@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build --prefix urbanstep",
+  "outputDirectory": "urbanstep/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

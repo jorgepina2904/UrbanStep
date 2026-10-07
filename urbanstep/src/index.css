@@ -1,0 +1,9 @@
+/* Minimal global styles - Tailwind CDN handles utility classes */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}

@@ -1,0 +1,16 @@
+{
+  "name": "urbanstep-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UrbanStep POS & Inventory Management System - Adapted for Venezuela",
+  "workspaces": [
+    "urbanstep"
+  ],
+  "scripts": {
+    "postinstall": "npm install --prefix urbanstep",
+    "dev": "npm run dev --prefix urbanstep",
+    "build": "npm run build --prefix urbanstep",
+    "preview": "npm run preview --prefix urbanstep",
+    "lint": "npm run lint --prefix urbanstep"
+  }
+}
