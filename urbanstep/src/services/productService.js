@@ -1,6 +1,7 @@
 import { simulateNetworkDelay, db } from './api';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { generateId } from '../utils/generateId';
+import { ensureSizeStock, calculateTotalStock, detectSizeCategory } from '../utils/shoeSizes';
 
 const notifyProductsChanged = () => {
     db.save('products');
@@ -32,6 +33,21 @@ const mapSupabaseProduct = (row) => {
     const isOutOfStock = stock <= 0;
     const isDeshabilitado = row.estado === 'deshabilitado' || Boolean(row.disabled) || isOutOfStock;
 
+    // Desglose de disponibilidad por talla
+    let sizeStock = null;
+    const rawStock = row.tallas_stock || row.size_stock || row.sizeStock;
+    if (rawStock && typeof rawStock === 'object') {
+        sizeStock = rawStock;
+    } else if (typeof rawStock === 'string') {
+        try {
+            sizeStock = JSON.parse(rawStock);
+        } catch {
+            sizeStock = null;
+        }
+    }
+    const finalSizeStock = ensureSizeStock(sizesArray, stock, sizeStock);
+    const finalSizeCategory = row.categoria_tallas || row.sizeCategory || detectSizeCategory(sizesArray);
+
     return {
         id: row.id,
         sku: row.sku,
@@ -46,6 +62,8 @@ const mapSupabaseProduct = (row) => {
         stock,
         minStock,
         sizes: sizesArray,
+        sizeCategory: finalSizeCategory,
+        sizeStock: finalSizeStock,
         color: row.color || 'Multicolor',
         colorHex: row.color_hex || '#3b82f6',
         imageUrl: row.imagen_url || row.imageUrl || row.image || '',
@@ -125,7 +143,14 @@ export const productService = {
      * Crear un nuevo producto en Supabase y localmente
      */
     create: async (productData) => {
-        const safeStock = Math.max(0, parseInt(productData.stock) || 0);
+        const sizes = Array.isArray(productData.sizes) && productData.sizes.length > 0 
+            ? productData.sizes 
+            : ['38', '39', '40', '41', '42', '43'];
+        const sizeCategory = productData.sizeCategory || detectSizeCategory(sizes);
+        const sizeStock = ensureSizeStock(sizes, parseInt(productData.stock) || 0, productData.sizeStock);
+        const safeStock = productData.sizeStock !== undefined 
+            ? calculateTotalStock(sizeStock) 
+            : Math.max(0, parseInt(productData.stock) || 0);
         const minStock = Math.max(1, parseInt(productData.minStock) || 5);
         const isOutOfStock = safeStock <= 0;
         const generatedId = productData.id || generateId('PRD');
@@ -143,7 +168,9 @@ export const productService = {
             purchasePrice: Math.max(0, Number(productData.cost) || 0),
             stock: safeStock,
             minStock: minStock,
-            sizes: productData.sizes || ['38', '39', '40', '41', '42'],
+            sizes,
+            sizeCategory,
+            sizeStock,
             status: isOutOfStock ? 'out_of_stock' : (safeStock > minStock ? 'in_stock' : 'low_stock'),
             disabled: isOutOfStock || Boolean(productData.disabled),
             active: !isOutOfStock && !Boolean(productData.disabled),
@@ -193,7 +220,19 @@ export const productService = {
         if (index === -1) throw new Error("Producto no encontrado");
 
         const current = db.products[index];
-        const nextStock = productData.stock !== undefined ? Math.max(0, parseInt(productData.stock) || 0) : current.stock;
+        const sizes = Array.isArray(productData.sizes) ? productData.sizes : current.sizes;
+        const sizeCategory = productData.sizeCategory || current.sizeCategory || detectSizeCategory(sizes);
+        let sizeStock = current.sizeStock;
+        let nextStock = current.stock;
+
+        if (productData.sizeStock !== undefined) {
+            sizeStock = ensureSizeStock(sizes, 0, productData.sizeStock);
+            nextStock = calculateTotalStock(sizeStock);
+        } else if (productData.stock !== undefined) {
+            nextStock = Math.max(0, parseInt(productData.stock) || 0);
+            sizeStock = ensureSizeStock(sizes, nextStock, current.sizeStock);
+        }
+
         const nextMinStock = productData.minStock !== undefined ? Math.max(1, parseInt(productData.minStock) || 5) : current.minStock;
         const isOutOfStock = nextStock <= 0;
 
@@ -206,6 +245,9 @@ export const productService = {
             purchasePrice: Math.max(0, Number(productData.cost ?? current.cost)),
             stock: nextStock,
             minStock: nextMinStock,
+            sizes,
+            sizeCategory,
+            sizeStock,
             disabled: isOutOfStock ? true : (productData.disabled !== undefined ? Boolean(productData.disabled) : current.disabled),
             status: isOutOfStock ? 'out_of_stock' : (nextStock > nextMinStock ? 'in_stock' : 'low_stock'),
             imageUrl: productData.imageUrl !== undefined ? productData.imageUrl : current.imageUrl,
@@ -309,21 +351,33 @@ export const productService = {
 
     /**
      * Actualizar stock individual (e.g. tras venta, compra o ajuste manual)
+     * Soporta actualizar una talla específica o el total distribuido
      */
-    updateStock: async (id, newStock) => {
+    updateStock: async (id, newStock, specificSize = null) => {
         const product = db.products.find(p => p.id === id);
         if (!product) throw new Error("Producto no encontrado");
 
-        const safeStock = Math.max(0, parseInt(newStock) || 0);
-        product.stock = safeStock;
+        if (specificSize) {
+            const s = String(specificSize);
+            if (!product.sizeStock) {
+                product.sizeStock = ensureSizeStock(product.sizes, product.stock);
+            }
+            product.sizeStock[s] = Math.max(0, parseInt(newStock) || 0);
+            product.stock = calculateTotalStock(product.sizeStock);
+        } else {
+            const safeStock = Math.max(0, parseInt(newStock) || 0);
+            product.stock = safeStock;
+            product.sizeStock = ensureSizeStock(product.sizes, safeStock, product.sizeStock);
+        }
         
+        const safeStock = product.stock;
         if (safeStock <= 0) {
             product.status = 'out_of_stock';
             product.disabled = true;
             product.active = false;
         } else {
             product.status = safeStock > product.minStock ? 'in_stock' : 'low_stock';
-            if (product.disabled && product.stockWasZero) {
+            if (product.disabled) {
                 product.disabled = false;
             }
             product.active = !product.disabled;

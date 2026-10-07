@@ -47,10 +47,13 @@ const mapProductToCatalog = (p) => ({
     brand: (p.brand || 'URBANSTEP').toUpperCase(),
     name: p.name,
     subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
+    color: p.color,
     price: Number(p.price) || 120,
     tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
     imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
     sizes: p.sizes || ['39', '40', '41', '42', '43'],
+    sizeStock: p.sizeStock || null,
+    sizeCategory: p.sizeCategory || null,
     rating: 4.9,
     reviewsCount: 150,
     stockBadge: `${p.stock} pares disponibles`,
@@ -153,10 +156,13 @@ export default function Landing() {
                         brand: (p.brand || 'URBANSTEP').toUpperCase(),
                         name: p.name,
                         subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
+                        color: p.color,
                         price: Number(p.price) || 120,
                         tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
                         imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
                         sizes: p.sizes || ['39', '40', '41', '42', '43'],
+                        sizeStock: p.sizeStock || null,
+                        sizeCategory: p.sizeCategory || null,
                         rating: 4.8,
                         reviewsCount: 120,
                         stockBadge: `${p.stock} pares disponibles`,
@@ -210,13 +216,18 @@ export default function Landing() {
     // Add to cart handler
     const handleAddToCart = (product) => {
         const chosenSize = selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
+        if (product.sizeStock && product.sizeStock[chosenSize] !== undefined && product.sizeStock[chosenSize] <= 0) {
+            toast.error(`La talla ${chosenSize} de "${product.name}" se encuentra agotada temporalmente`);
+            return;
+        }
         addItem({
             id: product.id,
             name: product.name,
             price: product.price,
             brand: product.brand,
             imageUrl: product.imageUrl,
-            stock: product.stock
+            stock: product.stock,
+            sizeStock: product.sizeStock
         }, chosenSize, 1);
         toast.success(`Agregado a la bolsa: ${product.name} (Talla ${chosenSize})`, {
             icon: '🛍️'
@@ -768,28 +779,59 @@ export default function Landing() {
 
                                     {/* Sizes Selector */}
                                     <div className="mt-3">
-                                        <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 mb-1.5">
-                                            <span>Seleccionar Talla:</span>
-                                            <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Talla: {activeSize}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            {(product.sizes || ['39', '40', '41', '42', '43']).map((sz) => (
-                                                <button
-                                                    key={sz}
-                                                    type="button"
-                                                    onClick={() => handleSelectSize(product.id, sz)}
-                                                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
-                                                        activeSize === sz
-                                                            ? 'bg-blue-600 text-white shadow-sm'
-                                                            : isDark
-                                                                ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
-                                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
-                                                    }`}
-                                                >
-                                                    {sz}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        {(() => {
+                                            const activeStock = product.sizeStock ? (product.sizeStock[activeSize] ?? null) : null;
+                                            const isSelectedOutOfStock = activeStock !== null && activeStock <= 0;
+                                            return (
+                                                <>
+                                                    <div className="flex items-center justify-between text-[10px] font-mono mb-1.5">
+                                                        <span className="text-gray-400">Seleccionar Talla:</span>
+                                                        <span className={`font-bold ${
+                                                            isSelectedOutOfStock 
+                                                                ? 'text-rose-500' 
+                                                                : activeStock !== null 
+                                                                    ? 'text-emerald-500' 
+                                                                    : isDark ? 'text-white' : 'text-gray-900'
+                                                        }`}>
+                                                            Talla: {activeSize} {activeStock !== null ? (isSelectedOutOfStock ? '(Agotada)' : `(${activeStock} disp.)`) : ''}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {(product.sizes || ['39', '40', '41', '42', '43']).map((sz) => {
+                                                            const szStock = product.sizeStock ? (product.sizeStock[sz] ?? null) : null;
+                                                            const isSzOut = szStock !== null && szStock <= 0;
+                                                            const isSelected = activeSize === sz;
+                                                            return (
+                                                                <button
+                                                                    key={sz}
+                                                                    type="button"
+                                                                    onClick={() => handleSelectSize(product.id, sz)}
+                                                                    title={szStock !== null ? `${szStock} pares disponibles` : `Talla ${sz}`}
+                                                                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1 ${
+                                                                        isSelected
+                                                                            ? isSzOut
+                                                                                ? 'bg-rose-600 text-white shadow-sm'
+                                                                                : 'bg-blue-600 text-white shadow-sm'
+                                                                            : isSzOut
+                                                                                ? 'bg-white/5 text-gray-500 line-through opacity-50 border border-white/5'
+                                                                                : isDark
+                                                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
+                                                                    }`}
+                                                                >
+                                                                    <span>{sz}</span>
+                                                                    {szStock !== null && (
+                                                                        <span className="text-[9px] opacity-75 font-normal">
+                                                                            ({szStock})
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -809,14 +851,25 @@ export default function Landing() {
                                         </div>
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => handleAddToCart(product)}
-                                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-blue-600/30 shrink-0 active:scale-95"
-                                    >
-                                        <ShoppingBag className="w-3.5 h-3.5" />
-                                        Agregar
-                                    </button>
+                                    {(() => {
+                                        const activeStock = product.sizeStock ? (product.sizeStock[activeSize] ?? null) : null;
+                                        const isSelectedOutOfStock = activeStock !== null && activeStock <= 0;
+                                        return (
+                                            <button
+                                                type="button"
+                                                disabled={isSelectedOutOfStock}
+                                                onClick={() => handleAddToCart(product)}
+                                                className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                                                    isSelectedOutOfStock
+                                                        ? 'opacity-40 cursor-not-allowed bg-gray-500 text-white'
+                                                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
+                                                }`}
+                                            >
+                                                <ShoppingBag className="w-3.5 h-3.5" />
+                                                {isSelectedOutOfStock ? 'Agotado' : 'Agregar'}
+                                            </button>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         );

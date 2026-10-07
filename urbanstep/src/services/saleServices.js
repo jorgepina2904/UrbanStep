@@ -2,6 +2,7 @@ import { simulateNetworkDelay, db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
+import { ensureSizeStock, calculateTotalStock } from '../utils/shoeSizes';
 
 export const saleService = {
     getAll: async () => {
@@ -100,7 +101,26 @@ export const saleService = {
         for (const item of newSale.items) {
             const product = db.products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
             if (product) {
-                product.stock = Math.max(0, (product.stock || 0) - (item.quantity || 1));
+                const qty = item.quantity || 1;
+                const itemSize = item.size || item.talla;
+
+                // Descontar de la talla específica si existe desglose
+                if (itemSize) {
+                    const s = String(itemSize);
+                    if (!product.sizeStock) {
+                        product.sizeStock = ensureSizeStock(product.sizes, product.stock);
+                    }
+                    if (product.sizeStock[s] !== undefined) {
+                        product.sizeStock[s] = Math.max(0, (product.sizeStock[s] || 0) - qty);
+                    }
+                    product.stock = calculateTotalStock(product.sizeStock);
+                } else {
+                    product.stock = Math.max(0, (product.stock || 0) - qty);
+                    if (product.sizeStock) {
+                        product.sizeStock = ensureSizeStock(product.sizes, product.stock, product.sizeStock);
+                    }
+                }
+
                 if (product.stock <= 0) {
                     product.status = 'out_of_stock';
                     product.disabled = true;

@@ -5,8 +5,31 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { productService } from '../services/productService';
 import { formatCurrency } from '../utils/formatCurrency';
-import { Palette, Check, ChevronDown, Image as ImageIcon, Upload, Link as LinkIcon, X, Sparkles } from 'lucide-react';
+import { 
+    Palette, 
+    Check, 
+    ChevronDown, 
+    Image as ImageIcon, 
+    Upload, 
+    Link as LinkIcon, 
+    X, 
+    Sparkles, 
+    Layers, 
+    Plus, 
+    Minus, 
+    RotateCcw, 
+    Zap,
+    Tag
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import { 
+    SHOE_SIZE_CATEGORIES, 
+    ensureSizeStock, 
+    calculateTotalStock, 
+    detectSizeCategory, 
+    getDefaultSizes, 
+    getSizeCategoryById 
+} from '../utils/shoeSizes';
 
 const PRESET_IMAGES = [
     { name: 'Nike Air Max Red', url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80' },
@@ -164,10 +187,23 @@ export default function Products() {
     const [editingProduct, setEditingProduct] = useState(null);
     const [imageTab, setImageTab] = useState('local'); // 'local' | 'url' | 'presets'
     const [urlInput, setUrlInput] = useState('');
+    const [customSizeInput, setCustomSizeInput] = useState('');
     const fileInputRef = useRef(null);
 
     const [form, setForm] = useState({
-        name: '', brand: '', category: '', price: '', cost: '', stock: '', minStock: '', color: '', description: '', imageUrl: '',
+        name: '', 
+        brand: '', 
+        category: 'Zapatillas', 
+        price: '', 
+        cost: '', 
+        stock: '0', 
+        minStock: '3', 
+        color: 'Negro', 
+        description: '', 
+        imageUrl: '',
+        sizeCategory: 'caballero',
+        sizes: getDefaultSizes('caballero'),
+        sizeStock: ensureSizeStock(getDefaultSizes('caballero'), 0),
     });
 
     useEffect(() => {
@@ -193,8 +229,26 @@ export default function Products() {
 
     const openCreateModal = () => {
         setEditingProduct(null);
-        setForm({ name: '', brand: '', category: '', price: '', cost: '', stock: '', minStock: '', color: '', description: '', imageUrl: '' });
+        const defaultCat = 'caballero';
+        const defaultSizes = getDefaultSizes(defaultCat);
+        const defaultStock = ensureSizeStock(defaultSizes, 0);
+        setForm({
+            name: '',
+            brand: '',
+            category: 'Zapatillas',
+            price: '',
+            cost: '',
+            stock: '0',
+            minStock: '3',
+            color: 'Negro',
+            description: '',
+            imageUrl: '',
+            sizeCategory: defaultCat,
+            sizes: defaultSizes,
+            sizeStock: defaultStock,
+        });
         setUrlInput('');
+        setCustomSizeInput('');
         setImageTab('local');
         setShowModal(true);
     };
@@ -202,21 +256,154 @@ export default function Products() {
     const openEditModal = (product) => {
         setEditingProduct(product);
         const currentImg = product.imageUrl || product.image || '';
+        const cat = product.sizeCategory || detectSizeCategory(product.sizes);
+        const sizes = Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : getDefaultSizes(cat);
+        const sizeStock = ensureSizeStock(sizes, product.stock, product.sizeStock);
+        const total = calculateTotalStock(sizeStock) || product.stock || 0;
         setForm({
             name: product.name,
             brand: product.brand,
             category: product.category,
             price: String(product.price),
             cost: String(product.cost),
-            stock: String(product.stock),
+            stock: String(total),
             minStock: String(product.minStock),
-            color: product.color,
-            description: product.description,
+            color: product.color || 'Negro',
+            description: product.description || '',
             imageUrl: currentImg,
+            sizeCategory: cat,
+            sizes: sizes,
+            sizeStock: sizeStock,
         });
         setUrlInput(currentImg.startsWith('http') ? currentImg : '');
+        setCustomSizeInput('');
         setImageTab(currentImg.startsWith('data:') ? 'local' : currentImg.startsWith('http') ? 'url' : 'local');
         setShowModal(true);
+    };
+
+    const handleCategoryChange = (catId) => {
+        const newSizes = getDefaultSizes(catId);
+        setForm(prev => {
+            const newStockMap = {};
+            newSizes.forEach(s => {
+                newStockMap[s] = prev.sizeStock[s] !== undefined ? prev.sizeStock[s] : 0;
+            });
+            const total = calculateTotalStock(newStockMap);
+            return {
+                ...prev,
+                sizeCategory: catId,
+                sizes: newSizes,
+                sizeStock: newStockMap,
+                stock: String(total),
+            };
+        });
+    };
+
+    const handleSizeQuantityChange = (size, qty) => {
+        const safeQty = Math.max(0, parseInt(qty) || 0);
+        setForm(prev => {
+            const updated = {
+                ...prev.sizeStock,
+                [size]: safeQty,
+            };
+            const total = calculateTotalStock(updated);
+            return {
+                ...prev,
+                sizeStock: updated,
+                stock: String(total),
+            };
+        });
+    };
+
+    const handleStepSizeQuantity = (size, delta) => {
+        setForm(prev => {
+            const currentVal = parseInt(prev.sizeStock[size]) || 0;
+            const newVal = Math.max(0, currentVal + delta);
+            const updated = {
+                ...prev.sizeStock,
+                [size]: newVal,
+            };
+            const total = calculateTotalStock(updated);
+            return {
+                ...prev,
+                sizeStock: updated,
+                stock: String(total),
+            };
+        });
+    };
+
+    const handleRemoveSize = (sizeToRemove) => {
+        if (form.sizes.length <= 1) {
+            toast.error('Debe haber al menos 1 talla activa');
+            return;
+        }
+        setForm(prev => {
+            const newSizes = prev.sizes.filter(s => s !== sizeToRemove);
+            const newStockMap = { ...prev.sizeStock };
+            delete newStockMap[sizeToRemove];
+            const total = calculateTotalStock(newStockMap);
+            return {
+                ...prev,
+                sizes: newSizes,
+                sizeStock: newStockMap,
+                stock: String(total),
+            };
+        });
+    };
+
+    const handleAddCustomSize = (e) => {
+        if (e) e.preventDefault();
+        const trimmed = customSizeInput.trim().toUpperCase();
+        if (!trimmed) return;
+        if (form.sizes.includes(trimmed)) {
+            toast.error(`La talla ${trimmed} ya está incluida`);
+            return;
+        }
+        setForm(prev => {
+            const newSizes = [...prev.sizes, trimmed];
+            const newStockMap = { ...prev.sizeStock, [trimmed]: 0 };
+            return {
+                ...prev,
+                sizes: newSizes,
+                sizeStock: newStockMap,
+            };
+        });
+        setCustomSizeInput('');
+        toast.success(`Talla ${trimmed} agregada`);
+    };
+
+    const handleDistributeEvenly = () => {
+        const input = window.prompt('¿Cuántos pares de calzado llegaron para CADA talla de este color?', '2');
+        if (input === null) return;
+        const qtyPerSize = Math.max(0, parseInt(input) || 0);
+        setForm(prev => {
+            const newStockMap = {};
+            prev.sizes.forEach(s => {
+                newStockMap[s] = qtyPerSize;
+            });
+            const total = calculateTotalStock(newStockMap);
+            return {
+                ...prev,
+                sizeStock: newStockMap,
+                stock: String(total),
+            };
+        });
+        toast.success(`Asignados ${qtyPerSize} pares a cada talla`);
+    };
+
+    const handleResetAllSizes = () => {
+        setForm(prev => {
+            const newStockMap = {};
+            prev.sizes.forEach(s => {
+                newStockMap[s] = 0;
+            });
+            return {
+                ...prev,
+                sizeStock: newStockMap,
+                stock: '0',
+            };
+        });
+        toast('Stock de tallas reiniciado a 0');
     };
 
     const handleLocalFileUpload = (e) => {
@@ -237,7 +424,6 @@ export default function Products() {
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                // Optimizar tamaño para rendimiento de almacenamiento
                 const canvas = document.createElement('canvas');
                 const MAX_WIDTH = 800;
                 const MAX_HEIGHT = 800;
@@ -285,15 +471,18 @@ export default function Products() {
             return;
         }
 
+        const totalCalculated = calculateTotalStock(form.sizeStock);
         const data = {
             ...form,
             price: parseFloat(form.price) || 0,
             cost: parseFloat(form.cost) || 0,
-            stock: parseInt(form.stock) || 0,
+            stock: totalCalculated,
             minStock: parseInt(form.minStock) || 0,
             imageUrl: form.imageUrl || '',
             image: form.imageUrl || '',
-            sizes: editingProduct?.sizes || ['38', '39', '40', '41', '42', '43'],
+            sizes: form.sizes,
+            sizeCategory: form.sizeCategory,
+            sizeStock: form.sizeStock,
         };
 
         if (editingProduct) {
@@ -437,17 +626,53 @@ export default function Products() {
                                 <div className="flex items-start justify-between mb-1">
                                     <div className="flex-1 min-w-0 pr-2">
                                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={product.name}>{product.name}</h3>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">{product.brand}</p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">{product.brand}</p>
+                                            {product.sizeCategory && (
+                                                <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50">
+                                                    {product.sizeCategory}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     {getStatusBadge(product.status)}
                                 </div>
 
-                                <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">{product.sku}</p>
+                                <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 font-mono mt-1">
+                                    <span>{product.sku}</span>
+                                    {product.color && <span className="text-[11px] font-sans font-medium text-gray-600 dark:text-gray-300">{product.color}</span>}
+                                </div>
 
-                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                {/* Sizes & Stock preview pill list */}
+                                {product.sizes && product.sizes.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                                        <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                                            {product.sizes.slice(0, 5).map(s => {
+                                                const sQty = product.sizeStock ? product.sizeStock[s] : null;
+                                                return (
+                                                    <span 
+                                                        key={s} 
+                                                        className={`px-1.5 py-0.5 rounded font-mono shrink-0 ${
+                                                            sQty !== null && sQty <= 0 
+                                                                ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through' 
+                                                                : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold'
+                                                        }`}
+                                                    >
+                                                        {s}{sQty !== null ? `:${sQty}` : ''}
+                                                    </span>
+                                                );
+                                            })}
+                                            {product.sizes.length > 5 && (
+                                                <span className="text-[9px] text-gray-400 font-mono">+{product.sizes.length - 5}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                                     <div>
                                         <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(product.price)}</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500">Stock: {product.stock} un.</p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500">Stock: {product.stock} pares</p>
                                     </div>
                                     <div className="flex gap-1">
                                         <button
@@ -667,25 +892,247 @@ export default function Products() {
                         )}
                     </div>
 
+                    {/* Size Categories & Per-Size Availability Section */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-50 via-gray-50/80 to-blue-50/30 dark:from-gray-800/70 dark:via-gray-800/50 dark:to-blue-950/20 border border-gray-200 dark:border-gray-700 space-y-4">
+                        {/* Section Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-200/80 dark:border-gray-700/80">
+                            <div>
+                                <label className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                    Categoría de Tallas & Disponibilidad por Talla
+                                </label>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    Selecciona la escala de tallas e ingresa cuántos pares llegaron de cada talla para el color <strong>{form.color || 'seleccionado'}</strong>.
+                                </p>
+                            </div>
+                            
+                            {/* Live Badge with Total Pairs */}
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100/90 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300 font-extrabold text-xs self-start sm:self-auto shadow-xs">
+                                <Zap className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                <span>Total: {calculateTotalStock(form.sizeStock)} pares</span>
+                            </div>
+                        </div>
+
+                        {/* Step 1: Category Selector Pills */}
+                        <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-2">
+                                1. Selecciona la Categoría de Talla:
+                            </span>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                                {SHOE_SIZE_CATEGORIES.map((cat) => {
+                                    const isSelected = form.sizeCategory === cat.id;
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => handleCategoryChange(cat.id)}
+                                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                                                isSelected
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20 ring-2 ring-blue-500/30'
+                                                    : 'bg-white dark:bg-gray-800/90 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-750'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                                    isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                                }`}>
+                                                    {cat.badge}
+                                                </span>
+                                                {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                            </div>
+                                            <span className="text-xs font-bold leading-tight truncate">{cat.name.split('/')[0]}</span>
+                                            <span className={`text-[10px] mt-0.5 line-clamp-1 ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+                                                {cat.description.split('(')[1]?.replace(')', '') || cat.description}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Step 2: Per-Size Stock Inventory Matrix */}
+                        <div>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    2. Pares disponibles por Talla (Color: <span className="text-gray-900 dark:text-white font-black">{form.color || 'No asignado'}</span>):
+                                </span>
+                                
+                                {/* Quick actions */}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={handleDistributeEvenly}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 transition-colors shadow-xs"
+                                        title="Asignar la misma cantidad de pares a todas las tallas"
+                                    >
+                                        <Zap className="w-3 h-3" />
+                                        Distribuir Parejo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleResetAllSizes}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors shadow-xs"
+                                        title="Poner todas las tallas en 0"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Reiniciar a 0
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sizes Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                                {form.sizes.map((s) => {
+                                    const qty = form.sizeStock[s] ?? 0;
+                                    const hasStock = qty > 0;
+                                    return (
+                                        <div
+                                            key={s}
+                                            className={`p-2 rounded-xl border transition-all flex flex-col justify-between ${
+                                                hasStock
+                                                    ? 'bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-500 shadow-xs ring-1 ring-blue-500/20'
+                                                    : 'bg-white/60 dark:bg-gray-850 border-gray-200 dark:border-gray-750 opacity-80'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-xs font-black text-gray-900 dark:text-white font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                                        Talla {s}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveSize(s)}
+                                                    className="text-gray-300 hover:text-red-500 transition-colors p-0.5 rounded"
+                                                    title={`Quitar talla ${s}`}
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+
+                                            {/* Quantity Stepper */}
+                                            <div className="flex items-center gap-1 mt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleStepSizeQuantity(s, -1)}
+                                                    className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
+                                                    title="Restar 1 par"
+                                                >
+                                                    <Minus className="w-3 h-3" />
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={qty}
+                                                    onChange={(e) => handleSizeQuantityChange(s, e.target.value)}
+                                                    className="flex-1 min-w-0 h-7 text-center rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-xs font-black text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    title={`Cantidad de pares para talla ${s}`}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleStepSizeQuantity(s, 1)}
+                                                    className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
+                                                    title="Sumar 1 par"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-1.5 text-center">
+                                                <span className={`text-[10px] font-bold ${hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                                                    {hasStock ? `${qty} ${qty === 1 ? 'par' : 'pares'}` : '0 pares'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Add Custom / Extra Size Row */}
+                            <div className="mt-3 pt-3 border-t border-gray-200/60 dark:border-gray-700/60 flex items-center gap-2">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">¿Llegó una talla fuera de rango?</span>
+                                <div className="flex items-center gap-1.5">
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 47, 34, XL"
+                                        value={customSizeInput}
+                                        onChange={(e) => setCustomSizeInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAddCustomSize();
+                                            }
+                                        }}
+                                        className="w-28 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleAddCustomSize}
+                                        className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 text-xs font-bold transition-colors flex items-center gap-1"
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                        Agregar Talla
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Prices and Stock */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {[
-                            { key: 'price', label: 'Precio de Venta (USD)', type: 'number', placeholder: '0.00' },
-                            { key: 'cost', label: 'Costo de Adquisición (USD)', type: 'number', placeholder: '0.00' },
-                            { key: 'stock', label: 'Stock Actual', type: 'number', placeholder: '0' },
-                            { key: 'minStock', label: 'Stock Mínimo (Alerta)', type: 'number', placeholder: '0' },
-                        ].map(field => (
-                            <div key={field.key}>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{field.label}</label>
-                                <input
-                                    type={field.type}
-                                    value={form[field.key]}
-                                    onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                    placeholder={field.placeholder}
-                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
-                                />
-                            </div>
-                        ))}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Precio de Venta (USD)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={form.price}
+                                onChange={e => setForm(prev => ({ ...prev, price: e.target.value }))}
+                                placeholder="0.00"
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-semibold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Costo de Adquisición (USD)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={form.cost}
+                                onChange={e => setForm(prev => ({ ...prev, cost: e.target.value }))}
+                                placeholder="0.00"
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-semibold"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                                <span>Stock Actual (Total Pares)</span>
+                                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold font-mono">
+                                    ⚡ Suma de Tallas
+                                </span>
+                            </label>
+                            <input
+                                type="number"
+                                value={form.stock}
+                                readOnly
+                                placeholder="0"
+                                className="w-full px-4 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 text-gray-900 dark:text-white font-bold placeholder-gray-400 focus:outline-none cursor-not-allowed text-sm"
+                                title="Calculado automáticamente como la suma de pares desglosados por talla"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Calculado en vivo sumando los pares de cada talla arriba.</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stock Mínimo (Alerta)</label>
+                            <input
+                                type="number"
+                                value={form.minStock}
+                                onChange={e => setForm(prev => ({ ...prev, minStock: e.target.value }))}
+                                placeholder="3"
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1">Umbral para alertas de reabastecimiento de inventario.</p>
+                        </div>
 
                         <div className="sm:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>

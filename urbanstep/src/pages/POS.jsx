@@ -121,8 +121,12 @@ export default function POS() {
 
     const handleAddToCart = (product) => {
         const size = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
+        if (product.sizeStock && product.sizeStock[size] !== undefined && product.sizeStock[size] <= 0) {
+            toast.error(`La talla ${size} de "${product.name}" está agotada`, { duration: 2500 });
+            return;
+        }
         addItem(product, size);
-        toast.success(`${product.name} (${size}) agregado al carrito`, { duration: 1500 });
+        toast.success(`${product.name} (Talla ${size}) agregado`, { duration: 1500 });
     };
 
     const handleCarrierChange = (e) => {
@@ -367,24 +371,46 @@ export default function POS() {
                                         {/* Size Selector in single neat scrollable row */}
                                         {product.sizes && product.sizes.length > 0 && (
                                             <div className="mt-2.5">
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
-                                                    Talla:
-                                                </span>
+                                                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                                                    <span>Talla:</span>
+                                                    {product.sizeStock && (
+                                                        <span className={product.sizeStock[currentSize] > 0 ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : "text-rose-500 font-extrabold"}>
+                                                            {product.sizeStock[currentSize] > 0 
+                                                                ? `${product.sizeStock[currentSize]} disp.` 
+                                                                : 'Agotado'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="flex gap-1 overflow-x-auto pb-1 max-w-full scrollbar-none">
-                                                    {product.sizes.map((s) => (
-                                                        <button
-                                                            key={s}
-                                                            type="button"
-                                                            onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
-                                                            className={`px-2.5 py-1 text-xs rounded-lg font-bold shrink-0 transition-all ${
-                                                                currentSize === s
-                                                                    ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
-                                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                                            }`}
-                                                        >
-                                                            {s}
-                                                        </button>
-                                                    ))}
+                                                    {product.sizes.map((s) => {
+                                                        const sStock = product.sizeStock ? (product.sizeStock[s] ?? 0) : null;
+                                                        const isOutOfStock = sStock !== null && sStock <= 0;
+                                                        const isSelected = currentSize === s;
+                                                        return (
+                                                            <button
+                                                                key={s}
+                                                                type="button"
+                                                                onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
+                                                                title={sStock !== null ? `${sStock} pares disponibles` : `Talla ${s}`}
+                                                                className={`px-2 py-1 text-xs rounded-lg font-bold shrink-0 transition-all flex items-center gap-1 ${
+                                                                    isSelected
+                                                                        ? isOutOfStock
+                                                                            ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500'
+                                                                            : 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
+                                                                        : isOutOfStock
+                                                                            ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through opacity-60'
+                                                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                                }`}
+                                                            >
+                                                                <span>{s}</span>
+                                                                {sStock !== null && (
+                                                                    <span className="text-[9px] font-mono opacity-80">
+                                                                        ({sStock})
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
@@ -400,15 +426,25 @@ export default function POS() {
                                                 {formatBs(toBs(product.price))}
                                             </span>
                                         </div>
-                                        <Button
-                                            size="sm"
-                                            variant="primary"
-                                            className="flex items-center gap-1.5 shadow-md shadow-blue-500/25 shrink-0 px-3.5 py-2 font-bold text-xs uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white active:scale-95"
-                                            onClick={() => handleAddToCart(product)}
-                                        >
-                                            <Plus className="w-3.5 h-3.5" />
-                                            Agregar
-                                        </Button>
+                                        {(() => {
+                                            const isSelectedSizeOut = product.sizeStock && product.sizeStock[currentSize] !== undefined && product.sizeStock[currentSize] <= 0;
+                                            return (
+                                                <Button
+                                                    size="sm"
+                                                    variant={isSelectedSizeOut ? "secondary" : "primary"}
+                                                    disabled={isSelectedSizeOut}
+                                                    className={`flex items-center gap-1.5 shadow-md shrink-0 px-3.5 py-2 font-bold text-xs uppercase tracking-wide whitespace-nowrap active:scale-95 ${
+                                                        isSelectedSizeOut
+                                                            ? 'opacity-50 cursor-not-allowed bg-gray-200 dark:bg-gray-800 text-gray-400'
+                                                            : 'shadow-blue-500/25 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
+                                                    }`}
+                                                    onClick={() => handleAddToCart(product)}
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    {isSelectedSizeOut ? 'Agotado' : 'Agregar'}
+                                                </Button>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             );

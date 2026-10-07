@@ -224,8 +224,28 @@ export default function Inventory() {
                             {product.name}
                           </p>
                           <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                            {product.brand} • {product.category}
+                            {product.brand} • {product.category} {product.color ? `• ${product.color}` : ''}
                           </p>
+                          {product.sizes && product.sizes.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1 overflow-x-auto pb-0.5 max-w-xs scrollbar-none">
+                              {product.sizes.map(s => {
+                                const q = product.sizeStock ? product.sizeStock[s] : null;
+                                return (
+                                  <span
+                                    key={s}
+                                    title={q !== null ? `Talla ${s}: ${q} pares` : `Talla ${s}`}
+                                    className={`px-1.5 py-0.5 rounded font-mono text-[9px] ${
+                                      q !== null && q <= 0
+                                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through opacity-60'
+                                        : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 font-bold'
+                                    }`}
+                                  >
+                                    {s}{q !== null ? `:${q}` : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
