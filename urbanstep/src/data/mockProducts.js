@@ -1,69 +1,274 @@
-import { generateId } from '../utils/generateId';
-import { generateSKU } from '../utils/generateSKU';
+/**
+ * Catálogo Oficial UrbanStep Venezuela
+ * Modelos reales y auténticos de calzado y streetwear
+ * Sincronizados con el esquema Supabase (tabla 'productos')
+ */
 
-const categories = ['Zapatillas', 'Ropa', 'Accesorios'];
-const brands = ['Nike', 'Adidas', 'Puma', 'UrbanStep', 'Vans', 'New Balance'];
-const colors = ['Negro', 'Blanco', 'Rojo', 'Azul', 'Gris'];
-
-const SNEAKER_IMAGES = [
-    'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80', // Nike Air Red
-    'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=600&auto=format&fit=crop&q=80', // Adidas Sneaker
-    'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=600&auto=format&fit=crop&q=80', // Vans Old Skool
-    'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=600&auto=format&fit=crop&q=80', // Puma White/Gold
-    'https://images.unsplash.com/photo-1539185441755-769473a23570?w=600&auto=format&fit=crop&q=80', // New Balance Lifestyle
-    'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=600&auto=format&fit=crop&q=80', // Air Force style
-    'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=600&auto=format&fit=crop&q=80', // Running Sport
-    'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&auto=format&fit=crop&q=80', // Streetwear classic
-];
-
-const APPAREL_IMAGES = [
-    'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=600&auto=format&fit=crop&q=80',
-];
-
-const ACCESSORY_IMAGES = [
-    'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=600&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1622445268045-81676f45a7d3?w=600&auto=format&fit=crop&q=80',
-];
-
-export const mockProducts = Array.from({ length: 24 }).map((_, index) => {
-    const category = categories[index % categories.length];
-    const brand = brands[index % brands.length];
-    const cost = Math.floor(Math.random() * 40) + 30;
-    const price = cost + Math.floor(Math.random() * 60) + 30;
-    const stock = Math.floor(Math.random() * 35) + (index % 5 === 0 ? 0 : 2);
-    const minStock = 5;
-    const itemSizes = category === 'Zapatillas' ? ['38', '39', '40', '41', '42', '43'] : ['S', 'M', 'L', 'XL'];
-
-    let imageUrl = '';
-    if (category === 'Zapatillas') {
-        imageUrl = SNEAKER_IMAGES[index % SNEAKER_IMAGES.length];
-    } else if (category === 'Ropa') {
-        imageUrl = APPAREL_IMAGES[index % APPAREL_IMAGES.length];
-    } else {
-        imageUrl = ACCESSORY_IMAGES[index % ACCESSORY_IMAGES.length];
+export const mockProducts = [
+    {
+        id: 'PRD-1001',
+        sku: 'NK-AJ1-CHI',
+        name: 'Air Jordan 1 Retro High OG "Chicago Lost & Found"',
+        brand: 'Nike / Jordan',
+        category: 'Zapatillas',
+        description: 'La silueta más legendaria del básquetbol retro en cuero agrietado vintage y caja original estilo 1985.',
+        cost: 110,
+        price: 180,
+        salePrice: 180,
+        purchasePrice: 110,
+        stock: 8,
+        minStock: 4,
+        sizes: ['40', '41', '42', '43', '44'],
+        color: 'Rojo Chicago',
+        colorHex: '#dc2626',
+        imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1002',
+        sku: 'NK-DNK-PND',
+        name: 'Nike Dunk Low Retro "Panda"',
+        brand: 'Nike',
+        category: 'Zapatillas',
+        description: 'El clásico monocromático que domina el streetwear mundial en cuero premium y suela vulcanizada.',
+        cost: 70,
+        price: 115,
+        salePrice: 115,
+        purchasePrice: 70,
+        stock: 15,
+        minStock: 5,
+        sizes: ['38', '39', '40', '41', '42', '43'],
+        color: 'Negro / Blanco',
+        colorHex: '#1a1a1a',
+        imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1003',
+        sku: 'AD-SMB-WHT',
+        name: 'Adidas Originals Samba OG "Cloud White"',
+        brand: 'Adidas',
+        category: 'Zapatillas',
+        description: 'Silueta icónica de perfil bajo con puntera de gamuza en T y clásica suela de goma caramelo.',
+        cost: 60,
+        price: 100,
+        salePrice: 100,
+        purchasePrice: 60,
+        stock: 12,
+        minStock: 5,
+        sizes: ['39', '40', '41', '42', '43'],
+        color: 'Blanco / Negro Gum',
+        colorHex: '#f5f5f5',
+        imageUrl: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1004',
+        sku: 'YZ-350-ONX',
+        name: 'Yeezy Boost 350 V2 "Onyx"',
+        brand: 'Yeezy',
+        category: 'Zapatillas',
+        description: 'Amortiguación BOOST de longitud completa con empeine elástico de tejido Primeknit monofilamento.',
+        cost: 140,
+        price: 220,
+        salePrice: 220,
+        purchasePrice: 140,
+        stock: 5,
+        minStock: 3,
+        sizes: ['40', '41', '42', '43', '44', '45'],
+        color: 'Onyx Black',
+        colorHex: '#111827',
+        imageUrl: 'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=800&auto=format&fit=crop&q=80',
+        status: 'low_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1005',
+        sku: 'NB-550-GRN',
+        name: 'New Balance 550 Vintage "White/Green"',
+        brand: 'New Balance',
+        category: 'Zapatillas',
+        description: 'Tributo auténtico al baloncesto retro de 1989 en cuero de grano grueso y acentos verde bosque.',
+        cost: 75,
+        price: 125,
+        salePrice: 125,
+        purchasePrice: 75,
+        stock: 9,
+        minStock: 4,
+        sizes: ['39', '40', '41', '42', '43'],
+        color: 'Blanco / Verde Vintage',
+        colorHex: '#16a34a',
+        imageUrl: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1006',
+        sku: 'PM-SUD-BLK',
+        name: 'Puma Suede Classic XXI "Triple Black"',
+        brand: 'Puma',
+        category: 'Zapatillas',
+        description: 'Gamuza de primera calidad con logotipo dorado metálico PUMA y herencia urbana.',
+        cost: 50,
+        price: 85,
+        salePrice: 85,
+        purchasePrice: 50,
+        stock: 14,
+        minStock: 5,
+        sizes: ['38', '39', '40', '41', '42', '43'],
+        color: 'Negro Triple',
+        colorHex: '#0f172a',
+        imageUrl: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1007',
+        sku: 'NK-AF1-007',
+        name: 'Nike Air Force 1 07 "Triple White"',
+        brand: 'Nike',
+        category: 'Zapatillas',
+        description: 'El clásico indiscutible en cuero blanco puro con amortiguación Air encapsulada.',
+        cost: 65,
+        price: 110,
+        salePrice: 110,
+        purchasePrice: 65,
+        stock: 18,
+        minStock: 6,
+        sizes: ['38', '39', '40', '41', '42', '43', '44'],
+        color: 'Blanco Puro',
+        colorHex: '#ffffff',
+        imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1008',
+        sku: 'AD-CMP-BLK',
+        name: 'Adidas Campus 00s "Core Black"',
+        brand: 'Adidas',
+        category: 'Zapatillas',
+        description: 'Silueta acolchada estilo skate de los 2000s con cordones anchos y gamuza prémium.',
+        cost: 68,
+        price: 110,
+        salePrice: 110,
+        purchasePrice: 68,
+        stock: 11,
+        minStock: 4,
+        sizes: ['39', '40', '41', '42', '43'],
+        color: 'Core Black / White',
+        colorHex: '#18181b',
+        imageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1009',
+        sku: 'NK-AJ1-TSM',
+        name: 'Travis Scott x Air Jordan 1 Low "Reverse Mocha"',
+        brand: 'Nike / Jordan',
+        category: 'Zapatillas',
+        description: 'Colaboración legendaria de Cactus Jack con Swoosh invertido y gamuza color moca y vela.',
+        cost: 160,
+        price: 250,
+        salePrice: 250,
+        purchasePrice: 160,
+        stock: 4,
+        minStock: 2,
+        sizes: ['40', '41', '42', '43', '44'],
+        color: 'Sail / Ridgerock',
+        colorHex: '#78350f',
+        imageUrl: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800&auto=format&fit=crop&q=80',
+        status: 'low_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1010',
+        sku: 'NB-2002-RN',
+        name: 'New Balance 2002R "Protection Pack Rain Cloud"',
+        brand: 'New Balance',
+        category: 'Zapatillas',
+        description: 'Capas de gamuza deshilachada deconstruida con amortiguación N-ergy y suela de absorción de impacto.',
+        cost: 95,
+        price: 160,
+        salePrice: 160,
+        purchasePrice: 95,
+        stock: 7,
+        minStock: 3,
+        sizes: ['39', '40', '41', '42', '43'],
+        color: 'Rain Cloud / Grey',
+        colorHex: '#6b7280',
+        imageUrl: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1011',
+        sku: 'VN-KNU-BLK',
+        name: 'Vans Knu Skool "Black / True White"',
+        brand: 'Vans',
+        category: 'Zapatillas',
+        description: 'Reedición estilo años 90 con lengüeta y tobillera extra acolchadas y sidestripe en 3D.',
+        cost: 45,
+        price: 75,
+        salePrice: 75,
+        purchasePrice: 45,
+        stock: 16,
+        minStock: 5,
+        sizes: ['37', '38', '39', '40', '41', '42'],
+        color: 'Negro / Blanco',
+        colorHex: '#000000',
+        imageUrl: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-1012',
+        sku: 'AD-BB-FRM',
+        name: 'Adidas Bad Bunny x Forum Low "Easter Egg"',
+        brand: 'Adidas',
+        category: 'Zapatillas',
+        description: 'Edición especial Bad Bunny con lengüeta doble desmontable y hebilla metálica táctica.',
+        cost: 120,
+        price: 195,
+        salePrice: 195,
+        purchasePrice: 120,
+        stock: 6,
+        minStock: 3,
+        sizes: ['39', '40', '41', '42', '43'],
+        color: 'Pastel Pink / Brown',
+        colorHex: '#ec4899',
+        imageUrl: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80',
+        image: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80',
+        status: 'in_stock',
+        active: true,
+        disabled: false
     }
-
-    return {
-        id: `PRD-${1000 + index}`,
-        sku: generateSKU(category, brand),
-        name: `${brand} ${category === 'Zapatillas' ? 'Sneaker Pro' : category === 'Ropa' ? 'Urban Hoodie' : 'Cap Classic'} #${index + 1}`,
-        description: `Excelente calzado ${brand} de alta durabilidad, diseño ergonómico y estilo urbano vanguardista.`,
-        category,
-        brand,
-        cost,
-        price,
-        salePrice: price,
-        purchasePrice: cost,
-        stock,
-        minStock,
-        sizes: itemSizes,
-        color: colors[index % colors.length],
-        imageUrl,
-        image: imageUrl,
-        status: stock > minStock ? 'in_stock' : stock > 0 ? 'low_stock' : 'out_of_stock',
-        variants: itemSizes.map(size => ({ size, stock: Math.floor(stock / itemSizes.length) }))
-    };
-});
+];
 
 export default mockProducts;

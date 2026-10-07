@@ -34,9 +34,11 @@ export const DEFAULT_SETTINGS = {
     ticketPrefix: 'TKT',
     ticketFooter: '¡Gracias por su compra en UrbanStep! Para cambios de calzado dispone de 7 días continuos en su caja original.',
     
-    // Envíos nacionales
+    // Envíos nacionales y geolocalización
     enabledCarriers: ['retiro_tienda', 'delivery_local', 'mrw', 'zoom', 'tealca'],
     localDeliveryCost: 3.50,
+    storeLatitude: 10.068330144675503,
+    storeLongitude: -69.28499381534304,
 };
 
 export const settingsService = {

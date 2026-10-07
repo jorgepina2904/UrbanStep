@@ -40,102 +40,23 @@ import {
     Moon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { mockProducts } from '../data/mockProducts';
 
-// Curated high-heat drops with authentic styling
-const FEATURED_DROPS = [
-    {
-        id: 'DROP-AJ1',
-        brand: 'JORDAN',
-        name: 'Air Jordan 1 Retro High OG "Chicago Lost & Found"',
-        subtitle: 'Heritage Red / Black / Muslin',
-        price: 180,
-        tag: '🔥 HYPE DROP',
-        imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80',
-        sizes: ['40', '41', '42', '43', '44'],
-        rating: 4.9,
-        reviewsCount: 342,
-        stockBadge: 'Stock Limitado',
-        stock: 8,
-        description: 'La silueta más legendaria del básquetbol retro. Acabados vintage en cuero agrietado y caja original estilo 1985.'
-    },
-    {
-        id: 'DROP-DUNK',
-        brand: 'NIKE',
-        name: 'Nike Dunk Low Retro "Panda"',
-        subtitle: 'White / Black Classic Contrast',
-        price: 115,
-        tag: '⚡ MÁS VENDIDO',
-        imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80',
-        sizes: ['38', '39', '40', '41', '42', '43'],
-        rating: 4.8,
-        reviewsCount: 520,
-        stockBadge: 'Entrega Inmediata',
-        stock: 15,
-        description: 'El clásico monocromático que domina el streetwear mundial. Construcción premium en cuero sintético y suela duradera.'
-    },
-    {
-        id: 'DROP-SAMBA',
-        brand: 'ADIDAS',
-        name: 'Adidas Originals Samba OG "Cloud White"',
-        subtitle: 'Core White / Black / Gum Sole',
-        price: 100,
-        tag: '✨ TENDENCIA 2026',
-        imageUrl: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80',
-        sizes: ['39', '40', '41', '42', '43'],
-        rating: 4.9,
-        reviewsCount: 289,
-        stockBadge: 'Envío Express',
-        stock: 12,
-        description: 'Silueta icónica de terraza británica de perfil bajo, puntera de gamuza en T y clásica suela de goma color caramelo.'
-    },
-    {
-        id: 'DROP-YEEZY',
-        brand: 'YEEZY',
-        name: 'Yeezy Boost 350 V2 "Onyx"',
-        subtitle: 'Triple Carbon / Primeknit / Boost',
-        price: 220,
-        tag: '🏆 EXCLUSIVO',
-        imageUrl: 'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=800&auto=format&fit=crop&q=80',
-        sizes: ['40', '41', '42', '43', '44', '45'],
-        rating: 5.0,
-        reviewsCount: 198,
-        stockBadge: 'Últimas Unidades',
-        stock: 5,
-        description: 'Amortiguación BOOST de longitud completa encapsulada en TPU translúcido con empeine elástico de tejido Primeknit monofilamento.'
-    },
-    {
-        id: 'DROP-NB550',
-        brand: 'NEW BALANCE',
-        name: 'New Balance 550 Vintage "White/Green"',
-        subtitle: 'Sea Salt / Forest Green Leather',
-        price: 125,
-        tag: '🏀 RETRO BASKET',
-        imageUrl: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80',
-        sizes: ['39', '40', '41', '42', '43'],
-        rating: 4.7,
-        reviewsCount: 165,
-        stockBadge: 'Disponible en Barquisimeto',
-        stock: 9,
-        description: 'Tributo auténtico a los jugadores profesionales de básquetbol de 1989. Cuero de grano grueso y detalles vintage color verde bosque.'
-    },
-    {
-        id: 'DROP-PUMA',
-        brand: 'PUMA',
-        name: 'Puma Suede Classic XXI "Triple Black"',
-        subtitle: 'Premium Black Suede / Gold Foil',
-        price: 85,
-        tag: '👟 STREET CLASSIC',
-        imageUrl: 'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&auto=format&fit=crop&q=80',
-        sizes: ['38', '39', '40', '41', '42', '43'],
-        rating: 4.8,
-        reviewsCount: 140,
-        stockBadge: 'Disponible en Tienda',
-        stock: 14,
-        description: 'Gamuza de primera calidad con logotipo dorado metálico PUMA. La herencia del b-boying y hip-hop en tus pies.'
-    }
-];
-
-const BRANDS = ['TODAS', 'JORDAN', 'NIKE', 'ADIDAS', 'YEEZY', 'NEW BALANCE', 'PUMA'];
+const mapProductToCatalog = (p) => ({
+    id: p.id,
+    brand: (p.brand || 'URBANSTEP').toUpperCase(),
+    name: p.name,
+    subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
+    price: Number(p.price) || 120,
+    tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
+    imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
+    sizes: p.sizes || ['39', '40', '41', '42', '43'],
+    rating: 4.9,
+    reviewsCount: 150,
+    stockBadge: `${p.stock} pares disponibles`,
+    stock: p.stock,
+    description: p.description || 'Calzado original garantizado UrbanStep Store.'
+});
 
 export default function Landing() {
     const { user, login, logout, isAuthenticated } = useAuth();
@@ -145,8 +66,8 @@ export default function Landing() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Catalog state
-    const [products, setProducts] = useState(FEATURED_DROPS);
+    // Catalog state — Inicializado con catálogo oficial unificado
+    const [products, setProducts] = useState(() => mockProducts.map(mapProductToCatalog));
     const [selectedBrand, setSelectedBrand] = useState('TODAS');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSizes, setSelectedSizes] = useState({});
@@ -245,11 +166,11 @@ export default function Landing() {
 
                     setProducts(mappedDb);
                 } else {
-                    setProducts(FEATURED_DROPS);
+                    setProducts(mockProducts.map(mapProductToCatalog));
                 }
             } catch (err) {
                 console.warn('Usando catálogo inicial:', err);
-                setProducts(FEATURED_DROPS);
+                setProducts(mockProducts.map(mapProductToCatalog));
             }
         };
 
@@ -727,31 +648,31 @@ export default function Landing() {
 
                                 <div className="relative w-full h-56 shrink-0 flex items-center justify-center p-2 mb-4 bg-black/40 rounded-2xl overflow-hidden">
                                     <img
-                                        src={FEATURED_DROPS[0].imageUrl}
-                                        alt={FEATURED_DROPS[0].name}
+                                        src={(products[0] || mockProducts[0])?.imageUrl}
+                                        alt={(products[0] || mockProducts[0])?.name}
                                         className="w-full h-full object-contain filter drop-shadow-2xl hover:scale-105 transition-transform"
                                     />
                                 </div>
 
                                 <div className="space-y-1">
-                                    <p className="text-xs font-mono text-blue-400 uppercase font-bold">{FEATURED_DROPS[0].brand}</p>
-                                    <h3 className="text-lg font-bold text-white">{FEATURED_DROPS[0].name}</h3>
-                                    <p className="text-xs text-gray-400">{FEATURED_DROPS[0].subtitle}</p>
+                                    <p className="text-xs font-mono text-blue-400 uppercase font-bold">{(products[0] || mockProducts[0])?.brand}</p>
+                                    <h3 className="text-lg font-bold text-white">{(products[0] || mockProducts[0])?.name}</h3>
+                                    <p className="text-xs text-gray-400">{(products[0] || mockProducts[0])?.subtitle || (products[0] || mockProducts[0])?.category}</p>
                                 </div>
 
                                 <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
                                     <div>
                                         <p className="text-[11px] text-gray-500 font-mono">Precio Oficial</p>
                                         <p className="text-2xl font-black text-white">
-                                            ${FEATURED_DROPS[0].price}{' '}
+                                            ${(products[0] || mockProducts[0])?.price}{' '}
                                             <span className="text-xs font-bold text-emerald-400 font-mono">
-                                                ({formatBs(FEATURED_DROPS[0].price * rate)})
+                                                ({formatBs(((products[0] || mockProducts[0])?.price || 0) * rate)})
                                             </span>
                                         </p>
                                     </div>
 
                                     <button
-                                        onClick={() => handleAddToCart(FEATURED_DROPS[0])}
+                                        onClick={() => handleAddToCart(products[0] || mockProducts[0])}
                                         className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-blue-600/30"
                                     >
                                         <Plus className="w-4 h-4" />
@@ -932,8 +853,22 @@ export default function Landing() {
                                 <span className="text-blue-400">BARQUISIMETO & CABUDARE</span>
                             </h2>
                             <p className="text-sm text-gray-300 leading-relaxed max-w-xl">
-                                Despacho directo desde nuestra sede principal en el C.C. Las Trinitarias hasta tu puerta. Paga cómodamente al recibir mediante Pago Móvil, Punto de Venta inalámbrico o Efectivo en Divisas.
+                                Despacho directo desde nuestra sede principal en Barquisimeto hasta tu puerta. Paga cómodamente al recibir mediante Pago Móvil, Punto de Venta inalámbrico o Efectivo en Divisas.
                             </p>
+
+                            <div className="pt-1">
+                                <a
+                                    href="https://www.google.com/maps?q=10.068330144675503,-69.28499381534304"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 border border-blue-500/30 text-xs font-bold transition-all shadow-sm group"
+                                >
+                                    <MapPin className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
+                                    <span>Ver Sede en Google Maps (10.06833, -69.28499)</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                </a>
+                            </div>
+
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                                 <div className="p-3 rounded-xl bg-black/40 border border-white/10">
                                     <p className="font-bold text-xs text-white">Las Trinitarias & Este</p>
@@ -993,9 +928,17 @@ export default function Landing() {
                     </div>
 
                     <div className="flex items-center gap-6 text-[11px]">
-                        <span>Tasa Oficial BCV: {formatBs(rate)} / USD</span>
+                        <a
+                            href="https://www.google.com/maps?q=10.068330144675503,-69.28499381534304"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-blue-400 flex items-center gap-1 transition-colors font-bold"
+                        >
+                            <MapPin className="w-3.5 h-3.5 text-red-400" />
+                            <span>Ubicación Maps (10.06833, -69.28499)</span>
+                        </a>
                         <span>•</span>
-                        <span>Despacho Express Lara</span>
+                        <span>BCV: {formatBs(rate)} / USD</span>
                         <span>•</span>
                         <span>© 2026 Todos los derechos reservados</span>
                     </div>

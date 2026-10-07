@@ -82,6 +82,9 @@ export default function POS() {
 
     useEffect(() => {
         loadData();
+        const handleSync = () => loadData();
+        window.addEventListener('products_updated', handleSync);
+        return () => window.removeEventListener('products_updated', handleSync);
     }, []);
 
     const loadData = async () => {
@@ -90,7 +93,7 @@ export default function POS() {
                 productService.getAll(),
                 settingsService.getSettings()
             ]);
-            setProducts(prods.filter(p => p.stock > 0));
+            setProducts(prods.filter(p => !p.disabled && p.stock > 0));
             setSettings(sett);
         } finally {
             setLoading(false);
@@ -276,7 +279,7 @@ export default function POS() {
     }
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 h-full pb-10">
+        <div className="flex flex-col lg:flex-row gap-6 min-h-full pb-12">
             {/* Catalog Section */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Search & Category Tabs */}
@@ -312,10 +315,10 @@ export default function POS() {
                     </div>
                 </div>
 
-                {/* Products Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 overflow-y-auto pr-1">
+                {/* Products Grid — Protegido contra contracción responsiva con min-h-[380px] */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-fr">
                     {filtered.length === 0 ? (
-                        <div className="col-span-full text-center py-16 text-gray-400">
+                        <div className="col-span-full text-center py-16 text-gray-400 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
                             <Store className="w-12 h-12 mx-auto mb-2 opacity-40" />
                             <p className="text-base font-medium">No se encontraron productos disponibles</p>
                             <p className="text-xs mt-1">Prueba cambiando el término de búsqueda</p>
@@ -325,15 +328,18 @@ export default function POS() {
                             const currentSize = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
                             const imgSrc = product.imageUrl || product.image;
                             return (
-                                <Card key={product.id} className="p-3 sm:p-3.5 flex flex-col min-w-0 justify-between hover:border-blue-500/60 transition-all group overflow-hidden bg-white dark:bg-gray-900 shadow-sm relative">
+                                <div
+                                    key={product.id}
+                                    className="p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-lg hover:border-blue-500/60 transition-all flex flex-col justify-between min-w-0 min-h-[380px] shrink-0 group relative overflow-hidden"
+                                >
                                     <div className="flex-1 min-w-0">
-                                        {/* Product image thumbnail */}
-                                        <div className="h-24 sm:h-28 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/70 mb-2 overflow-hidden relative flex items-center justify-center border border-gray-200/70 dark:border-gray-750">
+                                        {/* Product image thumbnail — Altura fija de 176px protegida contra squishing */}
+                                        <div className="h-44 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/80 mb-3 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700">
                                             {imgSrc ? (
                                                 <img
                                                     src={imgSrc}
                                                     alt={product.name}
-                                                    className="w-full h-full object-contain p-1.5 group-hover:scale-105 transition-transform duration-200"
+                                                    className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
                                                     onError={(e) => {
                                                         e.target.style.display = 'none';
                                                         const fb = e.target.parentElement.querySelector('.pos-fallback-icon');
@@ -341,36 +347,36 @@ export default function POS() {
                                                     }}
                                                 />
                                             ) : null}
-                                            <span className={`pos-fallback-icon text-3xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
+                                            <span className={`pos-fallback-icon text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
 
-                                            <div className="absolute top-1.5 left-1.5 z-10">
-                                                <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[9px] shadow-sm font-bold">
+                                            <div className="absolute top-2 left-2 z-10">
+                                                <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
                                                     {product.stock} en stock
                                                 </Badge>
                                             </div>
-                                            <span className="absolute top-1.5 right-1.5 z-10 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm">
+                                            <span className="absolute top-2 right-2 z-10 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm">
                                                 {product.sku}
                                             </span>
                                         </div>
 
-                                        <h3 className="font-extrabold text-gray-900 dark:text-white text-xs sm:text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                                        <h3 className="font-extrabold text-gray-900 dark:text-white text-sm sm:text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                                             {product.name}
                                         </h3>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{product.brand} • {product.category}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{product.brand} • {product.category}</p>
 
                                         {/* Size Selector in single neat scrollable row */}
                                         {product.sizes && product.sizes.length > 0 && (
-                                            <div className="mt-2">
+                                            <div className="mt-2.5">
                                                 <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
                                                     Talla:
                                                 </span>
-                                                <div className="flex gap-1 overflow-x-auto pb-1 max-w-full">
+                                                <div className="flex gap-1 overflow-x-auto pb-1 max-w-full scrollbar-none">
                                                     {product.sizes.map((s) => (
                                                         <button
                                                             key={s}
                                                             type="button"
                                                             onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
-                                                            className={`px-2 py-0.5 text-[10px] sm:text-[11px] rounded-lg font-bold shrink-0 transition-all ${
+                                                            className={`px-2.5 py-1 text-xs rounded-lg font-bold shrink-0 transition-all ${
                                                                 currentSize === s
                                                                     ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
                                                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
@@ -385,26 +391,26 @@ export default function POS() {
                                     </div>
 
                                     {/* Dual Price & Add Button anchored safely */}
-                                    <div className="relative z-20 mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
+                                    <div className="relative z-20 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
                                         <div className="min-w-0 pr-1">
-                                            <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white block truncate leading-tight">
+                                            <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white block truncate leading-tight">
                                                 {formatUSD(product.price)}
                                             </span>
-                                            <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block truncate">
+                                            <span className="text-[11px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 block truncate">
                                                 {formatBs(toBs(product.price))}
                                             </span>
                                         </div>
                                         <Button
                                             size="sm"
                                             variant="primary"
-                                            className="flex items-center gap-1 shadow-md shadow-blue-500/25 shrink-0 px-3 py-1.5 font-bold text-xs uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white active:scale-95"
+                                            className="flex items-center gap-1.5 shadow-md shadow-blue-500/25 shrink-0 px-3.5 py-2 font-bold text-xs uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white active:scale-95"
                                             onClick={() => handleAddToCart(product)}
                                         >
                                             <Plus className="w-3.5 h-3.5" />
                                             Agregar
                                         </Button>
                                     </div>
-                                </Card>
+                                </div>
                             );
                         })
                     )}

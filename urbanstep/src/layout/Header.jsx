@@ -24,7 +24,8 @@ import {
     Settings,
     FileBarChart,
     Monitor,
-    Globe
+    Globe,
+    Menu
 } from 'lucide-react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -36,7 +37,7 @@ import Input from '../ui/Input';
 import Button from '../ui/Button';
 import toast from 'react-hot-toast';
 
-export const Header = () => {
+export const Header = ({ onToggleMobileSidebar }) => {
     const { isDark, toggleTheme } = useContext(ThemeContext);
     const { rate, updateRate, refreshRate, isRefreshing, formatBs, formatUSD } = useCurrency();
     const { user } = useContext(AuthContext);
@@ -239,8 +240,19 @@ export const Header = () => {
 
     return (
         <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 transition-colors duration-200 shrink-0 relative z-30">
-            {/* Left: Modules Dropdown Button */}
-            <div className="flex items-center gap-3">
+            {/* Left: Mobile Drawer Trigger & Modules Dropdown Button */}
+            <div className="flex items-center gap-2 sm:gap-3">
+                {onToggleMobileSidebar && (
+                    <button
+                        onClick={onToggleMobileSidebar}
+                        className="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden transition-colors border border-gray-200 dark:border-gray-800"
+                        title="Abrir menú de navegación"
+                        aria-label="Abrir menú"
+                    >
+                        <Menu className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+                    </button>
+                )}
+
                 <div className="relative" ref={modulesRef}>
                     <button
                         onClick={() => setIsModulesOpen(!isModulesOpen)}

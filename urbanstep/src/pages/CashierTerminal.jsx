@@ -114,6 +114,9 @@ export default function CashierTerminal() {
 
     useEffect(() => {
         loadData();
+        const handleSync = () => loadData();
+        window.addEventListener('products_updated', handleSync);
+        return () => window.removeEventListener('products_updated', handleSync);
     }, [loadData]);
 
     // Focus scanner/search input on load
@@ -478,8 +481,8 @@ export default function CashierTerminal() {
                         </div>
                     </div>
 
-                    {/* Products Grid */}
-                    <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pr-1">
+                    {/* Products Grid — Protegido con auto-rows-fr y min-h-[360px] */}
+                    <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pr-1 auto-rows-fr">
                         {filtered.length === 0 ? (
                             <div className="col-span-full text-center py-16 text-gray-400">
                                 <Store className="w-12 h-12 mx-auto mb-2 opacity-30" />
@@ -492,31 +495,31 @@ export default function CashierTerminal() {
                                 return (
                                     <div
                                         key={product.id}
-                                        className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 transition-all flex flex-col min-w-0 justify-between group overflow-hidden shadow-sm relative"
+                                        className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col min-w-0 min-h-[360px] shrink-0 justify-between group overflow-hidden shadow-sm relative"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            {/* Shoe Image Thumbnail */}
-                                            <div className="h-24 sm:h-26 w-full shrink-0 rounded-lg bg-gray-50 dark:bg-gray-800/70 mb-2 overflow-hidden relative flex items-center justify-center border border-gray-200/60 dark:border-gray-700/60">
+                                            {/* Shoe Image Thumbnail — Protegido con h-40 shrink-0 */}
+                                            <div className="h-40 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/70 mb-2.5 overflow-hidden relative flex items-center justify-center border border-gray-200/60 dark:border-gray-700/60">
                                                 {imgSrc ? (
                                                     <img
                                                         src={imgSrc}
                                                         alt={product.name}
-                                                        className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-200"
+                                                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
                                                         onError={(e) => { e.target.style.display = 'none'; }}
                                                     />
                                                 ) : null}
-                                                <span className={`text-3xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
-                                                <div className="absolute top-1.5 left-1.5 z-10">
-                                                    <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[9px] shadow-sm font-bold">
+                                                <span className={`text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
+                                                <div className="absolute top-2 left-2 z-10">
+                                                    <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
                                                         {product.stock} disp.
                                                     </Badge>
                                                 </div>
-                                                <span className="absolute top-1.5 right-1.5 z-10 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/75 text-white">
+                                                <span className="absolute top-2 right-2 z-10 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white">
                                                     {product.sku}
                                                 </span>
                                             </div>
 
-                                            <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                            <h4 className="font-extrabold text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                                                 {product.name}
                                             </h4>
                                             <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{product.brand} • {product.category}</p>

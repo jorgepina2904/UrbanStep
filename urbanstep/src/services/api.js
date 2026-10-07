@@ -12,6 +12,11 @@ const loadStorage = (key, fallback) => {
         if (item) {
             const parsed = JSON.parse(item);
             if (Array.isArray(parsed) && parsed.length > 0) {
+                // Si la caché local tiene los antiguos datos de prueba aleatorios (e.g. "Sneaker Pro #1"), limpiar automáticamente
+                if (key === 'urbanstep_products' && parsed.some(p => p.name?.includes('Sneaker Pro #') || p.name?.includes('Urban Hoodie #'))) {
+                    localStorage.setItem(key, JSON.stringify(fallback));
+                    return [...fallback];
+                }
                 return parsed;
             }
         }
@@ -60,7 +65,7 @@ class InMemoryDB {
 export const db = new InMemoryDB();
 
 // Simulated network delay
-export const simulateNetworkDelay = async (ms = 150) => {
+export const simulateNetworkDelay = async (ms = 100) => {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });

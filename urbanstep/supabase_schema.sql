@@ -104,8 +104,8 @@ CREATE TABLE IF NOT EXISTS configuracion_tienda (
     delivery_tarifa_base_usd NUMERIC(10, 2) DEFAULT 2.00 CHECK (delivery_tarifa_base_usd >= 0),
     delivery_costo_km_usd NUMERIC(10, 4) DEFAULT 0.5000 CHECK (delivery_costo_km_usd >= 0),
     delivery_distancia_max_km NUMERIC(10, 2) DEFAULT 30.00 CHECK (delivery_distancia_max_km > 0),
-    latitud_tienda NUMERIC(12, 8) DEFAULT 10.4961,   -- Caracas Chacao
-    longitud_tienda NUMERIC(12, 8) DEFAULT -66.8983,
+    latitud_tienda NUMERIC(12, 8) DEFAULT 10.06833014,   -- Barquisimeto, Estado Lara
+    longitud_tienda NUMERIC(12, 8) DEFAULT -69.28499382,
 
     nota_pie_ticket TEXT DEFAULT '¡Gracias por su compra en UrbanStep! Para cambios de calzado dispone de 7 días continuos en su empaque original con su comprobante.',
     actualizado_el TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -1056,8 +1056,8 @@ INSERT INTO configuracion_tienda (
     'UrbanStep Venezuela',
     'UrbanStep C.A.',
     'J-50123456-7',
-    'Av. Francisco de Miranda, Centro Lido, Nivel Galería, Chacao, Caracas, Venezuela',
-    '+58 212-951-4000',
+    'Av. Los Leones con Av. Venezuela, Barquisimeto, Edo. Lara, Venezuela',
+    '+58 251-255-4000',
     'contacto@urbanstep.com.ve',
     42.5000,
     0.1600,
@@ -1070,8 +1070,8 @@ INSERT INTO configuracion_tienda (
     'UrbanStep International LLC',
     '0102 - Banco de Venezuela',
     '0102-0001-00-1234567890',
-    10.4961,
-    -66.8983
+    10.06833014,
+    -69.28499382
 ) ON CONFLICT DO NOTHING;
 
 -- B) Historial de tasa BCV inicial

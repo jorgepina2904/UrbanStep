@@ -11,9 +11,9 @@ const DEFAULT_CONFIG = {
     baseRateUsd: 2.00,      // Tarifa base en USD
     perKmUsd: 0.40,          // Costo por km en Lara
     maxDistanceKm: 99999,    // Deslimitado: cubre todo el Estado Lara y Venezuela
-    storeLat: 10.0678,       // Latitud Tienda Principal (Barquisimeto, Estado Lara)
-    storeLng: -69.3474,      // Longitud Tienda Principal (Barquisimeto, Estado Lara)
-    storeAddress: 'Av. Los Leones con Av. Lara, C.C. Las Trinitarias, Nivel Galería, Barquisimeto, Edo. Lara',
+    storeLat: 10.068330144675503,  // Latitud Exacta Tienda UrbanStep
+    storeLng: -69.28499381534304, // Longitud Exacta Tienda UrbanStep
+    storeAddress: 'UrbanStep Store, Barquisimeto, Edo. Lara, Venezuela',
 };
 
 /**
