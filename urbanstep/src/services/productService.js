@@ -2,6 +2,7 @@ import { simulateNetworkDelay, db } from './api';
 import { generateId } from '../utils/generateId';
 
 const notifyProductsChanged = () => {
+    db.save('products');
     if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('products_updated', { detail: [...db.products] }));
     }

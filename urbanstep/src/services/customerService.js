@@ -59,6 +59,7 @@ export const customerService = {
         };
         
         db.customers.push(newCustomer);
+        db.save('customers');
 
         if (isSupabaseConfigured()) {
             try {
@@ -124,6 +125,7 @@ export const customerService = {
         }
 
         if (typeof window !== 'undefined') {
+            db.save('customers');
             window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
         }
 
@@ -150,6 +152,7 @@ export const customerService = {
         db.customers[index] = updated;
 
         if (typeof window !== 'undefined') {
+            db.save('customers');
             window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
         }
 
@@ -184,6 +187,7 @@ export const customerService = {
         }
 
         if (typeof window !== 'undefined') {
+            db.save('customers');
             window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
         }
 

@@ -492,11 +492,11 @@ export default function CashierTerminal() {
                                 return (
                                     <div
                                         key={product.id}
-                                        className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 hover:border-blue-500 transition-all flex flex-col min-w-0 justify-between group overflow-hidden"
+                                        className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 transition-all flex flex-col min-w-0 justify-between group overflow-hidden shadow-sm relative"
                                     >
-                                        <div>
+                                        <div className="flex-1 min-w-0">
                                             {/* Shoe Image Thumbnail */}
-                                            <div className="h-32 w-full shrink-0 rounded-lg bg-gray-200/60 dark:bg-gray-700/60 mb-2 overflow-hidden relative flex items-center justify-center">
+                                            <div className="h-24 sm:h-26 w-full shrink-0 rounded-lg bg-gray-50 dark:bg-gray-800/70 mb-2 overflow-hidden relative flex items-center justify-center border border-gray-200/60 dark:border-gray-700/60">
                                                 {imgSrc ? (
                                                     <img
                                                         src={imgSrc}
@@ -506,49 +506,54 @@ export default function CashierTerminal() {
                                                     />
                                                 ) : null}
                                                 <span className={`text-3xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
-                                                <div className="absolute top-1.5 left-1.5">
-                                                    <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[9px] shadow-sm">
+                                                <div className="absolute top-1.5 left-1.5 z-10">
+                                                    <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[9px] shadow-sm font-bold">
                                                         {product.stock} disp.
                                                     </Badge>
                                                 </div>
-                                                <span className="absolute top-1.5 right-1.5 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/60 text-white">
+                                                <span className="absolute top-1.5 right-1.5 z-10 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/75 text-white">
                                                     {product.sku}
                                                 </span>
                                             </div>
 
-                                            <h4 className="font-bold text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                            <h4 className="font-extrabold text-xs sm:text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                                                 {product.name}
                                             </h4>
-                                            <p className="text-[11px] text-gray-500">{product.brand} • {product.category}</p>
+                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{product.brand} • {product.category}</p>
 
-                                            {/* Size Selector */}
+                                            {/* Size Selector in single neat scrollable row */}
                                             {product.sizes && product.sizes.length > 0 && (
-                                                <div className="mt-2.5 flex flex-wrap gap-1">
-                                                    {product.sizes.map((s) => (
-                                                        <button
-                                                            key={s}
-                                                            type="button"
-                                                            onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
-                                                            className={`px-2 py-0.5 text-[11px] rounded-md font-bold transition-colors ${
-                                                                currentSize === s
-                                                                    ? 'bg-blue-600 text-white'
-                                                                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
-                                                            }`}
-                                                        >
-                                                            {s}
-                                                        </button>
-                                                    ))}
+                                                <div className="mt-2">
+                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
+                                                        Talla:
+                                                    </span>
+                                                    <div className="flex gap-1 overflow-x-auto pb-1 max-w-full">
+                                                        {product.sizes.map((s) => (
+                                                            <button
+                                                                key={s}
+                                                                type="button"
+                                                                onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
+                                                                className={`px-2 py-0.5 text-[10px] sm:text-[11px] rounded-md font-bold shrink-0 transition-colors ${
+                                                                    currentSize === s
+                                                                        ? 'bg-blue-600 text-white shadow-sm'
+                                                                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                                }`}
+                                                            >
+                                                                {s}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
 
                                         {/* Pricing & Fast Add */}
-                                        <div className="mt-3 pt-2.5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 shrink-0">
+                                        <div className="relative z-20 mt-2.5 pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
                                             <div className="min-w-0 pr-1">
-                                                <span className="text-base font-black text-gray-900 dark:text-white block leading-tight truncate">
+                                                <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white block leading-tight truncate">
                                                     {formatUSD(product.price)}
                                                 </span>
-                                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block truncate">
+                                                <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block truncate">
                                                     {formatBs(toBs(product.price))}
                                                 </span>
                                             </div>
@@ -556,7 +561,7 @@ export default function CashierTerminal() {
                                             <Button
                                                 size="sm"
                                                 variant="primary"
-                                                className="flex items-center gap-1 font-bold shadow-sm shrink-0 min-w-max px-3 whitespace-nowrap"
+                                                className="flex items-center gap-1 font-bold shadow-md shadow-blue-500/20 shrink-0 px-3 py-1.5 text-xs uppercase tracking-wide whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white active:scale-95"
                                                 onClick={() => handleAddToCart(product)}
                                             >
                                                 <Plus className="w-3.5 h-3.5" />

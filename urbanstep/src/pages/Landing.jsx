@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useCart } from '../contexts/CartContext';
+import { ThemeContext } from '../contexts/ThemeContext';
 import { productService } from '../services/productService';
 import { userService } from '../services/userService';
 import { customerService } from '../services/customerService';
@@ -34,7 +35,9 @@ import {
     CreditCard,
     Phone,
     Mail,
-    LogOut
+    LogOut,
+    Sun,
+    Moon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -136,6 +139,7 @@ const BRANDS = ['TODAS', 'JORDAN', 'NIKE', 'ADIDAS', 'YEEZY', 'NEW BALANCE', 'PU
 
 export default function Landing() {
     const { user, login, logout, isAuthenticated } = useAuth();
+    const { isDark, toggleTheme } = useContext(ThemeContext);
     const { rate, formatBs } = useCurrency();
     const { items: cartItems, addItem, removeItem, updateQuantity, clearCart, subtotal } = useCart();
     const navigate = useNavigate();
@@ -205,38 +209,62 @@ export default function Landing() {
         }
     }, [user]);
 
-    // Load products from DB and merge with curated drops
+    // Dynamic brand list based on active products
+    const availableBrands = useMemo(() => {
+        const set = new Set(['TODAS']);
+        products.forEach(p => {
+            if (p.brand) set.add(p.brand.toUpperCase());
+        });
+        return Array.from(set);
+    }, [products]);
+
+    // Load products from DB and keep synchronized in real time
     useEffect(() => {
         const loadProducts = async () => {
             try {
                 const dbProducts = await productService.getAll();
                 if (dbProducts && dbProducts.length > 0) {
-                    const mappedDb = dbProducts.map(p => ({
+                    // Filter to active items with positive stock
+                    const activeDbProducts = dbProducts.filter(p => !p.disabled && p.stock > 0);
+
+                    const mappedDb = activeDbProducts.map(p => ({
                         id: p.id,
                         brand: (p.brand || 'URBANSTEP').toUpperCase(),
                         name: p.name,
-                        subtitle: p.color || p.category || 'Edición 2026',
+                        subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
                         price: Number(p.price) || 120,
-                        tag: p.stock <= p.minStock ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
+                        tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
                         imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
                         sizes: p.sizes || ['39', '40', '41', '42', '43'],
                         rating: 4.8,
                         reviewsCount: 120,
-                        stockBadge: p.stock > 0 ? `${p.stock} pares` : 'Agotado',
+                        stockBadge: `${p.stock} pares disponibles`,
                         stock: p.stock,
                         description: p.description || 'Calzado original garantizado UrbanStep Store.'
                     }));
 
-                    const mergedMap = new Map();
-                    FEATURED_DROPS.forEach(d => mergedMap.set(d.name.toLowerCase(), d));
-                    mappedDb.forEach(p => mergedMap.set(p.name.toLowerCase(), p));
-                    setProducts([...mergedMap.values()]);
+                    setProducts(mappedDb);
+                } else {
+                    setProducts(FEATURED_DROPS);
                 }
             } catch (err) {
-                console.warn('Usando catálogo curado:', err);
+                console.warn('Usando catálogo inicial:', err);
+                setProducts(FEATURED_DROPS);
             }
         };
+
         loadProducts();
+
+        const handleSync = () => loadProducts();
+        window.addEventListener('products_updated', handleSync);
+        window.addEventListener('sales_updated', handleSync);
+        window.addEventListener('storage', handleSync);
+
+        return () => {
+            window.removeEventListener('products_updated', handleSync);
+            window.removeEventListener('sales_updated', handleSync);
+            window.removeEventListener('storage', handleSync);
+        };
     }, []);
 
     // Filtered drops
@@ -460,9 +488,15 @@ export default function Landing() {
     };
 
     return (
-        <div className="min-h-screen bg-[#07090e] text-gray-100 font-sans selection:bg-blue-600 selection:text-white flex flex-col">
+        <div className={`min-h-screen font-sans selection:bg-blue-600 selection:text-white flex flex-col transition-colors duration-200 ${
+            isDark ? 'bg-[#07090e] text-gray-100' : 'bg-gray-50 text-gray-900'
+        }`}>
             {/* Live Ticker Bar: BCV Official Rate & Lara Express Delivery */}
-            <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 border-b border-blue-900/40 text-[11px] py-2 px-4 sticky top-0 z-40 backdrop-blur-md">
+            <div className={`border-b text-[11px] py-2 px-4 sticky top-0 z-40 backdrop-blur-md transition-colors ${
+                isDark
+                    ? 'bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 border-blue-900/40 text-gray-300'
+                    : 'bg-blue-950 text-blue-100 border-blue-900'
+            }`}>
                 <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 font-mono">
                     <div className="flex items-center gap-3">
                         <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
@@ -521,7 +555,9 @@ export default function Landing() {
             </div>
 
             {/* Ecommerce Header */}
-            <header className="border-b border-white/[0.06] bg-black/40 backdrop-blur-xl sticky top-9 z-30">
+            <header className={`border-b sticky top-9 z-30 backdrop-blur-xl transition-colors ${
+                isDark ? 'border-white/[0.06] bg-black/60' : 'border-gray-200 bg-white/90 shadow-sm'
+            }`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
                     {/* Brand */}
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
@@ -529,7 +565,7 @@ export default function Landing() {
                             <Store className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <span className="text-2xl font-black tracking-tighter text-white uppercase italic">
+                            <span className={`text-2xl font-black tracking-tighter uppercase italic ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 URBAN<span className="text-blue-500">STEP</span>
                             </span>
                             <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 align-middle">
@@ -548,21 +584,43 @@ export default function Landing() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Buscar silueta: Dunk Panda, Jordan 1, Samba, Yeezy..."
-                                className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-white text-xs focus:outline-none focus:border-blue-500 placeholder-gray-500 transition-colors"
+                                className={`w-full pl-10 pr-4 py-2 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors ${
+                                    isDark
+                                        ? 'bg-white/[0.05] border border-white/10 text-white placeholder-gray-500'
+                                        : 'bg-gray-100 border border-gray-300 text-gray-900 placeholder-gray-400'
+                                }`}
                             />
                         </div>
                     </div>
 
-                    {/* Actions: Shopping Bag + Unified Login */}
-                    <div className="flex items-center gap-3">
+                    {/* Actions: Theme Toggle + Shopping Bag + Unified Login */}
+                    <div className="flex items-center gap-2.5 sm:gap-3">
+                        {/* Dark / Light Mode Switcher */}
+                        <button
+                            type="button"
+                            onClick={toggleTheme}
+                            className={`p-2.5 rounded-xl border transition-all active:scale-95 shadow-sm ${
+                                isDark
+                                    ? 'bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-amber-400'
+                                    : 'bg-gray-100 hover:bg-gray-200 border-gray-300 text-blue-600'
+                            }`}
+                            title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+                        >
+                            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-blue-600" />}
+                        </button>
+
                         {/* Shopping Bag Button */}
                         <button
                             type="button"
                             onClick={() => setIsCartOpen(true)}
-                            className="relative flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white font-bold text-xs transition-all active:scale-95 shadow-sm"
+                            className={`relative flex items-center gap-2 px-3.5 py-2.5 rounded-xl border font-bold text-xs transition-all active:scale-95 shadow-sm ${
+                                isDark
+                                    ? 'bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-white'
+                                    : 'bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-900'
+                            }`}
                             title="Ver bolsa de compras"
                         >
-                            <ShoppingBag className="w-4 h-4 text-blue-400" />
+                            <ShoppingBag className="w-4 h-4 text-blue-500" />
                             <span className="hidden sm:inline">Bolsa</span>
                             {totalItemsCount > 0 && (
                                 <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
@@ -575,7 +633,11 @@ export default function Landing() {
                         {isAuthenticated ? (
                             <div className="flex items-center gap-2">
                                 {user?.role === 'Cliente' ? (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-800 text-cyan-300 text-xs font-bold">
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                                        isDark
+                                            ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300'
+                                            : 'bg-blue-50 border-blue-200 text-blue-700'
+                                    }`}>
                                         <User className="w-3.5 h-3.5" />
                                         <span>Hola, {user.name.split(' ')[0]}</span>
                                     </div>
@@ -595,7 +657,11 @@ export default function Landing() {
                                     setIsAuthModalOpen(true);
                                     setAuthTab('login');
                                 }}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-black font-black text-xs uppercase tracking-wider hover:bg-gray-200 transition-all shadow-lg shadow-white/10 active:scale-95 shrink-0"
+                                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all shadow-lg active:scale-95 shrink-0 ${
+                                    isDark
+                                        ? 'bg-white text-black hover:bg-gray-200 shadow-white/10'
+                                        : 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/20'
+                                }`}
                             >
                                 <LogIn className="w-3.5 h-3.5" />
                                 <span>Iniciar Sesión</span>
@@ -703,7 +769,7 @@ export default function Landing() {
                 {/* Brand Filter Pills */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                        {BRANDS.map((brand) => (
+                        {availableBrands.map((brand) => (
                             <button
                                 key={brand}
                                 type="button"
@@ -711,7 +777,9 @@ export default function Landing() {
                                 className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                                     selectedBrand === brand
                                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                                        : 'bg-white/[0.04] text-gray-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
+                                        : isDark
+                                            ? 'bg-white/[0.04] text-gray-400 hover:text-white hover:bg-white/[0.08] border border-white/[0.06]'
+                                            : 'bg-white text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 shadow-sm'
                                 }`}
                             >
                                 {brand}
@@ -720,7 +788,7 @@ export default function Landing() {
                     </div>
 
                     <p className="text-xs text-gray-400 font-mono">
-                        Mostrando <strong className="text-white">{filteredProducts.length}</strong> calzados
+                        Mostrando <strong className={isDark ? "text-white" : "text-gray-900"}>{filteredProducts.length}</strong> calzados
                     </p>
                 </div>
 
@@ -733,12 +801,16 @@ export default function Landing() {
                         return (
                             <div
                                 key={product.id}
-                                className="group rounded-3xl bg-white/[0.03] border border-white/[0.08] p-5 hover:border-blue-500/50 hover:bg-white/[0.05] transition-all duration-300 flex flex-col justify-between shadow-xl min-w-0"
+                                className={`group rounded-3xl border p-5 transition-all duration-300 flex flex-col justify-between shadow-xl min-w-0 ${
+                                    isDark
+                                        ? 'bg-white/[0.03] border-white/[0.08] hover:border-blue-500/50 hover:bg-white/[0.05]'
+                                        : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-2xl shadow-gray-200/50'
+                                }`}
                             >
                                 <div className="min-w-0">
                                     {/* Top Tag & Rating */}
                                     <div className="flex items-center justify-between mb-3">
-                                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
                                             {product.tag}
                                         </span>
                                         <div className="flex items-center gap-1 text-xs text-amber-400 font-bold">
@@ -748,7 +820,9 @@ export default function Landing() {
                                     </div>
 
                                     {/* Image Thumbnail wrapper — Shrink-0 and fixed height prevents responsive contracting */}
-                                    <div className="w-full h-52 sm:h-56 shrink-0 relative overflow-hidden rounded-2xl bg-neutral-900/90 p-4 flex items-center justify-center mb-4 border border-white/5">
+                                    <div className={`w-full h-52 sm:h-56 shrink-0 relative overflow-hidden rounded-2xl p-4 flex items-center justify-center mb-4 border ${
+                                        isDark ? 'bg-neutral-900/90 border-white/5' : 'bg-gray-100 border-gray-200'
+                                    }`}>
                                         <img
                                             src={product.imageUrl}
                                             alt={product.name}
@@ -762,18 +836,20 @@ export default function Landing() {
 
                                     {/* Sneaker Info */}
                                     <div className="space-y-1">
-                                        <p className="text-[10px] font-mono font-bold text-blue-400 uppercase">{product.brand}</p>
-                                        <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition-colors line-clamp-1">
+                                        <p className="text-[10px] font-mono font-bold text-blue-500 uppercase">{product.brand}</p>
+                                        <h3 className={`text-base font-bold group-hover:text-blue-500 transition-colors line-clamp-1 ${
+                                            isDark ? 'text-white' : 'text-gray-900'
+                                        }`}>
                                             {product.name}
                                         </h3>
-                                        <p className="text-xs text-gray-400 line-clamp-1">{product.subtitle}</p>
+                                        <p className="text-xs text-gray-500 line-clamp-1">{product.subtitle}</p>
                                     </div>
 
                                     {/* Sizes Selector */}
                                     <div className="mt-3">
                                         <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 mb-1.5">
                                             <span>Seleccionar Talla:</span>
-                                            <span className="text-white font-bold">Talla: {activeSize}</span>
+                                            <span className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Talla: {activeSize}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                             {(product.sizes || ['39', '40', '41', '42', '43']).map((sz) => (
@@ -784,7 +860,9 @@ export default function Landing() {
                                                     className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
                                                         activeSize === sz
                                                             ? 'bg-blue-600 text-white shadow-sm'
-                                                            : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                            : isDark
+                                                                ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
                                                     }`}
                                                 >
                                                     {sz}
@@ -795,12 +873,16 @@ export default function Landing() {
                                 </div>
 
                                 {/* Price & Add to Cart button */}
-                                <div className="mt-5 pt-4 border-t border-white/[0.08] flex items-center justify-between gap-3">
+                                <div className={`mt-5 pt-4 border-t flex items-center justify-between gap-3 ${
+                                    isDark ? 'border-white/[0.08]' : 'border-gray-200'
+                                }`}>
                                     <div>
                                         <p className="text-[11px] text-gray-500 font-mono">PVP Oficial</p>
                                         <div className="flex items-baseline gap-1.5">
-                                            <span className="text-xl font-black text-white">${product.price}</span>
-                                            <span className="text-xs font-bold text-emerald-400 font-mono">
+                                            <span className={`text-xl font-black ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                                ${product.price}
+                                            </span>
+                                            <span className="text-xs font-bold text-emerald-500 font-mono">
                                                 {formatBs(priceBs)}
                                             </span>
                                         </div>

@@ -98,7 +98,7 @@ export const saleService = {
 
         // Actualizar stock de productos (no permite negativos y auto-deshabilita al agotarse)
         for (const item of newSale.items) {
-            const product = db.products.find(p => p.id === item.productId || p.name === item.name);
+            const product = db.products.find(p => p.id === item.productId || p.id === item.id || p.name === item.name);
             if (product) {
                 product.stock = Math.max(0, (product.stock || 0) - (item.quantity || 1));
                 if (product.stock <= 0) {
@@ -110,9 +110,15 @@ export const saleService = {
                 }
             }
         }
+
+        db.save('products');
+        db.save('sales');
+        db.save('customers');
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('products_updated', { detail: [...db.products] }));
             window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
+            window.dispatchEvent(new CustomEvent('sales_updated', { detail: [...db.sales] }));
         }
 
         // Sincronizar en Supabase si está disponible
