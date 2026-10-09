@@ -12,8 +12,8 @@ const loadStorage = (key, fallback) => {
         if (item) {
             const parsed = JSON.parse(item);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                // Si la caché local tiene los antiguos datos de prueba aleatorios (e.g. "Sneaker Pro #1"), limpiar automáticamente
-                if (key === 'urbanstep_products' && parsed.some(p => p.name?.includes('Sneaker Pro #') || p.name?.includes('Urban Hoodie #'))) {
+                // Si la caché local tiene los antiguos datos de prueba aleatorios o modelos viejos desfasados, limpiar automáticamente
+                if (key === 'urbanstep_products' && parsed.some(p => p.name?.includes('Sneaker Pro #') || p.name?.includes('Urban Hoodie #') || p.name?.includes('Chicago Lost & Found') || p.name?.includes('Panda') || p.name?.includes('Onyx'))) {
                     localStorage.setItem(key, JSON.stringify(fallback));
                     return [...fallback];
                 }

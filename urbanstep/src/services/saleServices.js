@@ -235,6 +235,9 @@ export const saleService = {
                 const totalVariants = calculateVariantsTotalStock(product.colorVariants);
                 if (Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
                     product.stock = Math.max(0, totalVariants);
+                    if (product.colorVariants[0]?.sizeStock) {
+                        product.sizeStock = { ...product.colorVariants[0].sizeStock };
+                    }
                 } else if (product.sizeStock) {
                     product.stock = Math.max(0, calculateTotalStock(product.sizeStock));
                 } else {

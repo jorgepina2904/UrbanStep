@@ -43,23 +43,6 @@ const mapSupabaseProduct = (row) => {
     // Si el producto no tiene existencias o está deshabilitado por inventario agotado
     const isExplicitlyZero = stock <= 0 || row.estado === 'deshabilitado' || row.estado === 'out_of_stock';
 
-    // Desglose de disponibilidad por talla
-    let sizeStock = null;
-    const rawStock = row.tallas_stock || row.size_stock || row.sizeStock;
-    if (rawStock && typeof rawStock === 'object') {
-        sizeStock = rawStock;
-    } else if (typeof rawStock === 'string') {
-        try {
-            sizeStock = JSON.parse(rawStock);
-        } catch {
-            sizeStock = null;
-        }
-    }
-    const finalSizeStock = isExplicitlyZero
-        ? ensureSizeStock(sizesArray, 0)
-        : ensureSizeStock(sizesArray, stock, sizeStock);
-    const finalSizeCategory = row.categoria_tallas || row.sizeCategory || detectSizeCategory(sizesArray);
-
     // Colores del modelo
     let modelColors = [];
     const rawColors = row.colores || row.colors;
@@ -86,6 +69,31 @@ const mapSupabaseProduct = (row) => {
             rawVariants = null;
         }
     }
+
+    // Desglose de disponibilidad por talla
+    let sizeStock = null;
+    const rawStock = row.tallas_stock || row.size_stock || row.sizeStock;
+    if (rawStock && typeof rawStock === 'object' && Object.keys(rawStock).length > 0) {
+        sizeStock = rawStock;
+    } else if (typeof rawStock === 'string') {
+        try {
+            sizeStock = JSON.parse(rawStock);
+            if (!sizeStock || Object.keys(sizeStock).length === 0) sizeStock = null;
+        } catch {
+            sizeStock = null;
+        }
+    }
+
+    // Si tallas_stock viene vacío pero hay variantes de color, sincronizar con la primera variante
+    if (!sizeStock && Array.isArray(rawVariants) && rawVariants[0]?.sizeStock) {
+        sizeStock = rawVariants[0].sizeStock;
+    }
+
+    const finalSizeStock = isExplicitlyZero
+        ? ensureSizeStock(sizesArray, 0)
+        : ensureSizeStock(sizesArray, stock, sizeStock);
+    const finalSizeCategory = row.categoria_tallas || row.sizeCategory || detectSizeCategory(sizesArray);
+
     let colorVariants = ensureColorVariants(modelColors, sizesArray, rawVariants, finalSizeStock);
     if (isExplicitlyZero) {
         colorVariants = colorVariants.map(v => ({
@@ -96,6 +104,11 @@ const mapSupabaseProduct = (row) => {
     }
     const totalVariantStock = calculateVariantsTotalStock(colorVariants);
     const computedStock = isExplicitlyZero ? 0 : (totalVariantStock > 0 ? totalVariantStock : stock);
+
+    // Garantizar sincronización 100% entre sizeStock principal y la primera variante
+    const synchronizedSizeStock = (Array.isArray(colorVariants) && colorVariants[0]?.sizeStock)
+        ? { ...colorVariants[0].sizeStock }
+        : finalSizeStock;
 
     const isOutOfStock = computedStock <= 0;
     const isDeshabilitado = row.estado === 'deshabilitado' || Boolean(row.disabled) || isOutOfStock;
@@ -119,7 +132,7 @@ const mapSupabaseProduct = (row) => {
         minStock,
         sizes: sizesArray,
         sizeCategory: finalSizeCategory,
-        sizeStock: finalSizeStock,
+        sizeStock: synchronizedSizeStock,
         color: primaryColor,
         colors: modelColors,
         colorVariants: colorVariants,
@@ -304,6 +317,9 @@ export const productService = {
                     stock: newProduct.stock,
                     stock_minimo: newProduct.minStock,
                     tallas: newProduct.sizes,
+                    tallas_stock: newProduct.sizeStock,
+                    colores: newProduct.colors,
+                    categoria_tallas: newProduct.sizeCategory,
                     color: newProduct.color,
                     color_hex: newProduct.colorHex,
                     proveedor_id: newProduct.supplierId,
@@ -445,6 +461,12 @@ export const productService = {
                     stock: updated.stock,
                     stock_minimo: updated.minStock,
                     tallas: updated.sizes,
+                    tallas_stock: updated.sizeStock,
+                    colores: updated.colors,
+                    variantes_color: updated.colorVariants,
+                    categoria_tallas: updated.sizeCategory,
+                    proveedor_id: updated.supplierId,
+                    proveedor_nombre: updated.supplierName,
                     color: updated.color,
                     color_hex: updated.colorHex,
                     imagen_url: updated.imageUrl,
