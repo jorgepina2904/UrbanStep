@@ -42,7 +42,11 @@ import {
     UserCheck,
     UserX,
     PlayCircle,
-    Lock
+    Lock,
+    Smartphone,
+    Coins,
+    Edit2,
+    Check
 } from 'lucide-react';
 import { userService } from '../services/userService';
 import toast from 'react-hot-toast';
@@ -146,6 +150,101 @@ export default function Settings() {
             window.removeEventListener('users_changed', userHandler);
         };
     }, []);
+
+    // Payment Methods Management
+    const [paymentMethods, setPaymentMethods] = useState(() => settingsService.getPaymentMethods());
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [editingPaymentMethod, setEditingPaymentMethod] = useState(null);
+    const [paymentMethodForm, setPaymentMethodForm] = useState({
+        label: '',
+        currency: 'USD',
+        type: 'digital',
+        bank: '',
+        phone: '',
+        rif: '',
+        email: '',
+        holder: '',
+        account: '',
+        instructions: '',
+        requiresReference: true,
+        active: true
+    });
+
+    useEffect(() => {
+        const payHandler = () => setPaymentMethods(settingsService.getPaymentMethods());
+        window.addEventListener('payment_methods_updated', payHandler);
+        return () => window.removeEventListener('payment_methods_updated', payHandler);
+    }, []);
+
+    const handleOpenCreatePaymentMethod = () => {
+        setEditingPaymentMethod(null);
+        setPaymentMethodForm({
+            label: '',
+            currency: 'USD',
+            type: 'digital',
+            bank: '',
+            phone: '',
+            rif: '',
+            email: '',
+            holder: '',
+            account: '',
+            instructions: '',
+            requiresReference: true,
+            active: true
+        });
+        setShowPaymentModal(true);
+    };
+
+    const handleOpenEditPaymentMethod = (pm) => {
+        setEditingPaymentMethod(pm);
+        setPaymentMethodForm({
+            label: pm.label || '',
+            currency: pm.currency || 'USD',
+            type: pm.type || 'digital',
+            bank: pm.bank || '',
+            phone: pm.phone || '',
+            rif: pm.rif || '',
+            email: pm.email || '',
+            holder: pm.holder || '',
+            account: pm.account || '',
+            instructions: pm.instructions || '',
+            requiresReference: pm.requiresReference ?? true,
+            active: pm.active ?? true
+        });
+        setShowPaymentModal(true);
+    };
+
+    const handleSavePaymentMethod = (e) => {
+        if (e) e.preventDefault();
+        if (!paymentMethodForm.label.trim()) {
+            toast.error('El nombre del método de pago es obligatorio');
+            return;
+        }
+
+        if (editingPaymentMethod) {
+            settingsService.updatePaymentMethod(editingPaymentMethod.id, paymentMethodForm);
+            toast.success(`Método "${paymentMethodForm.label}" actualizado`);
+        } else {
+            settingsService.addPaymentMethod(paymentMethodForm);
+            toast.success(`Nuevo método "${paymentMethodForm.label}" registrado con éxito`);
+        }
+        setPaymentMethods(settingsService.getPaymentMethods());
+        setShowPaymentModal(false);
+    };
+
+    const handleTogglePaymentMethod = (id) => {
+        const updated = settingsService.togglePaymentMethod(id);
+        setPaymentMethods(settingsService.getPaymentMethods());
+        toast.success(`Método ${updated.label} ${updated.active ? 'habilitado' : 'desactivado'}`);
+    };
+
+    const handleDeletePaymentMethod = (id, label) => {
+        if (window.confirm(`¿Estás seguro de eliminar el método de pago "${label}"?`)) {
+            settingsService.deletePaymentMethod(id);
+            setPaymentMethods(settingsService.getPaymentMethods());
+            toast.success(`Método "${label}" eliminado`);
+        }
+    };
 
     const [form, setForm] = useState(DEFAULT_SETTINGS);
 
@@ -555,7 +654,7 @@ export default function Settings() {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-800 overflow-x-auto gap-1">
+            <div className="flex border-b border-gray-200 dark:border-gray-800 overflow-x-auto gap-1 scrollbar-none no-scrollbar">
                 {tabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = activeTab === tab.id;
@@ -1132,60 +1231,216 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* Tab 3: Cuentas de Pago */}
+            {/* Tab 3: Cuentas y Métodos de Pago */}
             {activeTab === 'payments' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="p-6 space-y-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600">
-                                <CreditCard className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cuenta para Pago Móvil</h2>
-                                <p className="text-xs text-gray-500">Datos donde los clientes transferirán en el POS</p>
-                            </div>
-                        </div>
+                <div className="space-y-6">
+                    {/* Header bar with Stats & Add Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-slate-50/60 dark:from-slate-900 dark:via-blue-950/20 dark:to-slate-900 p-5 rounded-2xl border border-gray-200/80 dark:border-gray-800">
                         <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Banco Receptor</label>
-                            <select value={form.pagomovilBank} onChange={(e) => setForm({ ...form, pagomovilBank: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                {VENEZUELA_BANKS.map((b) => (<option key={b.code} value={`${b.code} - ${b.name}`}>{b.code} - {b.name}</option>))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Teléfono Afiliado al Pago Móvil</label>
-                            <Input value={form.pagomovilPhone} onChange={(e) => setForm({ ...form, pagomovilPhone: e.target.value })} placeholder="0414-2345678" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Cédula o RIF del Titular</label>
-                            <Input value={form.pagomovilRif} onChange={(e) => setForm({ ...form, pagomovilRif: e.target.value })} placeholder="J-50123456-7" />
-                        </div>
-                    </Card>
-                    <Card className="p-6 space-y-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600">
-                                <DollarSign className="w-5 h-5" />
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="w-5 h-5 text-blue-600" />
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                                    Métodos de Pago del Sistema
+                                </h2>
                             </div>
-                            <div>
-                                <h2 className="text-base font-bold text-gray-900 dark:text-white">Cuenta Zelle (USD)</h2>
-                                <p className="text-xs text-gray-500">Datos para pagos internacionales</p>
-                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Administra las pasarelas, cuentas receptoras y métodos disponibles para cobro en POS y tienda online.
+                            </p>
                         </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico de Zelle</label>
-                            <Input value={form.zelleEmail} onChange={(e) => setForm({ ...form, zelleEmail: e.target.value })} placeholder="pagos@urbanstep.com" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Nombre del Titular de Zelle</label>
-                            <Input value={form.zelleHolder} onChange={(e) => setForm({ ...form, zelleHolder: e.target.value })} placeholder="UrbanStep LLC" />
-                        </div>
-                        <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-                            <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Transferencia Bancaria Nacional</h3>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Cuenta Bancaria (20 dígitos)</label>
-                                <Input value={form.transferAccount} onChange={(e) => setForm({ ...form, transferAccount: e.target.value })} placeholder="0102-0001-00-1234567890" />
-                            </div>
-                        </div>
-                    </Card>
+                        <Button
+                            variant="primary"
+                            onClick={handleOpenCreatePaymentMethod}
+                            className="flex items-center gap-2 shadow-md shadow-blue-500/20 whitespace-nowrap"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Nuevo Método de Pago
+                        </Button>
+                    </div>
+
+                    {/* Quick KPIs */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <Card className="p-3.5">
+                            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Métodos</p>
+                            <p className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{paymentMethods.length}</p>
+                        </Card>
+                        <Card className="p-3.5">
+                            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Habilitados</p>
+                            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                {paymentMethods.filter(m => m.active).length}
+                            </p>
+                        </Card>
+                        <Card className="p-3.5">
+                            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Moneda USD ($)</p>
+                            <p className="text-xl font-black text-blue-600 dark:text-blue-400 mt-0.5">
+                                {paymentMethods.filter(m => m.currency === 'USD').length}
+                            </p>
+                        </Card>
+                        <Card className="p-3.5">
+                            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Moneda Bs. (VES)</p>
+                            <p className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                {paymentMethods.filter(m => m.currency === 'VES').length}
+                            </p>
+                        </Card>
+                    </div>
+
+                    {/* Payment Methods Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {paymentMethods.map((pm) => {
+                            const isUsd = pm.currency === 'USD';
+                            const isMobile = pm.type === 'movil';
+                            const isCard = pm.type === 'tarjeta';
+                            const isCash = pm.type === 'efectivo';
+                            const isDigital = pm.type === 'digital';
+
+                            return (
+                                <Card
+                                    key={pm.id}
+                                    className={`p-5 flex flex-col justify-between transition-all border ${
+                                        pm.active
+                                            ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm'
+                                            : 'border-gray-200/60 dark:border-gray-800/50 bg-gray-50/60 dark:bg-gray-900/40 opacity-75'
+                                    }`}
+                                >
+                                    <div className="space-y-3">
+                                        {/* Card Top: Type Icon, Label & Status Badge */}
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                                    isUsd
+                                                        ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200 dark:border-emerald-800'
+                                                        : 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 border border-blue-200 dark:border-blue-800'
+                                                }`}>
+                                                    {isMobile ? <Smartphone className="w-4 h-4" /> :
+                                                     isCard ? <CreditCard className="w-4 h-4" /> :
+                                                     isCash ? (isUsd ? <DollarSign className="w-4 h-4" /> : <Coins className="w-4 h-4" />) :
+                                                     isDigital ? <Building2 className="w-4 h-4" /> :
+                                                     <CreditCard className="w-4 h-4" />}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm text-gray-900 dark:text-white leading-tight">
+                                                        {pm.label}
+                                                    </h3>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <span className={`text-[10px] font-black uppercase px-1.5 py-0.2 rounded ${
+                                                            isUsd 
+                                                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                                                : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                                                        }`}>
+                                                            {pm.currency}
+                                                        </span>
+                                                        {pm.isCustom && (
+                                                            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.2 rounded border border-purple-200/50 dark:border-purple-800/50">
+                                                                Personalizado
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Active Switch */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleTogglePaymentMethod(pm.id)}
+                                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                                    pm.active ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-700'
+                                                }`}
+                                                title={pm.active ? 'Desactivar método' : 'Habilitar método'}
+                                            >
+                                                <span
+                                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                                        pm.active ? 'translate-x-4' : 'translate-x-0'
+                                                    }`}
+                                                />
+                                            </button>
+                                        </div>
+
+                                        {/* Method Specific Details */}
+                                        <div className="space-y-1.5 text-xs text-gray-600 dark:text-gray-300 bg-gray-50/70 dark:bg-gray-800/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 font-mono">
+                                            {pm.bank && (
+                                                <p className="truncate">
+                                                    <span className="text-gray-400 font-sans text-[10px] block">Banco / Plataforma:</span>
+                                                    <strong>{pm.bank}</strong>
+                                                </p>
+                                            )}
+                                            {pm.phone && (
+                                                <p>
+                                                    <span className="text-gray-400 font-sans text-[10px] block">Teléfono:</span>
+                                                    <strong>{pm.phone}</strong>
+                                                </p>
+                                            )}
+                                            {pm.rif && (
+                                                <p>
+                                                    <span className="text-gray-400 font-sans text-[10px] block">RIF / Cédula:</span>
+                                                    <strong>{pm.rif}</strong>
+                                                </p>
+                                            )}
+                                            {pm.email && (
+                                                <p className="truncate">
+                                                    <span className="text-gray-400 font-sans text-[10px] block">Correo / Cuenta:</span>
+                                                    <strong>{pm.email}</strong>
+                                                </p>
+                                            )}
+                                            {pm.account && (
+                                                <p className="truncate">
+                                                    <span className="text-gray-400 font-sans text-[10px] block">N° de Cuenta:</span>
+                                                    <strong>{pm.account}</strong>
+                                                </p>
+                                            )}
+                                            {pm.holder && (
+                                                <p className="truncate">
+                                                    <span className="text-gray-400 font-sans text-[10px] block">Titular:</span>
+                                                    <strong>{pm.holder}</strong>
+                                                </p>
+                                            )}
+                                            {pm.instructions && (
+                                                <p className="font-sans text-[11px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200/50 dark:border-gray-700/50 line-clamp-2">
+                                                    {pm.instructions}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Reference requirement badge */}
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-gray-400">Comprobante:</span>
+                                            {pm.requiresReference ? (
+                                                <span className="text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                                                    <CheckCircle2 className="w-3 h-3" />
+                                                    Requiere N° Referencia
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 font-medium">
+                                                    Sin referencia previa
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Footer Actions */}
+                                    <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenEditPaymentMethod(pm)}
+                                            className="px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors flex items-center gap-1"
+                                        >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                            Editar
+                                        </button>
+
+                                        {pm.isCustom && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeletePaymentMethod(pm.id, pm.label)}
+                                                className="p-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                                                title="Eliminar método de pago"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </Card>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 
@@ -1832,6 +2087,176 @@ export default function Settings() {
                         <Button type="submit" variant="primary" className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5">
                             <PlayCircle className="w-4 h-4" />
                             Aperturar Turno de Caja
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Modal para Crear/Editar Método de Pago */}
+            <Modal
+                isOpen={showPaymentModal}
+                onClose={() => setShowPaymentModal(false)}
+                title={editingPaymentMethod ? 'Editar Método de Pago' : 'Nuevo Método de Pago'}
+                size="md"
+            >
+                <form onSubmit={handleSavePaymentMethod} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Nombre del Método de Pago *
+                        </label>
+                        <Input
+                            value={paymentMethodForm.label}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, label: e.target.value })}
+                            placeholder="Ej: Binance Pay USDT, Zinli, Wally, Banesco Panamá..."
+                            required
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Moneda de Cobro
+                            </label>
+                            <select
+                                value={paymentMethodForm.currency}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, currency: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white font-bold"
+                            >
+                                <option value="USD">Dólares ($ USD)</option>
+                                <option value="VES">Bolívares (Bs. VES)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Tipo de Operación
+                            </label>
+                            <select
+                                value={paymentMethodForm.type}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, type: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white"
+                            >
+                                <option value="digital">Billetera Digital / Cripto</option>
+                                <option value="movil">Pago Móvil</option>
+                                <option value="tarjeta">Punto / Tarjeta de Débito</option>
+                                <option value="banco">Transferencia Bancaria</option>
+                                <option value="efectivo">Efectivo en Tienda</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Banco, Entidad o Red (Opcional)
+                        </label>
+                        <Input
+                            value={paymentMethodForm.bank}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, bank: e.target.value })}
+                            placeholder="Ej: Banesco, Mercantil, Red TRC20, Binance Pay ID..."
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Teléfono / Pay ID
+                            </label>
+                            <Input
+                                value={paymentMethodForm.phone}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, phone: e.target.value })}
+                                placeholder="0414-1234567 o Pay ID"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Cédula o RIF Titular
+                            </label>
+                            <Input
+                                value={paymentMethodForm.rif}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, rif: e.target.value })}
+                                placeholder="J-50123456-7 o V-12345678"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Correo Electrónico
+                            </label>
+                            <Input
+                                type="email"
+                                value={paymentMethodForm.email}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, email: e.target.value })}
+                                placeholder="pagos@tuempresa.com"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                Nombre del Titular
+                            </label>
+                            <Input
+                                value={paymentMethodForm.holder}
+                                onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, holder: e.target.value })}
+                                placeholder="UrbanStep C.A."
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Número de Cuenta o Wallet
+                        </label>
+                        <Input
+                            value={paymentMethodForm.account}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, account: e.target.value })}
+                            placeholder="0134-XXXX-XX-XXXXXXXXXX o Dirección Wallet"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                            Instrucciones para el Cajero o Cliente
+                        </label>
+                        <Input
+                            value={paymentMethodForm.instructions}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, instructions: e.target.value })}
+                            placeholder="Ej: Solicitar captura de pantalla y confirmar en la app antes de emitir factura"
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-800">
+                        <div>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">Exigir N° de Referencia Bancaria</p>
+                            <p className="text-[11px] text-gray-400">Obliga al cajero a escribir la referencia antes de confirmar</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={paymentMethodForm.requiresReference}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, requiresReference: e.target.checked })}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-100 dark:border-gray-800">
+                        <div>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">Habilitado para uso inmediato</p>
+                            <p className="text-[11px] text-gray-400">Aparecerá en la pantalla de cobro del POS y terminal de caja</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={paymentMethodForm.active}
+                            onChange={(e) => setPaymentMethodForm({ ...paymentMethodForm, active: e.target.checked })}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                        <Button type="button" variant="secondary" onClick={() => setShowPaymentModal(false)}>
+                            Cancelar
+                        </Button>
+                        <Button type="submit" variant="primary">
+                            {editingPaymentMethod ? 'Guardar Cambios' : 'Registrar Método'}
                         </Button>
                     </div>
                 </form>

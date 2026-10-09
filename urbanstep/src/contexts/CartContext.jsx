@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react';
+import { getAvailableStockForItem } from '../utils/shoeSizes';
 
 export const CartContext = createContext();
 
@@ -17,18 +18,41 @@ const initialState = {
 function cartReducer(state, action) {
     switch (action.type) {
         case 'ADD_ITEM': {
-            const { product, size, quantity = 1 } = action.payload;
-            const itemKey = `${product.id}-${size}`;
-            const existingIndex = state.items.findIndex(i => `${i.productId}-${i.size}` === itemKey || (i.id === product.id && i.size === size));
+            const { product, size, quantity = 1, color = null } = action.payload;
+            if (!product) return state;
+
+            const itemColor = color || product.color || (Array.isArray(product.colors) && product.colors[0]) || null;
+            const itemKey = `${product.id}-${size}${itemColor ? `-${itemColor}` : ''}`;
+            const maxStock = getAvailableStockForItem(product, size, itemColor);
+
+            // Si no hay stock alguno disponible, rechazar adición
+            if (maxStock <= 0) {
+                return state;
+            }
+
+            const existingIndex = state.items.findIndex(i => 
+                i.uniqueId === itemKey || 
+                (i.productId === product.id && String(i.size) === String(size) && (itemColor ? i.color === itemColor : true))
+            );
             
             if (existingIndex > -1) {
+                const existing = state.items[existingIndex];
+                const currentQty = existing.quantity || 0;
+                // No permitir exceder el stock real disponible
+                if (currentQty >= maxStock) {
+                    return state;
+                }
+                const newQuantity = Math.min(maxStock, currentQty + Math.max(1, quantity));
                 const updated = [...state.items];
                 updated[existingIndex] = {
-                    ...updated[existingIndex],
-                    quantity: updated[existingIndex].quantity + quantity
+                    ...existing,
+                    quantity: newQuantity,
+                    maxStock: maxStock
                 };
                 return { ...state, items: updated };
             }
+
+            const initialQuantity = Math.min(maxStock, Math.max(1, quantity));
             return {
                 ...state,
                 items: [
@@ -41,34 +65,60 @@ function cartReducer(state, action) {
                         price: product.price,
                         brand: product.brand,
                         size: size,
-                        quantity: quantity
+                        color: itemColor,
+                        quantity: initialQuantity,
+                        maxStock: maxStock,
+                        imageUrl: product.imageUrl || product.imagen_url || product.image,
+                        sku: product.sku
                     }
                 ]
             };
         }
-        case 'REMOVE_ITEM':
+
+        case 'REMOVE_ITEM': {
+            const payload = action.payload;
             return {
                 ...state,
-                items: state.items.filter(i => 
-                    i.uniqueId !== action.payload && 
-                    !(`${i.productId}-${i.size}` === action.payload) &&
-                    !(i.productId === action.payload.productId && i.size === action.payload.size)
-                )
+                items: state.items.filter(i => {
+                    if (typeof payload === 'string') {
+                        return i.uniqueId !== payload && i.id !== payload && `${i.productId}-${i.size}` !== payload;
+                    }
+                    if (payload && typeof payload === 'object') {
+                        const { uniqueId, productId, size, color } = payload;
+                        if (uniqueId && i.uniqueId === uniqueId) return false;
+                        if (productId && i.productId === productId) {
+                            if (size && String(i.size) !== String(size)) return true;
+                            if (color && i.color && String(i.color).toLowerCase() !== String(color).toLowerCase()) return true;
+                            return false;
+                        }
+                    }
+                    return true;
+                })
             };
-        case 'UPDATE_QTY':
+        }
+
+        case 'UPDATE_QTY': {
+            const { id, uniqueId, productId, size, color, qty } = action.payload;
+            const targetId = uniqueId || id;
             return {
                 ...state,
                 items: state.items.map(i => {
-                    const match = i.uniqueId === action.payload.id || 
-                                  `${i.productId}-${i.size}` === action.payload.id ||
-                                  (i.productId === action.payload.productId && i.size === action.payload.size);
-                    return match ? { ...i, quantity: action.payload.qty } : i;
+                    const match = (targetId && (i.uniqueId === targetId || i.id === targetId || `${i.productId}-${i.size}` === targetId)) ||
+                                  (productId && i.productId === productId && (!size || String(i.size) === String(size)) && (!color || String(i.color).toLowerCase() === String(color).toLowerCase()));
+                    if (!match) return i;
+
+                    const limit = i.maxStock !== undefined ? i.maxStock : 9999;
+                    // Asegurar que la cantidad esté estrictamente entre 0 y el stock disponible
+                    const safeQty = Math.max(0, Math.min(parseInt(qty) || 0, limit));
+                    return { ...i, quantity: safeQty };
                 }).filter(i => i.quantity > 0)
             };
+        }
+
         case 'SET_CUSTOMER':
             return { ...state, customer: action.payload };
         case 'SET_DISCOUNT':
-            return { ...state, discount: action.payload };
+            return { ...state, discount: Math.max(0, Math.min(100, Number(action.payload) || 0)) };
         case 'SET_APPLY_IGTF':
             return { ...state, applyIgtf: Boolean(action.payload) };
         case 'SET_SHIPPING':
@@ -110,16 +160,30 @@ export const CartProvider = ({ children }) => {
     const shipping = Number(state.shippingCost) || 0;
     const total = subtotalAfterDiscount + tax + igtf + shipping;
 
-    const addItem = (product, size = 'N/A', quantity = 1) => {
-        dispatch({ type: 'ADD_ITEM', payload: { product, size, quantity } });
+    const addItem = (product, size = 'N/A', quantity = 1, color = null) => {
+        dispatch({ type: 'ADD_ITEM', payload: { product, size, quantity, color } });
     };
 
-    const removeItem = (productId, size) => {
-        dispatch({ type: 'REMOVE_ITEM', payload: { productId, size } });
+    const removeItem = (productIdOrUniqueId, size = null, color = null) => {
+        if (typeof productIdOrUniqueId === 'string' && (productIdOrUniqueId.includes('-') || !size)) {
+            dispatch({ type: 'REMOVE_ITEM', payload: productIdOrUniqueId });
+        } else {
+            dispatch({ type: 'REMOVE_ITEM', payload: { productId: productIdOrUniqueId, size, color } });
+        }
     };
 
-    const updateQuantity = (productId, size, qty) => {
-        dispatch({ type: 'UPDATE_QTY', payload: { productId, size, qty } });
+    /**
+     * Permite actualizar cantidad con firma flexible:
+     * updateQuantity(uniqueId, newQty) O updateQuantity(productId, size, newQty, color)
+     */
+    const updateQuantity = (p1, p2, p3 = null, p4 = null) => {
+        if (p3 === null && p4 === null) {
+            // Firma: updateQuantity(uniqueId, qty)
+            dispatch({ type: 'UPDATE_QTY', payload: { uniqueId: p1, qty: p2 } });
+        } else {
+            // Firma: updateQuantity(productId, size, qty, color)
+            dispatch({ type: 'UPDATE_QTY', payload: { productId: p1, size: p2, qty: p3, color: p4 } });
+        }
     };
 
     const setApplyIgtf = (apply) => {
@@ -165,11 +229,6 @@ export const CartProvider = ({ children }) => {
             taxRate: state.taxRate,
             igtfRate: state.igtfRate,
             applyIgtf: state.applyIgtf,
-            setCustomer,
-            addItem,
-            removeItem,
-            updateQuantity,
-            setApplyIgtf,
             setShipping,
             setDeliveryData,
             clearCart,

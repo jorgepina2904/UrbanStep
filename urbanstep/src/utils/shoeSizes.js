@@ -110,3 +110,99 @@ export function detectSizeCategory(sizes = []) {
     if (min <= 36 && max <= 41) return 'dama';
     return 'unisex';
 }
+
+/**
+ * Garantiza que las variantes de color tengan su propia matriz de existencias por talla
+ */
+export function ensureColorVariants(colors = [], sizes = [], existingVariants = null, fallbackSizeStock = null) {
+    const safeSizes = Array.isArray(sizes) && sizes.length > 0 ? sizes : ['38', '39', '40', '41', '42', '43'];
+    const activeColors = Array.isArray(colors) && colors.length > 0 ? colors : ['Original'];
+
+    // Si ya existen variantes válidas
+    if (Array.isArray(existingVariants) && existingVariants.length > 0) {
+        return existingVariants.map(v => {
+            const vColor = v.color || 'Original';
+            const vHex = v.hex || '#3b82f6';
+            const vStock = ensureSizeStock(safeSizes, 0, v.sizeStock || fallbackSizeStock);
+            return {
+                color: vColor,
+                hex: vHex,
+                sizeStock: vStock,
+                total: calculateTotalStock(vStock)
+            };
+        });
+    }
+
+    // Si no existen variantes, crearlas a partir de los colores
+    return activeColors.map((colorName, idx) => {
+        // Al primer color le asignamos el fallbackSizeStock si existe, a los siguientes 0 o repartido
+        const baseStock = idx === 0 && fallbackSizeStock ? fallbackSizeStock : {};
+        const vStock = ensureSizeStock(safeSizes, 0, baseStock);
+        return {
+            color: colorName,
+            hex: '#3b82f6',
+            sizeStock: vStock,
+            total: calculateTotalStock(vStock)
+        };
+    });
+}
+
+/**
+ * Calcula la suma total de existencias en todas las variantes de color
+ */
+export function calculateVariantsTotalStock(colorVariants = []) {
+    if (!Array.isArray(colorVariants) || colorVariants.length === 0) return 0;
+    return colorVariants.reduce((sum, v) => sum + calculateTotalStock(v.sizeStock || {}), 0);
+}
+
+/**
+ * Obtiene el desglose de existencias por talla para un color específico de un producto
+ */
+export function getColorVariantSizeStock(product, colorName) {
+    if (!product) return {};
+    if (Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
+        const found = product.colorVariants.find(v => (v.color || '').toLowerCase() === (colorName || '').toLowerCase());
+        if (found && found.sizeStock) return found.sizeStock;
+        // Si no coincide exactamente, retornar la primera variante
+        if (product.colorVariants[0]?.sizeStock) return product.colorVariants[0].sizeStock;
+    }
+    return product.sizeStock || {};
+}
+
+/**
+ * Calcula con precisión milimétrica la cantidad máxima disponible de un producto
+ * para una talla y color específico, garantizando que nunca se exceda el inventario real.
+ */
+export function getAvailableStockForItem(product, size = 'N/A', color = null) {
+    if (!product || product.disabled || product.status === 'out_of_stock' || (product.stock !== undefined && product.stock <= 0)) return 0;
+
+    // 1. Si se especificó una talla válida (distinta de 'N/A' o vacío)
+    if (size && size !== 'N/A') {
+        const s = String(size);
+
+        // A. Buscar en variantes de color si existen
+        if (color && Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
+            const variant = product.colorVariants.find(v => (v.color || '').toLowerCase() === String(color).toLowerCase()) 
+                         || product.colorVariants[0];
+            if (variant?.sizeStock && variant.sizeStock[s] !== undefined) {
+                return Math.max(0, parseInt(variant.sizeStock[s]) || 0);
+            }
+        }
+
+        // B. Buscar en sizeStock general del producto
+        if (product.sizeStock && product.sizeStock[s] !== undefined) {
+            return Math.max(0, parseInt(product.sizeStock[s]) || 0);
+        }
+    }
+
+    // 2. Si se especificó un color pero no talla
+    if (color && Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
+        const variant = product.colorVariants.find(v => (v.color || '').toLowerCase() === String(color).toLowerCase());
+        if (variant) {
+            return Math.max(0, parseInt(variant.total) || calculateTotalStock(variant.sizeStock));
+        }
+    }
+
+    // 3. Fallback al stock general del producto
+    return Math.max(0, parseInt(product.stock) || 0);
+}

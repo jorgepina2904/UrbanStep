@@ -21,6 +21,7 @@ import Customers from './pages/Customers';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Delivery from './pages/Delivery';
+import Purchases from './pages/Purchases';
 
 export const App = () => {
   return (
@@ -41,6 +42,7 @@ export const App = () => {
                     <Route path="pos" element={<ProtectedRoute module="pos"><POS /></ProtectedRoute>} />
                     <Route path="products" element={<ProtectedRoute module="products"><Products /></ProtectedRoute>} />
                     <Route path="inventory" element={<ProtectedRoute module="inventory"><Inventory /></ProtectedRoute>} />
+                    <Route path="purchases" element={<ProtectedRoute module="purchases"><Purchases /></ProtectedRoute>} />
                     <Route path="customers" element={<ProtectedRoute module="customers"><Customers /></ProtectedRoute>} />
                     <Route path="delivery" element={<ProtectedRoute module="delivery"><Delivery /></ProtectedRoute>} />
                     <Route path="reports" element={<ProtectedRoute module="reports"><Reports /></ProtectedRoute>} />

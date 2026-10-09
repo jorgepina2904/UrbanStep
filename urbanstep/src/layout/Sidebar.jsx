@@ -17,7 +17,8 @@ import {
     ChevronRight,
     ChevronLeft,
     X,
-    FolderKanban
+    FolderKanban,
+    Building2
 } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission, RoleMeta } from '../utils/permissions';
@@ -58,6 +59,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
             items: [
                 { name: 'Productos', icon: Tags, path: '/products', module: 'products' },
                 { name: 'Inventario', icon: Package, path: '/inventory', module: 'inventory' },
+                { name: 'Compras & Proveedores', icon: Building2, path: '/purchases', module: 'purchases' },
             ]
         },
         {
@@ -140,38 +142,55 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                 )}
             >
                 {/* Header del Sidebar */}
-                <div className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
-                    <div className="flex items-center space-x-2.5 overflow-hidden">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20">
-                            <Store className="h-5 w-5" />
-                        </div>
-                        {(!isCollapsed || mobileOpen) && (
+                {isCollapsed && !mobileOpen ? (
+                    <div className="h-16 flex items-center justify-center border-b border-gray-200 dark:border-gray-800 shrink-0 px-2 relative">
+                        <button
+                            onClick={onToggleCollapse}
+                            className="group relative flex items-center justify-center focus:outline-none"
+                            title="Expandir menú lateral"
+                        >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20 transition-transform group-hover:scale-105">
+                                <Store className="h-5 w-5" />
+                            </div>
+                            {onToggleCollapse && (
+                                <span className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full p-0.5 text-blue-600 dark:text-blue-400 shadow-sm transition-transform group-hover:translate-x-0.5">
+                                    <ChevronRight className="w-3 h-3" />
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+                        <div className="flex items-center space-x-2.5 overflow-hidden">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20">
+                                <Store className="h-5 w-5" />
+                            </div>
                             <span className="text-lg font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 truncate">
                                 UrbanStep
                             </span>
+                        </div>
+
+                        {/* Botón de cerrar en móvil */}
+                        <button
+                            onClick={onCloseMobile}
+                            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden"
+                            aria-label="Cerrar navegación"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        {/* Botón de contraer en escritorio */}
+                        {onToggleCollapse && (
+                            <button
+                                onClick={onToggleCollapse}
+                                className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                title="Contraer menú lateral"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
                         )}
                     </div>
-
-                    {/* Botón de cerrar en móvil */}
-                    <button
-                        onClick={onCloseMobile}
-                        className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden"
-                        aria-label="Cerrar navegación"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-
-                    {/* Botón de contraer/desplegar en escritorio */}
-                    {onToggleCollapse && (
-                        <button
-                            onClick={onToggleCollapse}
-                            className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            title={isCollapsed ? "Expandir menú lateral" : "Contraer menú lateral"}
-                        >
-                            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                        </button>
-                    )}
-                </div>
+                )}
 
                 {/* Perfil del Usuario */}
                 {(!isCollapsed || mobileOpen) ? (
@@ -197,7 +216,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                 )}
 
                 {/* Navegación con Secciones Desplegables */}
-                <nav className="flex-1 px-3 py-3 space-y-2 overflow-y-auto scrollbar-thin">
+                <nav className="flex-1 px-3 py-3 space-y-2 overflow-y-auto scrollbar-none no-scrollbar">
                     {menuGroups.map((group) => {
                         // Filtrar items según permisos del usuario
                         const allowedItems = group.items.filter(item => hasPermission(user?.role, item.module));

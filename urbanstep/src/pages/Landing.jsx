@@ -8,6 +8,7 @@ import { productService } from '../services/productService';
 import { userService } from '../services/userService';
 import { customerService } from '../services/customerService';
 import { saleService } from '../services/saleServices';
+import { settingsService } from '../services/settingsService';
 import { getDefaultRoute } from '../utils/permissions';
 import {
     Store,
@@ -47,7 +48,8 @@ const mapProductToCatalog = (p) => ({
     brand: (p.brand || 'URBANSTEP').toUpperCase(),
     name: p.name,
     subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
-    color: p.color,
+    color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
+    colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
     price: Number(p.price) || 120,
     tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
     imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
@@ -74,6 +76,20 @@ export default function Landing() {
     const [selectedBrand, setSelectedBrand] = useState('TODAS');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSizes, setSelectedSizes] = useState({});
+    const [selectedColors, setSelectedColors] = useState({});
+
+    // Dynamic payment methods from settings
+    const [paymentMethods, setPaymentMethods] = useState(() => 
+        settingsService.getPaymentMethods().filter(pm => pm.active)
+    );
+
+    useEffect(() => {
+        const handleSyncPM = () => {
+            setPaymentMethods(settingsService.getPaymentMethods().filter(pm => pm.active));
+        };
+        window.addEventListener('payment_methods_updated', handleSyncPM);
+        return () => window.removeEventListener('payment_methods_updated', handleSyncPM);
+    }, []);
 
     // Cart Drawer state
     const [isCartOpen, setIsCartOpen] = useState(false);
@@ -156,7 +172,8 @@ export default function Landing() {
                         brand: (p.brand || 'URBANSTEP').toUpperCase(),
                         name: p.name,
                         subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
-                        color: p.color,
+                        color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
+                        colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
                         price: Number(p.price) || 120,
                         tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
                         imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
@@ -213,23 +230,34 @@ export default function Landing() {
         setSelectedSizes(prev => ({ ...prev, [productId]: size }));
     };
 
-    // Add to cart handler
+    // Add to cart handler with color variant support and strict stock checking
     const handleAddToCart = (product) => {
         const chosenSize = selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
-        if (product.sizeStock && product.sizeStock[chosenSize] !== undefined && product.sizeStock[chosenSize] <= 0) {
-            toast.error(`La talla ${chosenSize} de "${product.name}" se encuentra agotada temporalmente`);
+        const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
+            ? product.colors 
+            : (product.color ? [product.color] : ['Original']);
+        const chosenColor = selectedColors[product.id] || prodColors[0];
+        const availableStock = productService.getAvailableStock(product, chosenSize, chosenColor);
+
+        if (availableStock <= 0) {
+            toast.error(`La talla ${chosenSize}${chosenColor ? ` en ${chosenColor}` : ''} de "${product.name}" se encuentra agotada temporalmente`);
             return;
         }
-        addItem({
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            brand: product.brand,
-            imageUrl: product.imageUrl,
-            stock: product.stock,
-            sizeStock: product.sizeStock
-        }, chosenSize, 1);
-        toast.success(`Agregado a la bolsa: ${product.name} (Talla ${chosenSize})`, {
+
+        const existingItem = cartItems.find(i => 
+            (i.productId === product.id || i.id === product.id) && 
+            String(i.size) === String(chosenSize) && 
+            (chosenColor ? String(i.color || '').toLowerCase() === String(chosenColor).toLowerCase() : true)
+        );
+        const inCartQty = existingItem ? existingItem.quantity : 0;
+
+        if (inCartQty >= availableStock) {
+            toast.error(`Ya tienes el límite disponible (${availableStock} pares) de este modelo en tu bolsa de compras.`);
+            return;
+        }
+
+        addItem(product, chosenSize, 1, chosenColor);
+        toast.success(`Agregado a la bolsa: ${product.name} (${chosenColor} • Talla ${chosenSize})`, {
             icon: '🛍️'
         });
         setIsCartOpen(true);
@@ -383,6 +411,7 @@ export default function Landing() {
                     name: i.name,
                     brand: i.brand,
                     size: i.size,
+                    color: i.color || null,
                     price: i.price,
                     quantity: i.quantity,
                     totalUsd: i.price * i.quantity
@@ -604,24 +633,44 @@ export default function Landing() {
             </header>
 
             {/* Hero Banner */}
-            <section className="relative overflow-hidden pt-10 pb-16 md:pt-16 md:pb-24 border-b border-white/[0.06]">
-                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-600/15 rounded-full blur-[140px] pointer-events-none" />
+            <section className={`relative overflow-hidden pt-10 pb-16 md:pt-16 md:pb-24 border-b transition-colors ${
+                isDark 
+                    ? 'border-white/[0.06] bg-[#07090e]' 
+                    : 'border-slate-200/80 bg-gradient-to-b from-blue-50/70 via-white to-slate-50/40'
+            }`}>
+                {/* Ambient glow - subtle and de-noised for dark mode, fresh for light mode */}
+                <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 w-[650px] h-[550px] rounded-full blur-[160px] pointer-events-none ${
+                    isDark ? 'bg-blue-600/[0.05]' : 'bg-blue-400/10'
+                }`} />
+
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                         <div className="lg:col-span-7 space-y-5">
-                            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/70 border border-blue-500/30 text-blue-300 text-xs font-bold tracking-wider uppercase">
-                                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                            <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase transition-colors ${
+                                isDark 
+                                    ? 'bg-blue-950/70 border border-blue-500/30 text-blue-300' 
+                                    : 'bg-blue-50 border border-blue-200 text-blue-800 shadow-xs'
+                            }`}>
+                                <Sparkles className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
                                 SNEAKERS & STREETWEAR STORE • VENEZUELA 2026
                             </div>
 
-                            <h1 className="text-4xl sm:text-6xl md:text-7xl font-black text-white uppercase italic tracking-tight leading-[0.95]">
+                            <h1 className={`text-4xl sm:text-6xl md:text-7xl font-black uppercase italic tracking-tight leading-[0.95] ${
+                                isDark ? 'text-white' : 'text-slate-950'
+                            }`}>
                                 THE STREETS <br />
-                                <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+                                <span className={
+                                    isDark 
+                                        ? 'bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent' 
+                                        : 'bg-gradient-to-r from-blue-700 via-indigo-600 to-violet-700 bg-clip-text text-transparent'
+                                }>
                                     ARE YOURS.
                                 </span>
                             </h1>
 
-                            <p className="text-sm sm:text-base text-gray-300 max-w-xl font-normal leading-relaxed">
+                            <p className={`text-sm sm:text-base max-w-xl font-normal leading-relaxed ${
+                                isDark ? 'text-slate-300' : 'text-slate-700'
+                            }`}>
                                 Encuentra las siluetas más buscadas de <strong>Nike, Air Jordan, Adidas y Yeezy</strong>. Precios en tiempo real en <strong>Dólares ($)</strong> y <strong>Bolívares (Bs.)</strong> a tasa oficial BCV, con entrega express en el <strong>Estado Lara</strong> y envíos asegurados a toda Venezuela.
                             </p>
 
@@ -631,7 +680,7 @@ export default function Landing() {
                                         const el = document.getElementById('catalogo');
                                         if (el) el.scrollIntoView({ behavior: 'smooth' });
                                     }}
-                                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white font-black text-xs uppercase tracking-wider hover:brightness-110 transition-all shadow-xl shadow-blue-600/30 flex items-center gap-2 active:scale-95"
+                                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-600 text-white font-black text-xs uppercase tracking-wider hover:brightness-110 transition-all shadow-xl shadow-blue-600/30 flex items-center gap-2 active:scale-95"
                                 >
                                     Ver Catálogo y Drops
                                     <ArrowRight className="w-4 h-4" />
@@ -639,9 +688,13 @@ export default function Landing() {
 
                                 <button
                                     onClick={() => setIsCartOpen(true)}
-                                    className="px-5 py-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95"
+                                    className={`px-5 py-3 rounded-xl border font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 ${
+                                        isDark 
+                                            ? 'bg-white/[0.05] hover:bg-white/[0.1] border-white/10 text-white' 
+                                            : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-800 shadow-sm'
+                                    }`}
                                 >
-                                    <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                                    <ShoppingBag className="w-4 h-4 text-emerald-500" />
                                     Mi Bolsa ({totalItemsCount})
                                 </button>
                             </div>
@@ -649,15 +702,21 @@ export default function Landing() {
 
                         {/* Right: Featured Showcase Card */}
                         <div className="lg:col-span-5">
-                            <div className="p-6 rounded-3xl bg-gradient-to-b from-white/[0.07] to-white/[0.02] border border-white/10 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+                            <div className={`p-6 rounded-3xl border shadow-2xl backdrop-blur-xl relative overflow-hidden transition-colors ${
+                                isDark 
+                                    ? 'bg-gradient-to-b from-white/[0.05] to-white/[0.02] border-white/10' 
+                                    : 'bg-white border-slate-200/90 shadow-slate-200/60'
+                            }`}>
                                 <div className="flex items-center justify-between mb-4">
-                                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
                                         ⚡ DROP DESTACADO
                                     </span>
-                                    <span className="text-xs font-mono text-gray-400">Entrega 45 min en Lara</span>
+                                    <span className={`text-xs font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Entrega 45 min en Lara</span>
                                 </div>
 
-                                <div className="relative w-full h-56 shrink-0 flex items-center justify-center p-2 mb-4 bg-black/40 rounded-2xl overflow-hidden">
+                                <div className={`relative w-full h-56 shrink-0 flex items-center justify-center p-2 mb-4 rounded-2xl overflow-hidden border ${
+                                    isDark ? 'bg-black/40 border-white/5' : 'bg-slate-100/70 border-slate-200/60'
+                                }`}>
                                     <img
                                         src={(products[0] || mockProducts[0])?.imageUrl}
                                         alt={(products[0] || mockProducts[0])?.name}
@@ -666,17 +725,17 @@ export default function Landing() {
                                 </div>
 
                                 <div className="space-y-1">
-                                    <p className="text-xs font-mono text-blue-400 uppercase font-bold">{(products[0] || mockProducts[0])?.brand}</p>
-                                    <h3 className="text-lg font-bold text-white">{(products[0] || mockProducts[0])?.name}</h3>
-                                    <p className="text-xs text-gray-400">{(products[0] || mockProducts[0])?.subtitle || (products[0] || mockProducts[0])?.category}</p>
+                                    <p className="text-xs font-mono text-blue-600 dark:text-blue-400 uppercase font-bold">{(products[0] || mockProducts[0])?.brand}</p>
+                                    <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{(products[0] || mockProducts[0])?.name}</h3>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{(products[0] || mockProducts[0])?.subtitle || (products[0] || mockProducts[0])?.category}</p>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                                <div className={`mt-4 pt-4 border-t flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                                     <div>
                                         <p className="text-[11px] text-gray-500 font-mono">Precio Oficial</p>
-                                        <p className="text-2xl font-black text-white">
+                                        <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>
                                             ${(products[0] || mockProducts[0])?.price}{' '}
-                                            <span className="text-xs font-bold text-emerald-400 font-mono">
+                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                                                 ({formatBs(((products[0] || mockProducts[0])?.price || 0) * rate)})
                                             </span>
                                         </p>
@@ -684,7 +743,7 @@ export default function Landing() {
 
                                     <button
                                         onClick={() => handleAddToCart(products[0] || mockProducts[0])}
-                                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-blue-600/30"
+                                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-blue-600/30 active:scale-95"
                                     >
                                         <Plus className="w-4 h-4" />
                                         Comprar
@@ -698,9 +757,9 @@ export default function Landing() {
 
             {/* Catalog Section */}
             <main id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 flex-1 w-full space-y-8">
-                {/* Brand Filter Pills */}
+                {/* Brand Filter Pills without scrollbars */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
                         {availableBrands.map((brand) => (
                             <button
                                 key={brand}
@@ -735,8 +794,8 @@ export default function Landing() {
                                 key={product.id}
                                 className={`group rounded-3xl border p-5 transition-all duration-300 flex flex-col justify-between shadow-xl min-w-0 ${
                                     isDark
-                                        ? 'bg-white/[0.03] border-white/[0.08] hover:border-blue-500/50 hover:bg-white/[0.05]'
-                                        : 'bg-white border-gray-200 hover:border-blue-400 hover:shadow-2xl shadow-gray-200/50'
+                                        ? 'bg-[#0b0e18] border-slate-800/80 hover:border-blue-500/50 hover:bg-[#0f1322]'
+                                        : 'bg-white border-slate-200/90 hover:border-blue-500 hover:shadow-xl shadow-slate-200/50'
                                 }`}
                             >
                                 <div className="min-w-0">
@@ -753,7 +812,7 @@ export default function Landing() {
 
                                     {/* Image Thumbnail wrapper — Shrink-0 and fixed height prevents responsive contracting */}
                                     <div className={`w-full h-52 sm:h-56 shrink-0 relative overflow-hidden rounded-2xl p-4 flex items-center justify-center mb-4 border ${
-                                        isDark ? 'bg-neutral-900/90 border-white/5' : 'bg-gray-100 border-gray-200'
+                                        isDark ? 'bg-[#080b14] border-slate-800/60' : 'bg-slate-100/80 border-slate-200/60'
                                     }`}>
                                         <img
                                             src={product.imageUrl}
@@ -770,12 +829,52 @@ export default function Landing() {
                                     <div className="space-y-1">
                                         <p className="text-[10px] font-mono font-bold text-blue-500 uppercase">{product.brand}</p>
                                         <h3 className={`text-base font-bold group-hover:text-blue-500 transition-colors line-clamp-1 ${
-                                            isDark ? 'text-white' : 'text-gray-900'
+                                            isDark ? 'text-white' : 'text-slate-900'
                                         }`}>
                                             {product.name}
                                         </h3>
-                                        <p className="text-xs text-gray-500 line-clamp-1">{product.subtitle}</p>
+                                        <p className={`text-xs line-clamp-1 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{product.subtitle}</p>
                                     </div>
+
+                                    {/* Model Colors Selector */}
+                                    {(() => {
+                                        const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
+                                            ? product.colors 
+                                            : (product.color ? [product.color] : []);
+                                        if (prodColors.length <= 1) return null;
+                                        const activeColor = selectedColors[product.id] || prodColors[0];
+                                        return (
+                                            <div className="mt-2.5">
+                                                <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                                                    <span className={isDark ? "text-gray-400" : "text-slate-500"}>Color Disponible:</span>
+                                                    <span className={`font-bold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                                                        {activeColor}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {prodColors.map((cName) => {
+                                                        const isSelected = activeColor === cName;
+                                                        return (
+                                                            <button
+                                                                key={cName}
+                                                                type="button"
+                                                                onClick={() => setSelectedColors(prev => ({ ...prev, [product.id]: cName }))}
+                                                                className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all border flex items-center gap-1 ${
+                                                                    isSelected
+                                                                        ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                                                                        : isDark
+                                                                            ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
+                                                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                                                }`}
+                                                            >
+                                                                <span>{cName}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Sizes Selector */}
                                     <div className="mt-3">
@@ -852,21 +951,37 @@ export default function Landing() {
                                     </div>
 
                                     {(() => {
-                                        const activeStock = product.sizeStock ? (product.sizeStock[activeSize] ?? null) : null;
-                                        const isSelectedOutOfStock = activeStock !== null && activeStock <= 0;
+                                        const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
+                                            ? product.colors 
+                                            : (product.color ? [product.color] : ['Original']);
+                                        const chosenColor = selectedColors[product.id] || prodColors[0];
+                                        const availableStock = productService.getAvailableStock(product, activeSize, chosenColor);
+                                        const isSelectedOutOfStock = availableStock <= 0;
+
+                                        const existingInCart = cartItems.find(i => 
+                                            (i.productId === product.id || i.id === product.id) && 
+                                            String(i.size) === String(activeSize) && 
+                                            (chosenColor ? String(i.color || '').toLowerCase() === String(chosenColor).toLowerCase() : true)
+                                        );
+                                        const inCartQty = existingInCart ? existingInCart.quantity : 0;
+                                        const isMaxInCart = availableStock > 0 && inCartQty >= availableStock;
+                                        const isDisabled = isSelectedOutOfStock || isMaxInCart;
+
                                         return (
                                             <button
                                                 type="button"
-                                                disabled={isSelectedOutOfStock}
+                                                disabled={isDisabled}
                                                 onClick={() => handleAddToCart(product)}
                                                 className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
                                                     isSelectedOutOfStock
                                                         ? 'opacity-40 cursor-not-allowed bg-gray-500 text-white'
-                                                        : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
+                                                        : isMaxInCart
+                                                            ? 'opacity-70 cursor-not-allowed bg-amber-600/30 text-amber-300 border border-amber-500/40'
+                                                            : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30'
                                                 }`}
                                             >
                                                 <ShoppingBag className="w-3.5 h-3.5" />
-                                                {isSelectedOutOfStock ? 'Agotado' : 'Agregar'}
+                                                {isSelectedOutOfStock ? 'Agotado' : isMaxInCart ? 'En Bolsa (Máx)' : inCartQty > 0 ? `Bolsa (${inCartQty})` : 'Agregar'}
                                             </button>
                                         );
                                     })()}
@@ -893,19 +1008,23 @@ export default function Landing() {
             </main>
 
             {/* Lara Delivery & Guarantees Section */}
-            <section className="bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-purple-950/40 border-t border-white/[0.08] py-16">
+            <section className={`border-t py-16 transition-colors ${
+                isDark 
+                    ? 'bg-gradient-to-r from-blue-950/30 via-slate-900/60 to-indigo-950/30 border-white/[0.08]' 
+                    : 'bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border-slate-200'
+            }`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                         <div className="lg:col-span-7 space-y-4">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/20 text-xs font-bold">
                                 <MapPin className="w-3.5 h-3.5" />
                                 COBERTURA GEOLOCALIZADA EN ESTADO LARA
                             </div>
-                            <h2 className="text-3xl sm:text-4xl font-black text-white uppercase italic">
+                            <h2 className={`text-3xl sm:text-4xl font-black uppercase italic ${isDark ? 'text-white' : 'text-slate-950'}`}>
                                 DELIVERY EXPRESS EN 45 MINUTOS <br />
-                                <span className="text-blue-400">BARQUISIMETO & CABUDARE</span>
+                                <span className={isDark ? "text-blue-400" : "text-blue-600"}>BARQUISIMETO & CABUDARE</span>
                             </h2>
-                            <p className="text-sm text-gray-300 leading-relaxed max-w-xl">
+                            <p className={`text-sm leading-relaxed max-w-xl ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
                                 Despacho directo desde nuestra sede principal en Barquisimeto hasta tu puerta. Paga cómodamente al recibir mediante Pago Móvil, Punto de Venta inalámbrico o Efectivo en Divisas.
                             </p>
 
@@ -914,51 +1033,54 @@ export default function Landing() {
                                     href="https://www.google.com/maps?q=10.068330144675503,-69.28499381534304"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 border border-blue-500/30 text-xs font-bold transition-all shadow-sm group"
+                                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs group ${
+                                        isDark 
+                                            ? 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30' 
+                                            : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                                    }`}
                                 >
-                                    <MapPin className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
+                                    <MapPin className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
                                     <span>Ver Sede en Google Maps (10.06833, -69.28499)</span>
                                     <ArrowRight className="w-3.5 h-3.5" />
                                 </a>
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                                <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                                    <p className="font-bold text-xs text-white">Las Trinitarias & Este</p>
-                                    <p className="text-[11px] text-gray-400">15 - 25 min</p>
-                                </div>
-                                <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                                    <p className="font-bold text-xs text-white">Carrera 19 & Centro</p>
-                                    <p className="text-[11px] text-gray-400">20 - 30 min</p>
-                                </div>
-                                <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                                    <p className="font-bold text-xs text-white">Cabudare Centro</p>
-                                    <p className="text-[11px] text-gray-400">30 - 45 min</p>
-                                </div>
-                                <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                                    <p className="font-bold text-xs text-white">Carora & Quíbor</p>
-                                    <p className="text-[11px] text-gray-400">Mismo Día</p>
-                                </div>
+                                {[
+                                    { place: 'Las Trinitarias & Este', time: '15 - 25 min' },
+                                    { place: 'Carrera 19 & Centro', time: '20 - 30 min' },
+                                    { place: 'Cabudare Centro', time: '30 - 45 min' },
+                                    { place: 'Carora & Quíbor', time: 'Mismo Día' }
+                                ].map(zone => (
+                                    <div key={zone.place} className={`p-3 rounded-xl border ${
+                                        isDark ? 'bg-black/40 border-white/10' : 'bg-white border-slate-200 shadow-xs'
+                                    }`}>
+                                        <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>{zone.place}</p>
+                                        <p className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-slate-500 font-medium'}`}>{zone.time}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
                         <div className="lg:col-span-5">
-                            <div className="p-6 rounded-3xl bg-black/70 border border-white/10 space-y-4">
-                                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                            <div className={`p-6 rounded-3xl border space-y-4 ${
+                                isDark ? 'bg-black/70 border-white/10' : 'bg-white border-slate-200 shadow-md'
+                            }`}>
+                                <h3 className={`text-base font-bold flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                    <ShieldCheck className="w-5 h-5 text-emerald-500" />
                                     Beneficios Exclusivos de Despacho
                                 </h3>
-                                <ul className="space-y-3 text-xs text-gray-300">
+                                <ul className={`space-y-3 text-xs ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
                                     <li className="flex items-start gap-2">
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                                         <span><strong>Pruébate dos tallas antes de pagar:</strong> El motorizado lleva dos opciones para asegurar tu ajuste perfecto.</span>
                                     </li>
                                     <li className="flex items-start gap-2">
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                                         <span><strong>Comprobante fiscal con QR y RIF SENIAT:</strong> Emitido al momento de la entrega.</span>
                                     </li>
                                     <li className="flex items-start gap-2">
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                                         <span><strong>Envíos Nacionales:</strong> Despachos a toda Venezuela mediante Zoom, Tealca y MRW asegurado.</span>
                                     </li>
                                 </ul>
@@ -969,11 +1091,15 @@ export default function Landing() {
             </section>
 
             {/* Footer */}
-            <footer className="border-t border-white/[0.06] bg-black/80 py-10 text-xs text-gray-500">
+            <footer className={`border-t py-10 text-xs transition-colors ${
+                isDark ? 'border-white/[0.06] bg-[#05070c] text-gray-500' : 'border-slate-200 bg-white text-slate-500'
+            }`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
                     <div className="flex items-center gap-3">
                         <Store className="w-5 h-5 text-blue-500" />
-                        <span className="font-bold text-white uppercase tracking-wider">URBANSTEP VENEZUELA C.A.</span>
+                        <span className={`font-bold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            URBANSTEP VENEZUELA C.A.
+                        </span>
                         <span>•</span>
                         <span>RIF: J-50123456-7</span>
                         <span>•</span>
@@ -985,9 +1111,9 @@ export default function Landing() {
                             href="https://www.google.com/maps?q=10.068330144675503,-69.28499381534304"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hover:text-blue-400 flex items-center gap-1 transition-colors font-bold"
+                            className="hover:text-blue-500 flex items-center gap-1 transition-colors font-bold"
                         >
-                            <MapPin className="w-3.5 h-3.5 text-red-400" />
+                            <MapPin className="w-3.5 h-3.5 text-red-500" />
                             <span>Ubicación Maps (10.06833, -69.28499)</span>
                         </a>
                         <span>•</span>
@@ -1045,7 +1171,7 @@ export default function Landing() {
                                     <>
                                         {cartItems.map((item) => (
                                             <div
-                                                key={`${item.id}-${item.size}`}
+                                                key={`${item.id}-${item.size}-${item.color || ''}`}
                                                 className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center gap-3"
                                             >
                                                 {/* Thumbnail */}
@@ -1061,7 +1187,12 @@ export default function Landing() {
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[10px] font-mono text-blue-400 uppercase font-bold">{item.brand}</p>
                                                     <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                                                    <p className="text-[11px] text-gray-400">Talla: <strong className="text-white">{item.size}</strong></p>
+                                                    <p className="text-[11px] text-gray-400">
+                                                        Talla: <strong className="text-white">{item.size}</strong>
+                                                        {item.color && (
+                                                            <> • Color: <strong className="text-purple-400">{item.color}</strong></>
+                                                        )}
+                                                    </p>
                                                     <p className="text-xs font-black text-white mt-1">
                                                         ${item.price}{' '}
                                                         <span className="text-[10px] text-emerald-400 font-mono">
@@ -1073,7 +1204,7 @@ export default function Landing() {
                                                 {/* Controls */}
                                                 <div className="flex flex-col items-end gap-2">
                                                     <button
-                                                        onClick={() => removeItem(item.id, item.size)}
+                                                        onClick={() => removeItem(item.id, item.size, item.color)}
                                                         className="text-gray-500 hover:text-red-400 p-1"
                                                         title="Eliminar de la bolsa"
                                                     >
@@ -1081,18 +1212,34 @@ export default function Landing() {
                                                     </button>
                                                     <div className="flex items-center gap-1.5 bg-black/60 rounded-lg border border-white/10 p-0.5">
                                                         <button
-                                                            onClick={() => updateQuantity(item.id, item.size, item.quantity - 1)}
+                                                            onClick={() => updateQuantity(item.id, item.size, item.quantity - 1, item.color)}
                                                             className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-white"
+                                                            title="Disminuir"
                                                         >
                                                             <Minus className="w-3 h-3" />
                                                         </button>
                                                         <span className="text-xs font-bold font-mono px-1">{item.quantity}</span>
-                                                        <button
-                                                            onClick={() => updateQuantity(item.id, item.size, item.quantity + 1)}
-                                                            className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-white"
-                                                        >
-                                                            <Plus className="w-3 h-3" />
-                                                        </button>
+                                                        {(() => {
+                                                            const isAtMax = item.maxStock !== undefined && item.quantity >= item.maxStock;
+                                                            return (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (isAtMax) {
+                                                                            toast.error(`Stock máximo alcanzado (${item.maxStock} disponibles)`);
+                                                                            return;
+                                                                        }
+                                                                        updateQuantity(item.id, item.size, item.quantity + 1, item.color);
+                                                                    }}
+                                                                    disabled={isAtMax}
+                                                                    className={`w-5 h-5 flex items-center justify-center transition-colors ${
+                                                                        isAtMax ? 'opacity-25 cursor-not-allowed text-gray-600' : 'text-gray-400 hover:text-white'
+                                                                    }`}
+                                                                    title={isAtMax ? `Stock máximo alcanzado (${item.maxStock} disp.)` : "Aumentar"}
+                                                                >
+                                                                    <Plus className="w-3 h-3" />
+                                                                </button>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1250,17 +1397,34 @@ export default function Landing() {
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-gray-300 mb-1">Método de Pago Preferido</label>
+                                <label className="block font-semibold text-gray-300 mb-1">Método de Pago Preferido *</label>
                                 <select
                                     value={checkoutForm.paymentMethod}
                                     onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
                                     className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500 font-bold"
                                 >
-                                    <option value="pagomovil">Pago Móvil (Bs. Tasa BCV)</option>
-                                    <option value="efectivo_usd">Efectivo Divisas ($ al recibir)</option>
-                                    <option value="punto_venta">Punto de Venta Inalámbrico al entregar</option>
-                                    <option value="zelle">Zelle (USD)</option>
+                                    {paymentMethods.map(pm => (
+                                        <option key={pm.id} value={pm.id}>
+                                            {pm.name} ({pm.currency === 'VES' ? 'Bs. Tasa BCV' : '$ USD'})
+                                        </option>
+                                    ))}
                                 </select>
+                                {/* Active payment method details */}
+                                {(() => {
+                                    const selectedPm = paymentMethods.find(pm => pm.id === checkoutForm.paymentMethod);
+                                    if (!selectedPm) return null;
+                                    return (
+                                        <div className="mt-2 p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-gray-300 space-y-1 font-mono">
+                                            {selectedPm.bank && <p>Banco: <strong className="text-white">{selectedPm.bank}</strong></p>}
+                                            {selectedPm.phone && <p>Teléfono: <strong className="text-white">{selectedPm.phone}</strong></p>}
+                                            {selectedPm.rif && <p>RIF/Cédula: <strong className="text-white">{selectedPm.rif}</strong></p>}
+                                            {selectedPm.email && <p>Correo: <strong className="text-white">{selectedPm.email}</strong></p>}
+                                            {selectedPm.holder && <p>Titular: <strong className="text-white">{selectedPm.holder}</strong></p>}
+                                            {selectedPm.accountNumber && <p>Cuenta: <strong className="text-white">{selectedPm.accountNumber}</strong></p>}
+                                            {selectedPm.instructions && <p className="text-[10px] text-amber-300 italic">{selectedPm.instructions}</p>}
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             <div>

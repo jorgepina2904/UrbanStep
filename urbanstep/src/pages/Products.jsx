@@ -4,6 +4,7 @@ import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import { productService } from '../services/productService';
+import { purchaseService } from '../services/purchaseService';
 import { formatCurrency } from '../utils/formatCurrency';
 import { 
     Palette, 
@@ -19,7 +20,8 @@ import {
     Minus, 
     RotateCcw, 
     Zap,
-    Tag
+    Truck,
+    Copy
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { 
@@ -28,7 +30,8 @@ import {
     calculateTotalStock, 
     detectSizeCategory, 
     getDefaultSizes, 
-    getSizeCategoryById 
+    ensureColorVariants,
+    calculateVariantsTotalStock
 } from '../utils/shoeSizes';
 
 const PRESET_IMAGES = [
@@ -176,10 +179,160 @@ function ColorPalette({ value, onChange }) {
 }
 
 /**
+ * Selector de colores para modelos de calzado (admite múltiples colores por modelo)
+ */
+function ModelColorsSelector({ colors, primaryColor, onChangeColors, onSetPrimaryColor }) {
+    const [customColor, setCustomColor] = useState('');
+    const activeColors = Array.isArray(colors) && colors.length > 0 ? colors : [primaryColor || 'Negro'];
+
+    const toggleColor = (colorName) => {
+        let updated;
+        if (activeColors.includes(colorName)) {
+            if (activeColors.length === 1) {
+                toast.error('El modelo debe tener al menos un color asignado');
+                return;
+            }
+            updated = activeColors.filter(c => c !== colorName);
+            if (primaryColor === colorName) {
+                onSetPrimaryColor(updated[0]);
+            }
+        } else {
+            updated = [...activeColors, colorName];
+        }
+        onChangeColors(updated);
+    };
+
+    const addCustom = (e) => {
+        if (e) e.preventDefault();
+        const trimmed = customColor.trim();
+        if (!trimmed) return;
+        if (activeColors.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+            toast.error('Este color ya está en la lista del modelo');
+            return;
+        }
+        const updated = [...activeColors, trimmed];
+        onChangeColors(updated);
+        setCustomColor('');
+        toast.success(`Color "${trimmed}" añadido al modelo`);
+    };
+
+    return (
+        <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <label className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                    <Palette className="w-4 h-4 text-purple-500" />
+                    Colores Disponibles del Modelo ({activeColors.length})
+                </label>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Principal: <strong className="text-purple-600 dark:text-purple-400 font-bold">{primaryColor || activeColors[0]}</strong>
+                </span>
+            </div>
+
+            {/* Active Colors Chips */}
+            <div className="flex flex-wrap gap-1.5 min-h-[32px] p-1.5 rounded-xl bg-white dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/80">
+                {activeColors.map((colorName) => {
+                    const swatch = SHOE_COLORS.find(c => c.name.toLowerCase() === colorName.toLowerCase());
+                    const isPrimary = colorName === primaryColor;
+                    return (
+                        <div
+                            key={colorName}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                                isPrimary 
+                                    ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 shadow-xs ring-1 ring-purple-500/30'
+                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                            }`}
+                        >
+                            <span 
+                                className="w-3.5 h-3.5 rounded-full border border-gray-300 dark:border-gray-600 shrink-0 shadow-2xs"
+                                style={{ background: swatch?.hex || '#6366f1' }}
+                            />
+                            <span>{colorName}</span>
+                            {isPrimary ? (
+                                <span className="text-[9px] uppercase font-black bg-purple-200/80 dark:bg-purple-800/80 text-purple-900 dark:text-purple-100 px-1 py-0.5 rounded leading-none">
+                                    Principal
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => onSetPrimaryColor(colorName)}
+                                    className="text-[10px] text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors ml-0.5 font-bold"
+                                    title="Marcar como color principal"
+                                >
+                                    ★ Principal
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => toggleColor(colorName)}
+                                className="text-gray-400 hover:text-red-500 ml-1 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                title="Quitar este color"
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Quick Color Selector Grid */}
+            <div>
+                <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5">
+                    Toca para alternar colores predefinidos:
+                </p>
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+                    {SHOE_COLORS.map(c => {
+                        const isIncluded = activeColors.some(ac => ac.toLowerCase() === c.name.toLowerCase());
+                        return (
+                            <button
+                                key={c.name}
+                                type="button"
+                                onClick={() => toggleColor(c.name)}
+                                title={c.name}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs shrink-0 transition-all border ${
+                                    isIncluded
+                                        ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                }`}
+                            >
+                                <span 
+                                    className="w-2.5 h-2.5 rounded-full border border-white/60 shadow-2xs" 
+                                    style={{ background: c.hex }} 
+                                />
+                                <span className="text-[11px]">{c.name}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Custom color input */}
+            <div className="flex gap-2 pt-1 border-t border-gray-200/50 dark:border-gray-700/50">
+                <input
+                    type="text"
+                    value={customColor}
+                    onChange={(e) => setCustomColor(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }}
+                    placeholder="Escribir color personalizado (ej: Neón, Camuflaje, Triple White)..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+                <button
+                    type="button"
+                    onClick={addCustom}
+                    className="px-3 py-1.5 text-xs font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded-xl border border-purple-200 dark:border-purple-800 transition-colors whitespace-nowrap"
+                >
+                    + Añadir
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
  * Products management page with CRUD operations.
  */
 export default function Products() {
     const [products, setProducts] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -188,6 +341,7 @@ export default function Products() {
     const [imageTab, setImageTab] = useState('local'); // 'local' | 'url' | 'presets'
     const [urlInput, setUrlInput] = useState('');
     const [customSizeInput, setCustomSizeInput] = useState('');
+    const [activeColorTab, setActiveColorTab] = useState('Negro');
     const fileInputRef = useRef(null);
 
     const [form, setForm] = useState({
@@ -199,6 +353,10 @@ export default function Products() {
         stock: '0', 
         minStock: '3', 
         color: 'Negro', 
+        colors: ['Negro'],
+        supplierId: 'PRV-101',
+        supplierName: 'Distribuidora Deportiva Ávila C.A.',
+        colorVariants: [],
         description: '', 
         imageUrl: '',
         sizeCategory: 'caballero',
@@ -207,22 +365,34 @@ export default function Products() {
     });
 
     useEffect(() => {
-        loadProducts();
+        loadData();
     }, []);
 
-    const loadProducts = async () => {
+    const loadData = async () => {
         setLoading(true);
-        const data = await productService.getAll();
-        setProducts(data);
-        setLoading(false);
+        try {
+            const [data, sups] = await Promise.all([
+                productService.getAll(),
+                purchaseService.getSuppliers()
+            ]);
+            setProducts(data || []);
+            setSuppliers(sups || []);
+        } catch {
+            toast.error('Error al cargar datos');
+        } finally {
+            setLoading(false);
+        }
     };
+
+    const loadProducts = loadData;
 
     const categories = ['all', ...new Set(products.map(p => p.category))];
 
     const filtered = products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
             p.brand.toLowerCase().includes(search.toLowerCase()) ||
-            p.sku.toLowerCase().includes(search.toLowerCase());
+            p.sku.toLowerCase().includes(search.toLowerCase()) ||
+            (p.supplierName && p.supplierName.toLowerCase().includes(search.toLowerCase()));
         const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
         return matchesSearch && matchesCategory;
     });
@@ -231,7 +401,9 @@ export default function Products() {
         setEditingProduct(null);
         const defaultCat = 'caballero';
         const defaultSizes = getDefaultSizes(defaultCat);
-        const defaultStock = ensureSizeStock(defaultSizes, 0);
+        const initialVariants = ensureColorVariants(['Negro'], defaultSizes, null, ensureSizeStock(defaultSizes, 0));
+        const initialSupplier = suppliers[0] || { id: 'PRV-101', name: 'Distribuidora Deportiva Ávila C.A.' };
+
         setForm({
             name: '',
             brand: '',
@@ -241,12 +413,17 @@ export default function Products() {
             stock: '0',
             minStock: '3',
             color: 'Negro',
+            colors: ['Negro'],
+            supplierId: initialSupplier.id,
+            supplierName: initialSupplier.name || initialSupplier.companyName || 'Distribuidora Deportiva Ávila C.A.',
+            colorVariants: initialVariants,
             description: '',
             imageUrl: '',
             sizeCategory: defaultCat,
             sizes: defaultSizes,
-            sizeStock: defaultStock,
+            sizeStock: initialVariants[0]?.sizeStock || ensureSizeStock(defaultSizes, 0),
         });
+        setActiveColorTab('Negro');
         setUrlInput('');
         setCustomSizeInput('');
         setImageTab('local');
@@ -258,8 +435,20 @@ export default function Products() {
         const currentImg = product.imageUrl || product.image || '';
         const cat = product.sizeCategory || detectSizeCategory(product.sizes);
         const sizes = Array.isArray(product.sizes) && product.sizes.length > 0 ? product.sizes : getDefaultSizes(cat);
-        const sizeStock = ensureSizeStock(sizes, product.stock, product.sizeStock);
-        const total = calculateTotalStock(sizeStock) || product.stock || 0;
+        const primaryCol = product.color || 'Negro';
+        const modelCols = Array.isArray(product.colors) && product.colors.length > 0 
+            ? product.colors 
+            : [primaryCol];
+        
+        const variants = ensureColorVariants(modelCols, sizes, product.colorVariants, product.sizeStock);
+        const total = calculateVariantsTotalStock(variants) || product.stock || 0;
+        const initialSupplier = suppliers.find(s => s.id === product.supplierId) || {
+            id: product.supplierId || 'PRV-101',
+            name: product.supplierName || 'Distribuidora Deportiva Ávila C.A.'
+        };
+
+        const activeVar = variants.find(v => v.color.toLowerCase() === primaryCol.toLowerCase()) || variants[0];
+
         setForm({
             name: product.name,
             brand: product.brand,
@@ -268,48 +457,94 @@ export default function Products() {
             cost: String(product.cost),
             stock: String(total),
             minStock: String(product.minStock),
-            color: product.color || 'Negro',
+            color: primaryCol,
+            colors: modelCols,
+            supplierId: initialSupplier.id,
+            supplierName: initialSupplier.name || initialSupplier.companyName || product.supplierName || 'Proveedor',
+            colorVariants: variants,
             description: product.description || '',
             imageUrl: currentImg,
             sizeCategory: cat,
             sizes: sizes,
-            sizeStock: sizeStock,
+            sizeStock: activeVar?.sizeStock || ensureSizeStock(sizes, 0),
         });
+        setActiveColorTab(activeVar?.color || primaryCol);
         setUrlInput(currentImg.startsWith('http') ? currentImg : '');
         setCustomSizeInput('');
-        setImageTab(currentImg.startsWith('data:') ? 'local' : currentImg.startsWith('http') ? 'url' : 'local');
         setShowModal(true);
     };
 
     const handleCategoryChange = (catId) => {
         const newSizes = getDefaultSizes(catId);
         setForm(prev => {
-            const newStockMap = {};
-            newSizes.forEach(s => {
-                newStockMap[s] = prev.sizeStock[s] !== undefined ? prev.sizeStock[s] : 0;
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                const newStockMap = {};
+                newSizes.forEach(s => {
+                    newStockMap[s] = v.sizeStock?.[s] !== undefined ? v.sizeStock[s] : 0;
+                });
+                return { ...v, sizeStock: newStockMap, total: calculateTotalStock(newStockMap) };
             });
-            const total = calculateTotalStock(newStockMap);
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVar = updatedVariants.find(v => v.color.toLowerCase() === activeColorTab.toLowerCase()) || updatedVariants[0];
             return {
                 ...prev,
                 sizeCategory: catId,
                 sizes: newSizes,
-                sizeStock: newStockMap,
+                colorVariants: updatedVariants,
+                sizeStock: activeVar?.sizeStock || {},
                 stock: String(total),
             };
         });
     };
 
+    const handleSelectColorTab = (colName) => {
+        setActiveColorTab(colName);
+        const variant = form.colorVariants?.find(v => v.color.toLowerCase() === colName.toLowerCase());
+        if (variant && variant.sizeStock) {
+            setForm(prev => ({
+                ...prev,
+                sizeStock: variant.sizeStock
+            }));
+        }
+    };
+
+    const handleModelColorsChange = (newColors) => {
+        setForm(prev => {
+            const updatedVariants = ensureColorVariants(newColors, prev.sizes, prev.colorVariants, prev.sizeStock);
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const targetColorTab = newColors.includes(activeColorTab) ? activeColorTab : (newColors[0] || 'Negro');
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === targetColorTab.toLowerCase()) || updatedVariants[0];
+            return {
+                ...prev,
+                colors: newColors,
+                color: newColors.includes(prev.color) ? prev.color : (newColors[0] || 'Negro'),
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || {},
+                stock: String(total)
+            };
+        });
+        if (!newColors.includes(activeColorTab)) {
+            setActiveColorTab(newColors[0] || 'Negro');
+        }
+    };
+
     const handleSizeQuantityChange = (size, qty) => {
         const safeQty = Math.max(0, parseInt(qty) || 0);
         setForm(prev => {
-            const updated = {
-                ...prev.sizeStock,
-                [size]: safeQty,
-            };
-            const total = calculateTotalStock(updated);
+            const currentTab = activeColorTab || prev.color || prev.colors[0] || 'Negro';
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === currentTab.toLowerCase()) {
+                    const newStock = { ...(v.sizeStock || {}), [size]: safeQty };
+                    return { ...v, sizeStock: newStock, total: calculateTotalStock(newStock) };
+                }
+                return v;
+            });
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === currentTab.toLowerCase());
             return {
                 ...prev,
-                sizeStock: updated,
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || { ...prev.sizeStock, [size]: safeQty },
                 stock: String(total),
             };
         });
@@ -317,16 +552,24 @@ export default function Products() {
 
     const handleStepSizeQuantity = (size, delta) => {
         setForm(prev => {
-            const currentVal = parseInt(prev.sizeStock[size]) || 0;
+            const currentTab = activeColorTab || prev.color || prev.colors[0] || 'Negro';
+            const targetVariant = (prev.colorVariants || []).find(v => v.color.toLowerCase() === currentTab.toLowerCase());
+            const currentVal = parseInt(targetVariant?.sizeStock?.[size] ?? prev.sizeStock?.[size] ?? 0) || 0;
             const newVal = Math.max(0, currentVal + delta);
-            const updated = {
-                ...prev.sizeStock,
-                [size]: newVal,
-            };
-            const total = calculateTotalStock(updated);
+
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === currentTab.toLowerCase()) {
+                    const newStock = { ...(v.sizeStock || {}), [size]: newVal };
+                    return { ...v, sizeStock: newStock, total: calculateTotalStock(newStock) };
+                }
+                return v;
+            });
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === currentTab.toLowerCase());
             return {
                 ...prev,
-                sizeStock: updated,
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || { ...prev.sizeStock, [size]: newVal },
                 stock: String(total),
             };
         });
@@ -339,13 +582,18 @@ export default function Products() {
         }
         setForm(prev => {
             const newSizes = prev.sizes.filter(s => s !== sizeToRemove);
-            const newStockMap = { ...prev.sizeStock };
-            delete newStockMap[sizeToRemove];
-            const total = calculateTotalStock(newStockMap);
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                const newStockMap = { ...v.sizeStock };
+                delete newStockMap[sizeToRemove];
+                return { ...v, sizeStock: newStockMap, total: calculateTotalStock(newStockMap) };
+            });
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === activeColorTab.toLowerCase()) || updatedVariants[0];
             return {
                 ...prev,
                 sizes: newSizes,
-                sizeStock: newStockMap,
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || {},
                 stock: String(total),
             };
         });
@@ -361,11 +609,16 @@ export default function Products() {
         }
         setForm(prev => {
             const newSizes = [...prev.sizes, trimmed];
-            const newStockMap = { ...prev.sizeStock, [trimmed]: 0 };
+            const updatedVariants = (prev.colorVariants || []).map(v => ({
+                ...v,
+                sizeStock: { ...(v.sizeStock || {}), [trimmed]: 0 }
+            }));
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === activeColorTab.toLowerCase()) || updatedVariants[0];
             return {
                 ...prev,
                 sizes: newSizes,
-                sizeStock: newStockMap,
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || {},
             };
         });
         setCustomSizeInput('');
@@ -373,37 +626,73 @@ export default function Products() {
     };
 
     const handleDistributeEvenly = () => {
-        const input = window.prompt('¿Cuántos pares de calzado llegaron para CADA talla de este color?', '2');
+        const input = window.prompt(`¿Cuántos pares de calzado llegaron para CADA talla del color "${activeColorTab}"?`, '2');
         if (input === null) return;
         const qtyPerSize = Math.max(0, parseInt(input) || 0);
         setForm(prev => {
-            const newStockMap = {};
-            prev.sizes.forEach(s => {
-                newStockMap[s] = qtyPerSize;
+            const currentTab = activeColorTab || prev.color || prev.colors[0] || 'Negro';
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === currentTab.toLowerCase()) {
+                    const newStock = {};
+                    prev.sizes.forEach(s => { newStock[s] = qtyPerSize; });
+                    return { ...v, sizeStock: newStock, total: calculateTotalStock(newStock) };
+                }
+                return v;
             });
-            const total = calculateTotalStock(newStockMap);
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === currentTab.toLowerCase());
             return {
                 ...prev,
-                sizeStock: newStockMap,
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || {},
                 stock: String(total),
             };
         });
-        toast.success(`Asignados ${qtyPerSize} pares a cada talla`);
+        toast.success(`Asignados ${qtyPerSize} pares a cada talla de "${activeColorTab}"`);
+    };
+
+    const handleCopySizesToAllColors = () => {
+        setForm(prev => {
+            const currentTab = activeColorTab || prev.color || prev.colors[0] || 'Negro';
+            const sourceVariant = (prev.colorVariants || []).find(v => v.color.toLowerCase() === currentTab.toLowerCase());
+            if (!sourceVariant || !sourceVariant.sizeStock) return prev;
+            const copyStock = { ...sourceVariant.sizeStock };
+            const updatedVariants = (prev.colorVariants || []).map(v => ({
+                ...v,
+                sizeStock: { ...copyStock },
+                total: calculateTotalStock(copyStock)
+            }));
+            const total = calculateVariantsTotalStock(updatedVariants);
+            return {
+                ...prev,
+                colorVariants: updatedVariants,
+                stock: String(total),
+            };
+        });
+        toast.success(`Tallas del color "${activeColorTab}" replicadas a todos los colores del modelo`);
     };
 
     const handleResetAllSizes = () => {
         setForm(prev => {
-            const newStockMap = {};
-            prev.sizes.forEach(s => {
-                newStockMap[s] = 0;
+            const currentTab = activeColorTab || prev.color || prev.colors[0] || 'Negro';
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === currentTab.toLowerCase()) {
+                    const newStock = {};
+                    prev.sizes.forEach(s => { newStock[s] = 0; });
+                    return { ...v, sizeStock: newStock, total: 0 };
+                }
+                return v;
             });
+            const total = calculateVariantsTotalStock(updatedVariants);
+            const activeVariant = updatedVariants.find(v => v.color.toLowerCase() === currentTab.toLowerCase());
             return {
                 ...prev,
-                sizeStock: newStockMap,
-                stock: '0',
+                colorVariants: updatedVariants,
+                sizeStock: activeVariant?.sizeStock || {},
+                stock: String(total),
             };
         });
-        toast('Stock de tallas reiniciado a 0');
+        toast(`Stock de tallas para "${activeColorTab}" reiniciado a 0`);
     };
 
     const handleLocalFileUpload = (e) => {
@@ -471,9 +760,23 @@ export default function Products() {
             return;
         }
 
-        const totalCalculated = calculateTotalStock(form.sizeStock);
+        const primaryColor = form.color || (form.colors && form.colors[0]) || 'Negro';
+        const modelColors = Array.isArray(form.colors) && form.colors.length > 0 ? form.colors : [primaryColor];
+
+        const finalVariants = form.colorVariants && form.colorVariants.length > 0
+            ? form.colorVariants
+            : ensureColorVariants(modelColors, form.sizes, null, form.sizeStock);
+
+        const totalCalculated = calculateVariantsTotalStock(finalVariants) || calculateTotalStock(form.sizeStock);
+        const activeVariant = finalVariants.find(v => v.color.toLowerCase() === primaryColor.toLowerCase()) || finalVariants[0];
+
         const data = {
             ...form,
+            color: primaryColor,
+            colors: modelColors,
+            supplierId: form.supplierId || 'PRV-101',
+            supplierName: form.supplierName || 'Distribuidora Deportiva Ávila C.A.',
+            colorVariants: finalVariants,
             price: parseFloat(form.price) || 0,
             cost: parseFloat(form.cost) || 0,
             stock: totalCalculated,
@@ -482,7 +785,7 @@ export default function Products() {
             image: form.imageUrl || '',
             sizes: form.sizes,
             sizeCategory: form.sizeCategory,
-            sizeStock: form.sizeStock,
+            sizeStock: activeVariant?.sizeStock || form.sizeStock,
         };
 
         if (editingProduct) {
@@ -569,7 +872,7 @@ export default function Products() {
                             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
                         />
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
                         {categories.map(cat => (
                             <button
                                 key={cat}
@@ -591,6 +894,10 @@ export default function Products() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filtered.map(product => {
                     const imgSrc = product.imageUrl || product.image;
+                    const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
+                        ? product.colors 
+                        : (product.color ? [product.color] : []);
+
                     return (
                         <Card key={product.id} hover className="flex flex-col min-w-0 group overflow-hidden">
                             {/* Product image container */}
@@ -613,11 +920,19 @@ export default function Products() {
                                     <span className="text-5xl drop-shadow-sm select-none">👟</span>
                                 </div>
                                 
-                                {/* Color indicator badge */}
-                                {product.color && (
-                                    <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-200/80 dark:border-gray-700 shadow-sm">
-                                        {getColorSwatch(product.color)}
-                                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200">{product.color}</span>
+                                {/* Model Colors indicator badge */}
+                                {prodColors.length > 0 && (
+                                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border border-gray-200/80 dark:border-gray-700 shadow-sm max-w-[85%]">
+                                        <div className="flex items-center -space-x-1 shrink-0">
+                                            {prodColors.slice(0, 4).map((cName, idx) => (
+                                                <span key={idx} className="relative z-10 transition-transform hover:scale-125 hover:z-20">
+                                                    {getColorSwatch(cName)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200 truncate">
+                                            {prodColors.length > 1 ? `${prodColors.length} colores` : prodColors[0]}
+                                        </span>
                                     </div>
                                 )}
                             </div>
@@ -640,13 +955,24 @@ export default function Products() {
 
                                 <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 font-mono mt-1">
                                     <span>{product.sku}</span>
-                                    {product.color && <span className="text-[11px] font-sans font-medium text-gray-600 dark:text-gray-300">{product.color}</span>}
+                                    {prodColors.length > 0 && (
+                                        <span className="text-[11px] font-sans font-medium text-gray-600 dark:text-gray-300 truncate max-w-[120px]" title={prodColors.join(', ')}>
+                                            {prodColors.join(', ')}
+                                        </span>
+                                    )}
                                 </div>
+
+                                {product.supplierName && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 mt-1 truncate" title={`Proveedor: ${product.supplierName}`}>
+                                        <Truck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                        <span className="truncate font-medium">{product.supplierName}</span>
+                                    </div>
+                                )}
 
                                 {/* Sizes & Stock preview pill list */}
                                 {product.sizes && product.sizes.length > 0 && (
                                     <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                        <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-[10px]">
+                                        <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none no-scrollbar text-[10px]">
                                             {product.sizes.slice(0, 5).map(s => {
                                                 const sQty = product.sizeStock ? product.sizeStock[s] : null;
                                                 return (
@@ -734,7 +1060,54 @@ export default function Products() {
                         <div>
                             <ColorPalette
                                 value={form.color}
-                                onChange={(color) => setForm(prev => ({ ...prev, color }))}
+                                onChange={(color) => setForm(prev => ({ 
+                                    ...prev, 
+                                    color,
+                                    colors: (prev.colors || []).includes(color) ? prev.colors : [color, ...(prev.colors || [])]
+                                }))}
+                            />
+                        </div>
+
+                        {/* Supplier Selector */}
+                        <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 font-bold">
+                                    <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                    Proveedor del Calzado
+                                </span>
+                                <span className="text-[11px] text-gray-400">Vinculado a módulo de Compras / Proveedores</span>
+                            </label>
+                            <select
+                                value={form.supplierId || ''}
+                                onChange={e => {
+                                    const sId = e.target.value;
+                                    const sup = suppliers.find(s => s.id === sId);
+                                    setForm(prev => ({
+                                        ...prev,
+                                        supplierId: sId,
+                                        supplierName: sup ? (sup.name || sup.companyName) : prev.supplierName
+                                    }));
+                                }}
+                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm font-medium"
+                            >
+                                {suppliers.length === 0 && (
+                                    <option value="">Cargando proveedores...</option>
+                                )}
+                                {suppliers.map(sup => (
+                                    <option key={sup.id} value={sup.id}>
+                                        {sup.name || sup.companyName} {sup.rif ? `(${sup.rif})` : ''} - {sup.category || 'Calzado'}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Model Colors Selector */}
+                        <div className="sm:col-span-2">
+                            <ModelColorsSelector
+                                colors={form.colors}
+                                primaryColor={form.color}
+                                onChangeColors={handleModelColorsChange}
+                                onSetPrimaryColor={(c) => setForm(prev => ({ ...prev, color: c }))}
                             />
                         </div>
                     </div>
@@ -892,31 +1265,31 @@ export default function Products() {
                         )}
                     </div>
 
-                    {/* Size Categories & Per-Size Availability Section */}
+                    {/* Size Categories & Per-Color Per-Size Availability Section */}
                     <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-50 via-gray-50/80 to-blue-50/30 dark:from-gray-800/70 dark:via-gray-800/50 dark:to-blue-950/20 border border-gray-200 dark:border-gray-700 space-y-4">
                         {/* Section Header */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-200/80 dark:border-gray-700/80">
                             <div>
                                 <label className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                                     <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                    Categoría de Tallas & Disponibilidad por Talla
+                                    Matriz de Inventario: Tallas y Colores del Modelo
                                 </label>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                    Selecciona la escala de tallas e ingresa cuántos pares llegaron de cada talla para el color <strong>{form.color || 'seleccionado'}</strong>.
+                                    Configura los pares que llegaron por cada talla para cada uno de los colores del calzado.
                                 </p>
                             </div>
                             
                             {/* Live Badge with Total Pairs */}
                             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-100/90 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300 font-extrabold text-xs self-start sm:self-auto shadow-xs">
                                 <Zap className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                                <span>Total: {calculateTotalStock(form.sizeStock)} pares</span>
+                                <span>Total Modelo: {calculateVariantsTotalStock(form.colorVariants) || calculateTotalStock(form.sizeStock)} pares</span>
                             </div>
                         </div>
 
                         {/* Step 1: Category Selector Pills */}
                         <div>
                             <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-2">
-                                1. Selecciona la Categoría de Talla:
+                                1. Escala / Rango de Tallas:
                             </span>
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                                 {SHOE_SIZE_CATEGORIES.map((cat) => {
@@ -950,12 +1323,17 @@ export default function Products() {
                             </div>
                         </div>
 
-                        {/* Step 2: Per-Size Stock Inventory Matrix */}
-                        <div>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
-                                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                    2. Pares disponibles por Talla (Color: <span className="text-gray-900 dark:text-white font-black">{form.color || 'No asignado'}</span>):
-                                </span>
+                        {/* Step 2: Color Variant Tabs & Size Stock Matrix */}
+                        <div className="space-y-3 pt-3 border-t border-gray-200/60 dark:border-gray-700/60">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block">
+                                        2. Selecciona el Color para gestionar sus Tallas:
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        Toca una pestaña de color para ajustar cuántos pares hay en cada talla para ese color específico.
+                                    </span>
+                                </div>
                                 
                                 {/* Quick actions */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -963,116 +1341,180 @@ export default function Products() {
                                         type="button"
                                         onClick={handleDistributeEvenly}
                                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 transition-colors shadow-xs"
-                                        title="Asignar la misma cantidad de pares a todas las tallas"
+                                        title={`Asignar la misma cantidad a todas las tallas del color ${activeColorTab}`}
                                     >
                                         <Zap className="w-3 h-3" />
-                                        Distribuir Parejo
+                                        Distribuir ({activeColorTab})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopySizesToAllColors}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 transition-colors shadow-xs"
+                                        title="Copiar las cantidades de tallas de este color a todos los demás colores"
+                                    >
+                                        <Copy className="w-3 h-3" />
+                                        Copiar a Todos
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleResetAllSizes}
                                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors shadow-xs"
-                                        title="Poner todas las tallas en 0"
+                                        title={`Poner en 0 las tallas de ${activeColorTab}`}
                                     >
                                         <RotateCcw className="w-3 h-3" />
-                                        Reiniciar a 0
+                                        Reiniciar ({activeColorTab})
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Sizes Grid */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-                                {form.sizes.map((s) => {
-                                    const qty = form.sizeStock[s] ?? 0;
-                                    const hasStock = qty > 0;
+                            {/* Color Tabs Row */}
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+                                {(form.colors || [form.color || 'Negro']).map((colName) => {
+                                    const isSelected = (activeColorTab || '').toLowerCase() === colName.toLowerCase();
+                                    const variant = (form.colorVariants || []).find(v => v.color.toLowerCase() === colName.toLowerCase());
+                                    const variantCount = variant ? calculateTotalStock(variant.sizeStock) : 0;
+                                    const swatch = SHOE_COLORS.find(c => c.name.toLowerCase() === colName.toLowerCase());
+
                                     return (
-                                        <div
-                                            key={s}
-                                            className={`p-2 rounded-xl border transition-all flex flex-col justify-between ${
-                                                hasStock
-                                                    ? 'bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-500 shadow-xs ring-1 ring-blue-500/20'
-                                                    : 'bg-white/60 dark:bg-gray-850 border-gray-200 dark:border-gray-750 opacity-80'
+                                        <button
+                                            key={colName}
+                                            type="button"
+                                            onClick={() => handleSelectColorTab(colName)}
+                                            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all shrink-0 ${
+                                                isSelected
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-500/25'
+                                                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                                             }`}
                                         >
-                                            <div className="flex items-center justify-between mb-1.5">
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-xs font-black text-gray-900 dark:text-white font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
-                                                        Talla {s}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveSize(s)}
-                                                    className="text-gray-300 hover:text-red-500 transition-colors p-0.5 rounded"
-                                                    title={`Quitar talla ${s}`}
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </div>
-
-                                            {/* Quantity Stepper */}
-                                            <div className="flex items-center gap-1 mt-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleStepSizeQuantity(s, -1)}
-                                                    className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
-                                                    title="Restar 1 par"
-                                                >
-                                                    <Minus className="w-3 h-3" />
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    value={qty}
-                                                    onChange={(e) => handleSizeQuantityChange(s, e.target.value)}
-                                                    className="flex-1 min-w-0 h-7 text-center rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-xs font-black text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    title={`Cantidad de pares para talla ${s}`}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleStepSizeQuantity(s, 1)}
-                                                    className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
-                                                    title="Sumar 1 par"
-                                                >
-                                                    <Plus className="w-3 h-3" />
-                                                </button>
-                                            </div>
-
-                                            <div className="mt-1.5 text-center">
-                                                <span className={`text-[10px] font-bold ${hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
-                                                    {hasStock ? `${qty} ${qty === 1 ? 'par' : 'pares'}` : '0 pares'}
-                                                </span>
-                                            </div>
-                                        </div>
+                                            <span
+                                                className="w-3.5 h-3.5 rounded-full border border-white/60 shadow-2xs shrink-0"
+                                                style={{ background: swatch?.hex || '#6366f1' }}
+                                            />
+                                            <span>{colName}</span>
+                                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                                isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                            }`}>
+                                                {variantCount} pares
+                                            </span>
+                                        </button>
                                     );
                                 })}
                             </div>
 
-                            {/* Add Custom / Extra Size Row */}
-                            <div className="mt-3 pt-3 border-t border-gray-200/60 dark:border-gray-700/60 flex items-center gap-2">
-                                <span className="text-xs text-gray-500 dark:text-gray-400">¿Llegó una talla fuera de rango?</span>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 47, 34, XL"
-                                        value={customSizeInput}
-                                        onChange={(e) => setCustomSizeInput(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                handleAddCustomSize();
-                                            }
-                                        }}
-                                        className="w-28 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={handleAddCustomSize}
-                                        className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 text-xs font-bold transition-colors flex items-center gap-1"
-                                    >
-                                        <Plus className="w-3 h-3" />
-                                        Agregar Talla
-                                    </button>
+                            {/* Active Color Details & Sizes Matrix */}
+                            <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/80 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                        <span>Editando tallas para el color:</span>
+                                        <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 font-black">
+                                            {activeColorTab}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                        Subtotal color: {(() => {
+                                            const v = (form.colorVariants || []).find(cv => cv.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                                            return v ? calculateTotalStock(v.sizeStock) : 0;
+                                        })()} pares
+                                    </span>
+                                </div>
+
+                                {/* Sizes Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                                    {form.sizes.map((s) => {
+                                        const currentVariant = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || form.color || 'Negro').toLowerCase());
+                                        const qty = (currentVariant?.sizeStock && currentVariant.sizeStock[s] !== undefined)
+                                            ? currentVariant.sizeStock[s]
+                                            : (form.sizeStock[s] ?? 0);
+                                        const hasStock = qty > 0;
+                                        return (
+                                            <div
+                                                key={s}
+                                                className={`p-2 rounded-xl border transition-all flex flex-col justify-between ${
+                                                    hasStock
+                                                        ? 'bg-white dark:bg-gray-800 border-blue-400 dark:border-blue-500 shadow-xs ring-1 ring-blue-500/20'
+                                                        : 'bg-white/60 dark:bg-gray-850 border-gray-200 dark:border-gray-750 opacity-80'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-xs font-black text-gray-900 dark:text-white font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                                            Talla {s}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveSize(s)}
+                                                        className="text-gray-300 hover:text-red-500 transition-colors p-0.5 rounded"
+                                                        title={`Quitar talla ${s}`}
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+
+                                                {/* Quantity Stepper */}
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleStepSizeQuantity(s, -1)}
+                                                        className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
+                                                        title="Restar 1 par"
+                                                    >
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        value={qty}
+                                                        onChange={(e) => handleSizeQuantityChange(s, e.target.value)}
+                                                        className="flex-1 min-w-0 h-7 text-center rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-xs font-black text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        title={`Cantidad de pares para talla ${s}`}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleStepSizeQuantity(s, 1)}
+                                                        className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center font-bold transition-colors active:scale-95"
+                                                        title="Sumar 1 par"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+
+                                                <div className="mt-1.5 text-center">
+                                                    <span className={`text-[10px] font-bold ${hasStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                                                        {hasStock ? `${qty} ${qty === 1 ? 'par' : 'pares'}` : '0 pares'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Add Custom / Extra Size Row */}
+                                <div className="mt-3 pt-3 border-t border-gray-200/60 dark:border-gray-700/60 flex items-center gap-2">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">¿Llegó una talla fuera de rango?</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <input
+                                            type="text"
+                                            placeholder="Ej: 47, 34, XL"
+                                            value={customSizeInput}
+                                            onChange={(e) => setCustomSizeInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddCustomSize();
+                                                }
+                                            }}
+                                            className="w-28 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleAddCustomSize}
+                                            className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 text-xs font-bold transition-colors flex items-center gap-1"
+                                        >
+                                            <Plus className="w-3 h-3" />
+                                            Agregar Talla
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -1,7 +1,16 @@
 import { simulateNetworkDelay, db } from './api';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { generateId } from '../utils/generateId';
-import { ensureSizeStock, calculateTotalStock, detectSizeCategory } from '../utils/shoeSizes';
+import { 
+    ensureSizeStock, 
+    calculateTotalStock, 
+    detectSizeCategory,
+    ensureColorVariants,
+    calculateVariantsTotalStock,
+    getColorVariantSizeStock,
+    getAvailableStockForItem
+} from '../utils/shoeSizes';
+import { stockMovementService } from './stockMovementService';
 
 const notifyProductsChanged = () => {
     db.save('products');
@@ -30,8 +39,9 @@ const mapSupabaseProduct = (row) => {
     const cost = Number(row.costo_usd ?? row.cost ?? 0);
     const stock = Number(row.stock ?? 0);
     const minStock = Number(row.stock_minimo ?? row.minStock ?? 5);
-    const isOutOfStock = stock <= 0;
-    const isDeshabilitado = row.estado === 'deshabilitado' || Boolean(row.disabled) || isOutOfStock;
+
+    // Si el producto no tiene existencias o está deshabilitado por inventario agotado
+    const isExplicitlyZero = stock <= 0 || row.estado === 'deshabilitado' || row.estado === 'out_of_stock';
 
     // Desglose de disponibilidad por talla
     let sizeStock = null;
@@ -45,8 +55,54 @@ const mapSupabaseProduct = (row) => {
             sizeStock = null;
         }
     }
-    const finalSizeStock = ensureSizeStock(sizesArray, stock, sizeStock);
+    const finalSizeStock = isExplicitlyZero
+        ? ensureSizeStock(sizesArray, 0)
+        : ensureSizeStock(sizesArray, stock, sizeStock);
     const finalSizeCategory = row.categoria_tallas || row.sizeCategory || detectSizeCategory(sizesArray);
+
+    // Colores del modelo
+    let modelColors = [];
+    const rawColors = row.colores || row.colors;
+    if (Array.isArray(rawColors)) {
+        modelColors = rawColors;
+    } else if (typeof rawColors === 'string') {
+        try {
+            modelColors = JSON.parse(rawColors);
+        } catch {
+            modelColors = rawColors.split(',').map(c => c.trim()).filter(Boolean);
+        }
+    }
+    const primaryColor = row.color || 'Multicolor';
+    if (modelColors.length === 0) {
+        modelColors = [primaryColor];
+    }
+
+    // Variantes independientes de color y talla
+    let rawVariants = row.variantes_color || row.color_variants || row.colorVariants;
+    if (typeof rawVariants === 'string') {
+        try {
+            rawVariants = JSON.parse(rawVariants);
+        } catch {
+            rawVariants = null;
+        }
+    }
+    let colorVariants = ensureColorVariants(modelColors, sizesArray, rawVariants, finalSizeStock);
+    if (isExplicitlyZero) {
+        colorVariants = colorVariants.map(v => ({
+            ...v,
+            sizeStock: ensureSizeStock(sizesArray, 0),
+            total: 0
+        }));
+    }
+    const totalVariantStock = calculateVariantsTotalStock(colorVariants);
+    const computedStock = isExplicitlyZero ? 0 : (totalVariantStock > 0 ? totalVariantStock : stock);
+
+    const isOutOfStock = computedStock <= 0;
+    const isDeshabilitado = row.estado === 'deshabilitado' || Boolean(row.disabled) || isOutOfStock;
+
+    // Proveedor vinculado
+    const supplierId = row.proveedor_id || row.supplierId || 'PRV-101';
+    const supplierName = row.proveedor_nombre || row.supplierName || 'Distribuidora Deportiva Ávila C.A.';
 
     return {
         id: row.id,
@@ -59,18 +115,22 @@ const mapSupabaseProduct = (row) => {
         cost,
         salePrice: price,
         purchasePrice: cost,
-        stock,
+        stock: computedStock,
         minStock,
         sizes: sizesArray,
         sizeCategory: finalSizeCategory,
         sizeStock: finalSizeStock,
-        color: row.color || 'Multicolor',
+        color: primaryColor,
+        colors: modelColors,
+        colorVariants: colorVariants,
         colorHex: row.color_hex || '#3b82f6',
+        supplierId,
+        supplierName,
         imageUrl: row.imagen_url || row.imageUrl || row.image || '',
         image: row.imagen_url || row.imageUrl || row.image || '',
-        status: isOutOfStock ? 'out_of_stock' : (stock > minStock ? 'in_stock' : 'low_stock'),
+        status: isOutOfStock ? 'out_of_stock' : (computedStock > minStock ? 'in_stock' : 'low_stock'),
         disabled: isDeshabilitado,
-        active: !isDeshabilitado,
+        active: !isDeshabilitado && computedStock > 0,
         createdAt: row.creado_el || row.createdAt || new Date().toISOString()
     };
 };
@@ -99,6 +159,28 @@ export const productService = {
             }
         }
         await simulateNetworkDelay(50);
+        // Asegurar que cada producto local tenga proveedor y variantes de color
+        db.products = db.products.map(p => {
+            const supplierId = p.supplierId || 'PRV-101';
+            const supplierName = p.supplierName || 'Distribuidora Deportiva Ávila C.A.';
+            const colors = Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : [p.color || 'Negro'];
+            const sizes = Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : ['38', '39', '40', '41', '42'];
+            const isZero = (p.stock || 0) <= 0 || p.disabled || p.status === 'out_of_stock';
+            const colorVariants = isZero
+                ? (p.colorVariants || []).map(v => ({ ...v, sizeStock: ensureSizeStock(sizes, 0), total: 0 }))
+                : ensureColorVariants(colors, sizes, p.colorVariants, p.sizeStock);
+            const totalStock = isZero ? 0 : (calculateVariantsTotalStock(colorVariants) || p.stock || 0);
+            return {
+                ...p,
+                supplierId,
+                supplierName,
+                colors,
+                colorVariants,
+                stock: isZero ? 0 : totalStock,
+                disabled: isZero || p.disabled,
+                active: !isZero && !p.disabled && totalStock > 0
+            };
+        });
         return [...db.products];
     },
 
@@ -139,6 +221,10 @@ export const productService = {
         return productService.getById(id);
     },
 
+    getColorSizeStock: (product, colorName) => {
+        return getColorVariantSizeStock(product, colorName);
+    },
+
     /**
      * Crear un nuevo producto en Supabase y localmente
      */
@@ -148,13 +234,31 @@ export const productService = {
             : ['38', '39', '40', '41', '42', '43'];
         const sizeCategory = productData.sizeCategory || detectSizeCategory(sizes);
         const sizeStock = ensureSizeStock(sizes, parseInt(productData.stock) || 0, productData.sizeStock);
-        const safeStock = productData.sizeStock !== undefined 
-            ? calculateTotalStock(sizeStock) 
-            : Math.max(0, parseInt(productData.stock) || 0);
+        
+        const primaryColor = productData.color || (Array.isArray(productData.colors) && productData.colors[0]) || 'Multicolor';
+        const colors = Array.isArray(productData.colors) && productData.colors.length > 0 
+            ? productData.colors 
+            : [primaryColor];
+
+        // Variantes de color independientes
+        const colorVariants = ensureColorVariants(
+            colors, 
+            sizes, 
+            productData.colorVariants, 
+            sizeStock
+        );
+        const totalVariantStock = calculateVariantsTotalStock(colorVariants);
+        const safeStock = totalVariantStock > 0 
+            ? totalVariantStock 
+            : (productData.sizeStock !== undefined ? calculateTotalStock(sizeStock) : Math.max(0, parseInt(productData.stock) || 0));
+
         const minStock = Math.max(1, parseInt(productData.minStock) || 5);
         const isOutOfStock = safeStock <= 0;
         const generatedId = productData.id || generateId('PRD');
         const generatedSku = productData.sku || `US-${(productData.brand || 'GEN').substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const supplierId = productData.supplierId || 'PRV-101';
+        const supplierName = productData.supplierName || 'Distribuidora Deportiva Ávila C.A.';
 
         const newProduct = {
             id: generatedId,
@@ -174,7 +278,11 @@ export const productService = {
             status: isOutOfStock ? 'out_of_stock' : (safeStock > minStock ? 'in_stock' : 'low_stock'),
             disabled: isOutOfStock || Boolean(productData.disabled),
             active: !isOutOfStock && !Boolean(productData.disabled),
-            color: productData.color || 'Multicolor',
+            color: primaryColor,
+            colors: colors,
+            colorVariants: colorVariants,
+            supplierId,
+            supplierName,
             colorHex: productData.colorHex || '#3b82f6',
             description: productData.description || '',
             imageUrl: productData.imageUrl || productData.image || '',
@@ -198,12 +306,34 @@ export const productService = {
                     tallas: newProduct.sizes,
                     color: newProduct.color,
                     color_hex: newProduct.colorHex,
+                    proveedor_id: newProduct.supplierId,
+                    proveedor_nombre: newProduct.supplierName,
+                    variantes_color: newProduct.colorVariants,
                     imagen_url: newProduct.imageUrl,
                     descripcion: newProduct.description,
                     estado: newProduct.disabled ? 'deshabilitado' : (newProduct.stock > 0 ? 'in_stock' : 'out_of_stock')
                 });
             } catch (supErr) {
                 console.warn('Error al guardar producto en Supabase:', supErr);
+            }
+        }
+
+        // Si inicia con stock mayor a 0, registrar movimiento inicial
+        if (safeStock > 0) {
+            try {
+                await stockMovementService.record({
+                    productId: newProduct.id,
+                    productName: newProduct.name,
+                    sku: newProduct.sku,
+                    previousStock: 0,
+                    newStock: safeStock,
+                    delta: safeStock,
+                    type: 'edicion_producto',
+                    reason: 'Carga inicial al crear producto con proveedor ' + supplierName,
+                    userName: productData.userName || 'Administrador'
+                });
+            } catch (kErr) {
+                console.warn('Aviso kardex create:', kErr);
             }
         }
 
@@ -220,13 +350,31 @@ export const productService = {
         if (index === -1) throw new Error("Producto no encontrado");
 
         const current = db.products[index];
+        const previousStock = current.stock;
         const sizes = Array.isArray(productData.sizes) ? productData.sizes : current.sizes;
         const sizeCategory = productData.sizeCategory || current.sizeCategory || detectSizeCategory(sizes);
-        let sizeStock = current.sizeStock;
-        let nextStock = current.stock;
+        const primaryColor = productData.color || current.color || 'Multicolor';
+        const colors = Array.isArray(productData.colors) && productData.colors.length > 0
+            ? productData.colors
+            : (current.colors || [primaryColor]);
 
+        let sizeStock = current.sizeStock;
         if (productData.sizeStock !== undefined) {
             sizeStock = ensureSizeStock(sizes, 0, productData.sizeStock);
+        }
+
+        const colorVariants = ensureColorVariants(
+            colors, 
+            sizes, 
+            productData.colorVariants !== undefined ? productData.colorVariants : current.colorVariants, 
+            sizeStock
+        );
+        const totalVariantStock = calculateVariantsTotalStock(colorVariants);
+
+        let nextStock = current.stock;
+        if (totalVariantStock > 0) {
+            nextStock = totalVariantStock;
+        } else if (productData.sizeStock !== undefined) {
             nextStock = calculateTotalStock(sizeStock);
         } else if (productData.stock !== undefined) {
             nextStock = Math.max(0, parseInt(productData.stock) || 0);
@@ -235,6 +383,8 @@ export const productService = {
 
         const nextMinStock = productData.minStock !== undefined ? Math.max(1, parseInt(productData.minStock) || 5) : current.minStock;
         const isOutOfStock = nextStock <= 0;
+        const supplierId = productData.supplierId || current.supplierId || 'PRV-101';
+        const supplierName = productData.supplierName || current.supplierName || 'Distribuidora Deportiva Ávila C.A.';
 
         const updated = {
             ...current,
@@ -248,6 +398,12 @@ export const productService = {
             sizes,
             sizeCategory,
             sizeStock,
+            color: primaryColor,
+            colors: colors,
+            colorVariants: colorVariants,
+            supplierId,
+            supplierName,
+            colorHex: productData.colorHex || current.colorHex || '#3b82f6',
             disabled: isOutOfStock ? true : (productData.disabled !== undefined ? Boolean(productData.disabled) : current.disabled),
             status: isOutOfStock ? 'out_of_stock' : (nextStock > nextMinStock ? 'in_stock' : 'low_stock'),
             imageUrl: productData.imageUrl !== undefined ? productData.imageUrl : current.imageUrl,
@@ -256,6 +412,25 @@ export const productService = {
         };
 
         updated.active = !updated.disabled && updated.stock > 0;
+
+        // Registrar movimiento en el Kardex si varió la cantidad de stock
+        if (nextStock !== previousStock) {
+            try {
+                await stockMovementService.record({
+                    productId: current.id,
+                    productName: updated.name,
+                    sku: updated.sku,
+                    previousStock,
+                    newStock: nextStock,
+                    delta: nextStock - previousStock,
+                    type: 'edicion_producto',
+                    reason: productData.reason || 'Modificación de cantidad en edición de producto',
+                    userName: productData.userName || 'Administrador'
+                });
+            } catch (kErr) {
+                console.warn('Aviso kardex update:', kErr);
+            }
+        }
 
         // Actualizar en Supabase si está disponible
         if (isSupabaseConfigured() && supabase) {
@@ -351,23 +526,41 @@ export const productService = {
 
     /**
      * Actualizar stock individual (e.g. tras venta, compra o ajuste manual)
-     * Soporta actualizar una talla específica o el total distribuido
+     * Soporta actualizar una talla específica o el total distribuido y registra Kardex
      */
-    updateStock: async (id, newStock, specificSize = null) => {
+    updateStock: async (id, newStock, specificSize = null, reason = 'Ajuste manual de inventario', userName = 'Administrador', specificColor = null) => {
         const product = db.products.find(p => p.id === id);
         if (!product) throw new Error("Producto no encontrado");
 
+        const previousStock = product.stock;
+
+        // Asegurar variantes de color
+        if (!product.colorVariants || product.colorVariants.length === 0) {
+            product.colorVariants = ensureColorVariants(product.colors || [product.color || 'Negro'], product.sizes, null, product.sizeStock);
+        }
+
         if (specificSize) {
             const s = String(specificSize);
+            const targetColor = specificColor || product.color || 'Negro';
+
+            // Actualizar en la variante de color correspondiente
+            const variant = product.colorVariants.find(v => (v.color || '').toLowerCase() === targetColor.toLowerCase()) || product.colorVariants[0];
+            if (variant) {
+                if (!variant.sizeStock) variant.sizeStock = ensureSizeStock(product.sizes, 0);
+                variant.sizeStock[s] = Math.max(0, parseInt(newStock) || 0);
+                variant.total = calculateTotalStock(variant.sizeStock);
+            }
+
             if (!product.sizeStock) {
                 product.sizeStock = ensureSizeStock(product.sizes, product.stock);
             }
             product.sizeStock[s] = Math.max(0, parseInt(newStock) || 0);
-            product.stock = calculateTotalStock(product.sizeStock);
+            product.stock = calculateVariantsTotalStock(product.colorVariants) || calculateTotalStock(product.sizeStock);
         } else {
             const safeStock = Math.max(0, parseInt(newStock) || 0);
             product.stock = safeStock;
             product.sizeStock = ensureSizeStock(product.sizes, safeStock, product.sizeStock);
+            product.colorVariants = ensureColorVariants(product.colors, product.sizes, null, product.sizeStock);
         }
         
         const safeStock = product.stock;
@@ -385,10 +578,34 @@ export const productService = {
 
         product.updatedAt = new Date().toISOString();
 
+        // Registrar en Kardex
+        if (safeStock !== previousStock) {
+            try {
+                await stockMovementService.record({
+                    productId: product.id,
+                    productName: product.name,
+                    sku: product.sku,
+                    previousStock,
+                    newStock: safeStock,
+                    delta: safeStock - previousStock,
+                    type: 'ajuste_manual',
+                    reason: reason || 'Ajuste manual de existencias',
+                    size: specificSize,
+                    color: specificColor || product.color,
+                    userName: userName || 'Administrador'
+                });
+            } catch (kErr) {
+                console.warn('Aviso kardex updateStock:', kErr);
+            }
+        }
+
         if (isSupabaseConfigured() && supabase) {
             try {
                 await supabase.from('productos').update({
                     stock: safeStock,
+                    variantes_color: product.colorVariants,
+                    tallas_stock: product.sizeStock,
+                    colores: product.colors || [product.color || 'Negro'],
                     estado: product.disabled ? 'deshabilitado' : (safeStock > 0 ? 'in_stock' : 'out_of_stock'),
                     actualizado_el: new Date().toISOString()
                 }).eq('id', id);
@@ -399,6 +616,16 @@ export const productService = {
 
         notifyProductsChanged();
         return product;
+    },
+
+    /**
+     * Calcula la disponibilidad exacta de inventario para un producto, talla y color
+     */
+    getAvailableStock: (productOrId, size = 'N/A', color = null) => {
+        const product = typeof productOrId === 'string' 
+            ? db.products.find(p => p.id === productOrId)
+            : productOrId;
+        return getAvailableStockForItem(product, size, color);
     }
 };
 

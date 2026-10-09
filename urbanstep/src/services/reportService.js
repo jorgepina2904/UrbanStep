@@ -565,6 +565,7 @@ export const reportService = {
                 sku: p.sku,
                 name: p.name,
                 brand: p.brand,
+                supplierName: p.supplierName || 'Distribuidora Deportiva Ávila C.A.',
                 stock: p.stock,
                 minStock: p.minStock,
                 cost: p.cost,
@@ -576,6 +577,7 @@ export const reportService = {
                 sku: p.sku,
                 name: p.name,
                 brand: p.brand,
+                supplierName: p.supplierName || 'Distribuidora Deportiva Ávila C.A.',
                 minStock: p.minStock,
                 cost: p.cost,
                 price: p.price

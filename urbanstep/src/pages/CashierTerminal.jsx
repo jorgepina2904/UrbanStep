@@ -55,6 +55,7 @@ export default function CashierTerminal() {
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [selectedSize, setSelectedSize] = useState({});
+    const [selectedColor, setSelectedColor] = useState({});
     const [loading, setLoading] = useState(true);
 
     // Modales auxiliares de mostrador
@@ -66,6 +67,7 @@ export default function CashierTerminal() {
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
 
     // Checkout modal & payment state
+    const [paymentMethodsList, setPaymentMethodsList] = useState(() => settingsService.getPaymentMethods());
     const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('pagomovil');
     const [paymentBank, setPaymentBank] = useState('0134 - Banesco');
@@ -105,8 +107,9 @@ export default function CashierTerminal() {
                 productService.getAll(),
                 settingsService.getSettings()
             ]);
-            setProducts(prods.filter(p => p.stock > 0));
+            setProducts(prods.filter(p => !p.disabled && p.stock > 0));
             setSettings(sett);
+            setPaymentMethodsList(settingsService.getPaymentMethods());
         } finally {
             setLoading(false);
         }
@@ -115,8 +118,13 @@ export default function CashierTerminal() {
     useEffect(() => {
         loadData();
         const handleSync = () => loadData();
+        const handlePaySync = () => setPaymentMethodsList(settingsService.getPaymentMethods());
         window.addEventListener('products_updated', handleSync);
-        return () => window.removeEventListener('products_updated', handleSync);
+        window.addEventListener('payment_methods_updated', handlePaySync);
+        return () => {
+            window.removeEventListener('products_updated', handleSync);
+            window.removeEventListener('payment_methods_updated', handlePaySync);
+        };
     }, [loadData]);
 
     // Focus scanner/search input on load
@@ -173,17 +181,41 @@ export default function CashierTerminal() {
     });
 
     const handleAddToCart = (product) => {
+        const color = selectedColor[product.id] || product.color || (Array.isArray(product.colors) && product.colors[0]) || null;
         const size = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
-        if (product.sizeStock && product.sizeStock[size] !== undefined && product.sizeStock[size] <= 0) {
-            toast.error(`La talla ${size} de "${product.name}" está agotada`, { duration: 2000 });
+        const availableStock = productService.getAvailableStock(product, size, color);
+
+        if (availableStock <= 0) {
+            toast.error(`Agotado: La talla ${size}${color ? ` en ${color}` : ''} no tiene existencias`, { duration: 2000 });
             return;
         }
-        addItem(product, size);
+
+        const existingItem = items.find(i => 
+            i.productId === product.id && 
+            String(i.size) === String(size) && 
+            (color ? String(i.color || '').toLowerCase() === String(color).toLowerCase() : true)
+        );
+        const inCartQty = existingItem ? existingItem.quantity : 0;
+
+        if (inCartQty >= availableStock) {
+            toast.error(
+                `Límite alcanzado: Ya tienes el máximo disponible (${availableStock} pares) de esta talla y color en caja`, 
+                { duration: 2500 }
+            );
+            return;
+        }
+
+        addItem(product, size, 1, color);
+        toast.success(
+            `${product.name} (${color ? `${color} • ` : ''}Talla ${size}) agregado (${inCartQty + 1}/${availableStock} en caja)`, 
+            { duration: 1500 }
+        );
     };
 
-    const handleSelectPaymentMethod = (method) => {
-        setPaymentMethod(method);
-        if (method === 'efectivo_usd' || method === 'zelle') {
+    const handleSelectPaymentMethod = (methodId) => {
+        setPaymentMethod(methodId);
+        const pmObj = paymentMethodsList.find(m => m.id === methodId);
+        if (pmObj?.currency === 'USD' || methodId === 'efectivo_usd' || methodId === 'zelle') {
             setApplyIgtf(settings?.igtfActive ?? true);
         } else {
             setApplyIgtf(false);
@@ -221,6 +253,7 @@ export default function CashierTerminal() {
         try {
             const customerObj = state.customer;
             const carrierObj = SHIPPING_CARRIERS.find(c => c.id === shippingCarrier);
+            const foundPm = paymentMethodsList.find(m => m.id === paymentMethod);
 
             const saleData = {
                 customerId: customerObj?.id || 'publico',
@@ -236,6 +269,7 @@ export default function CashierTerminal() {
                     quantity: item.quantity,
                     price: item.price,
                     size: item.size,
+                    color: item.color || null,
                 })),
                 bcvRate: rate,
                 subtotal,
@@ -246,13 +280,14 @@ export default function CashierTerminal() {
                 shippingCarrierName: carrierObj?.name || 'Retiro en Tienda',
                 total,
                 paymentMethod,
-                paymentMethodLabel:
+                paymentMethodLabel: foundPm ? foundPm.label : (
                     paymentMethod === 'pagomovil' ? 'Pago Móvil' :
                     paymentMethod === 'zelle' ? 'Zelle (USD)' :
                     paymentMethod === 'punto_venta' ? 'Punto de Venta' :
                     paymentMethod === 'efectivo_usd' ? 'Efectivo Divisas' :
-                    paymentMethod === 'efectivo_bs' ? 'Efectivo Bolívares' : 'Otro',
-                paymentBank: paymentBank || '',
+                    paymentMethod === 'efectivo_bs' ? 'Efectivo Bolívares' : 'Otro'
+                ),
+                paymentBank: paymentBank || foundPm?.bank || '',
                 paymentReference: paymentReference || (paymentMethod.startsWith('efectivo') ? 'Efectivo' : 'Ref-0000'),
                 cashReceived: cashNum > 0 ? cashNum : null,
                 cashChange: paymentMethod === 'efectivo_bs' ? cashChangeBs : cashChange,
@@ -308,7 +343,7 @@ export default function CashierTerminal() {
 
             // Refresh stock
             const refreshedProds = await productService.getAll();
-            setProducts(refreshedProds.filter(p => p.stock > 0));
+            setProducts(refreshedProds.filter(p => !p.disabled && p.stock > 0));
 
             // Reset inputs
             setPaymentReference('');
@@ -468,7 +503,7 @@ export default function CashierTerminal() {
                         </div>
 
                         {/* Category Pills */}
-                        <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none no-scrollbar">
                             {categories.map((cat) => (
                                 <button
                                     key={cat}
@@ -485,8 +520,8 @@ export default function CashierTerminal() {
                         </div>
                     </div>
 
-                    {/* Products Grid — Protegido con auto-rows-fr y min-h-[360px] */}
-                    <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pr-1 auto-rows-fr">
+                    {/* Products Grid — Grilla fija sin solapamiento con auto-rows-max */}
+                    <div className="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 pr-1 auto-rows-max content-start scrollbar-none no-scrollbar pb-6">
                         {filtered.length === 0 ? (
                             <div className="col-span-full text-center py-16 text-gray-400">
                                 <Store className="w-12 h-12 mx-auto mb-2 opacity-30" />
@@ -494,15 +529,24 @@ export default function CashierTerminal() {
                             </div>
                         ) : (
                             filtered.map((product) => {
+                                const availableColors = Array.isArray(product.colors) && product.colors.length > 0
+                                    ? product.colors
+                                    : (product.color ? [product.color] : ['Original']);
+                                const currentColor = selectedColor[product.id] || product.color || availableColors[0];
+                                const currentVariantStock = productService.getColorSizeStock(product, currentColor);
+                                
                                 const currentSize = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
                                 const imgSrc = product.imageUrl || product.image;
+                                const sizeCount = currentVariantStock ? (currentVariantStock[currentSize] ?? 0) : (product.sizeStock ? (product.sizeStock[currentSize] ?? 0) : 0);
+                                const isSelectedSizeOut = sizeCount <= 0;
+
                                 return (
                                     <div
                                         key={product.id}
-                                        className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col min-w-0 min-h-[360px] shrink-0 justify-between group overflow-hidden shadow-sm relative"
+                                        className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col justify-between group shadow-sm relative min-h-[380px]"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            {/* Shoe Image Thumbnail — Protegido con h-40 shrink-0 */}
+                                            {/* Shoe Image Thumbnail */}
                                             <div className="h-40 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/70 mb-2.5 overflow-hidden relative flex items-center justify-center border border-gray-200/60 dark:border-gray-700/60">
                                                 {imgSrc ? (
                                                     <img
@@ -513,7 +557,7 @@ export default function CashierTerminal() {
                                                     />
                                                 ) : null}
                                                 <span className={`text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
-                                                <div className="absolute top-2 left-2 z-10">
+                                                <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                                                     <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
                                                         {product.stock} disp.
                                                     </Badge>
@@ -526,48 +570,80 @@ export default function CashierTerminal() {
                                             <h4 className="font-extrabold text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
                                                 {product.name}
                                             </h4>
-                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{product.brand} • {product.category}</p>
+                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                                                {product.brand} • {product.category}
+                                            </p>
 
-                                            {/* Size Selector in single neat scrollable row with per-size stock breakdown */}
+                                            {/* Model Color Options */}
+                                            {availableColors.length > 1 ? (
+                                                <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                                                    <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                                                        <span>Color:</span>
+                                                        <span className="text-blue-600 dark:text-blue-400 font-bold truncate max-w-[120px]">{currentColor}</span>
+                                                    </div>
+                                                    <div className="flex gap-1 overflow-x-auto pb-0.5 max-w-full scrollbar-none no-scrollbar">
+                                                        {availableColors.map((col) => {
+                                                            const isColSelected = currentColor === col;
+                                                            return (
+                                                                <button
+                                                                    key={col}
+                                                                    type="button"
+                                                                    onClick={() => setSelectedColor({ ...selectedColor, [product.id]: col })}
+                                                                    className={`px-2 py-0.5 text-[9px] sm:text-[10px] rounded-md font-bold shrink-0 transition-all ${
+                                                                        isColSelected
+                                                                            ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
+                                                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    {col}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                                    <span className="truncate">{currentColor}</span>
+                                                </div>
+                                            )}
+
+                                            {/* Size Selector with Per-Color Stock Breakdown */}
                                             {product.sizes && product.sizes.length > 0 && (
                                                 <div className="mt-2">
                                                     <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                                                        <span>Talla:</span>
-                                                        {product.sizeStock && (
-                                                            <span className={product.sizeStock[currentSize] > 0 ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : "text-rose-500 font-extrabold"}>
-                                                                {product.sizeStock[currentSize] > 0 
-                                                                    ? `${product.sizeStock[currentSize]} disp.` 
-                                                                    : 'Agotado'}
-                                                            </span>
-                                                        )}
+                                                        <span>Tallas ({currentColor}):</span>
+                                                        <span className={!isSelectedSizeOut ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : "text-rose-500 font-extrabold"}>
+                                                            {!isSelectedSizeOut 
+                                                                ? `${sizeCount} disp.` 
+                                                                : 'Agotado'}
+                                                        </span>
                                                     </div>
-                                                    <div className="flex gap-1 overflow-x-auto pb-1 max-w-full">
+                                                    <div className="flex gap-1 overflow-x-auto pb-1 max-w-full scrollbar-none no-scrollbar">
                                                         {product.sizes.map((s) => {
-                                                            const sStock = product.sizeStock ? (product.sizeStock[s] ?? 0) : null;
-                                                            const isOutOfStock = sStock !== null && sStock <= 0;
+                                                            const sStock = currentVariantStock ? (currentVariantStock[s] ?? 0) : (product.sizeStock ? (product.sizeStock[s] ?? 0) : 0);
+                                                            const isOutOfStock = sStock <= 0;
                                                             const isSelected = currentSize === s;
                                                             return (
                                                                 <button
                                                                     key={s}
                                                                     type="button"
                                                                     onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
-                                                                    title={sStock !== null ? `${sStock} pares disponibles` : `Talla ${s}`}
+                                                                    title={sStock > 0 ? `${sStock} pares disponibles de talla ${s} en ${currentColor}` : `Talla ${s} agotada`}
                                                                     className={`px-1.5 py-0.5 text-[10px] sm:text-[11px] rounded-md font-bold shrink-0 transition-colors flex items-center gap-0.5 ${
                                                                         isSelected
                                                                             ? isOutOfStock
-                                                                                ? 'bg-rose-600 text-white shadow-sm'
-                                                                                : 'bg-blue-600 text-white shadow-sm'
+                                                                                ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500'
+                                                                                : 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
                                                                             : isOutOfStock
                                                                                 ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through opacity-60'
                                                                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                                     }`}
                                                                 >
                                                                     <span>{s}</span>
-                                                                    {sStock !== null && (
-                                                                        <span className="text-[9px] font-mono opacity-80">
-                                                                            ({sStock})
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="text-[9px] font-mono opacity-80">
+                                                                        ({sStock})
+                                                                    </span>
                                                                 </button>
                                                             );
                                                         })}
@@ -577,7 +653,7 @@ export default function CashierTerminal() {
                                         </div>
 
                                         {/* Pricing & Fast Add */}
-                                        <div className="relative z-20 mt-2.5 pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
+                                        <div className="relative z-20 mt-3 pt-2.5 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
                                             <div className="min-w-0 pr-1">
                                                 <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white block leading-tight truncate">
                                                     {formatUSD(product.price)}
@@ -588,21 +664,31 @@ export default function CashierTerminal() {
                                             </div>
 
                                             {(() => {
-                                                const isSelectedSizeOut = product.sizeStock && product.sizeStock[currentSize] !== undefined && product.sizeStock[currentSize] <= 0;
+                                                const existingInCart = items.find(i => 
+                                                    i.productId === product.id && 
+                                                    String(i.size) === String(currentSize) && 
+                                                    (currentColor ? String(i.color || '').toLowerCase() === String(currentColor).toLowerCase() : true)
+                                                );
+                                                const inCartCount = existingInCart ? existingInCart.quantity : 0;
+                                                const isMaxInCart = sizeCount > 0 && inCartCount >= sizeCount;
+                                                const isButtonDisabled = isSelectedSizeOut || isMaxInCart;
+
                                                 return (
                                                     <Button
                                                         size="sm"
-                                                        variant={isSelectedSizeOut ? "secondary" : "primary"}
-                                                        disabled={isSelectedSizeOut}
-                                                        className={`flex items-center gap-1 font-bold shadow-md shrink-0 px-3 py-1.5 text-xs uppercase tracking-wide whitespace-nowrap active:scale-95 ${
+                                                        variant={isButtonDisabled ? "secondary" : "primary"}
+                                                        disabled={isButtonDisabled}
+                                                        className={`flex items-center gap-1 font-bold shadow-md shrink-0 px-3.5 py-1.5 text-xs uppercase tracking-wide whitespace-nowrap active:scale-95 ${
                                                             isSelectedSizeOut
                                                                 ? 'opacity-50 cursor-not-allowed bg-gray-200 dark:bg-gray-800 text-gray-400'
-                                                                : 'shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
+                                                                : isMaxInCart
+                                                                    ? 'opacity-70 cursor-not-allowed bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                                                    : 'shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
                                                         }`}
                                                         onClick={() => handleAddToCart(product)}
                                                     >
                                                         <Plus className="w-3.5 h-3.5" />
-                                                        {isSelectedSizeOut ? 'Agotado' : 'Agregar'}
+                                                        {isSelectedSizeOut ? 'Agotado' : isMaxInCart ? 'En Caja (Máx)' : inCartCount > 0 ? `Agregar (${inCartCount})` : 'Agregar'}
                                                     </Button>
                                                 );
                                             })()}
@@ -638,39 +724,69 @@ export default function CashierTerminal() {
                                 <p className="text-xs text-gray-400 mt-0.5">Selecciona o escanea calzados para facturar</p>
                             </div>
                         ) : (
-                            items.map((item) => (
-                                <div
-                                    key={item.uniqueId}
-                                    className="p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs"
-                                >
-                                    <div className="min-w-0 flex-1 pr-2">
-                                        <p className="font-bold text-gray-900 dark:text-white truncate">{item.name}</p>
-                                        <p className="text-[11px] text-gray-500">Talla: {item.size} • {formatUSD(item.price)}</p>
-                                    </div>
+                            items.map((item) => {
+                                const isAtMax = item.maxStock !== undefined && item.quantity >= item.maxStock;
+                                return (
+                                    <div
+                                        key={item.uniqueId}
+                                        className="p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs"
+                                    >
+                                        <div className="min-w-0 flex-1 pr-2">
+                                            <p className="font-bold text-gray-900 dark:text-white truncate">{item.name}</p>
+                                            <div className="flex items-center gap-1 text-[11px] text-gray-500 flex-wrap">
+                                                {item.color && <span className="font-semibold text-blue-600 dark:text-blue-400">{item.color} •</span>}
+                                                <span>Talla: {item.size} •</span>
+                                                <span>{formatUSD(item.price)}</span>
+                                                {item.maxStock !== undefined && (
+                                                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                                                        isAtMax 
+                                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' 
+                                                            : 'text-gray-400'
+                                                    }`}>
+                                                        {isAtMax ? `Límite (${item.maxStock} disp.)` : `Máx: ${item.maxStock}`}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
 
-                                    <div className="flex items-center gap-1.5">
-                                        <button
-                                            onClick={() => updateQuantity(item.productId, item.size, item.quantity - 1)}
-                                            className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold hover:bg-gray-300"
-                                        >
-                                            <Minus className="w-3 h-3" />
-                                        </button>
-                                        <span className="w-5 text-center font-extrabold text-gray-900 dark:text-white">{item.quantity}</span>
-                                        <button
-                                            onClick={() => updateQuantity(item.productId, item.size, item.quantity + 1)}
-                                            className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold hover:bg-gray-300"
-                                        >
-                                            <Plus className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                            onClick={() => removeItem(item.productId, item.size)}
-                                            className="ml-1 text-red-400 hover:text-red-500 p-1"
-                                        >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <button
+                                                onClick={() => updateQuantity(item.uniqueId, item.quantity - 1)}
+                                                className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold hover:bg-gray-300 active:scale-95 transition-transform"
+                                                title="Disminuir"
+                                            >
+                                                <Minus className="w-3 h-3" />
+                                            </button>
+                                            <span className="w-5 text-center font-extrabold text-gray-900 dark:text-white">{item.quantity}</span>
+                                            <button
+                                                onClick={() => {
+                                                    if (isAtMax) {
+                                                        toast.error(`Stock máximo alcanzado (${item.maxStock} disponibles)`, { duration: 2000 });
+                                                        return;
+                                                    }
+                                                    updateQuantity(item.uniqueId, item.quantity + 1);
+                                                }}
+                                                disabled={isAtMax}
+                                                className={`w-6 h-6 rounded flex items-center justify-center font-bold transition-all ${
+                                                    isAtMax
+                                                        ? 'opacity-30 cursor-not-allowed bg-gray-200 dark:bg-gray-800 text-gray-400'
+                                                        : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 active:scale-95'
+                                                }`}
+                                                title={isAtMax ? `No puedes agregar más de ${item.maxStock} unidades` : "Aumentar"}
+                                            >
+                                                <Plus className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={() => removeItem(item.uniqueId)}
+                                                className="ml-1 text-red-400 hover:text-red-500 p-1"
+                                                title="Eliminar de la venta"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
 
@@ -836,14 +952,13 @@ export default function CashierTerminal() {
 
                     {/* Payment methods */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {[
-                            { id: 'pagomovil', label: 'Pago Móvil', icon: Smartphone },
-                            { id: 'punto_venta', label: 'Punto / Débito', icon: CreditCard },
-                            { id: 'efectivo_usd', label: 'Efectivo $ USD', icon: DollarSign },
-                            { id: 'efectivo_bs', label: 'Efectivo Bs.', icon: Coins },
-                            { id: 'zelle', label: 'Zelle (USD)', icon: Building },
-                        ].map((pm) => {
-                            const Icon = pm.icon;
+                        {paymentMethodsList.filter(pm => pm.active).map((pm) => {
+                            let Icon = CreditCard;
+                            if (pm.type === 'movil') Icon = Smartphone;
+                            else if (pm.type === 'tarjeta') Icon = CreditCard;
+                            else if (pm.type === 'efectivo') Icon = pm.currency === 'USD' ? DollarSign : Coins;
+                            else if (pm.type === 'digital' || pm.type === 'banco') Icon = Building;
+
                             const isSelected = paymentMethod === pm.id;
                             return (
                                 <button
@@ -857,7 +972,8 @@ export default function CashierTerminal() {
                                     }`}
                                 >
                                     <Icon className="w-4 h-4 mb-1" />
-                                    {pm.label}
+                                    <span className="truncate max-w-full">{pm.label}</span>
+                                    <span className="text-[9px] font-mono opacity-70">({pm.currency})</span>
                                 </button>
                             );
                         })}
@@ -1051,6 +1167,60 @@ export default function CashierTerminal() {
                             </div>
                         </div>
                     )}
+
+                    {/* Custom / Other Payment Methods */}
+                    {!['pagomovil', 'punto_venta', 'efectivo_usd', 'efectivo_bs', 'zelle'].includes(paymentMethod) && (() => {
+                        const customPm = paymentMethodsList.find(m => m.id === paymentMethod);
+                        if (!customPm) return null;
+                        return (
+                            <div className="space-y-3 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 text-xs">
+                                <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-800/40 p-2.5 rounded-lg space-y-0.5">
+                                    <p className="font-bold text-blue-800 dark:text-blue-300 flex justify-between">
+                                        <span>Datos para {customPm.label}:</span>
+                                        {(customPm.account || customPm.phone || customPm.email) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => copyToClipboard(customPm.account || customPm.phone || customPm.email, customPm.label)}
+                                                className="text-blue-600 flex items-center gap-1 font-normal"
+                                            >
+                                                <Copy className="w-3 h-3" /> Copiar
+                                            </button>
+                                        )}
+                                    </p>
+                                    {customPm.bank && <p>Banco / Entidad: <strong>{customPm.bank}</strong></p>}
+                                    {customPm.account && <p>Cuenta / Wallet: <strong>{customPm.account}</strong></p>}
+                                    {customPm.phone && <p>Teléfono / Pay ID: <strong>{customPm.phone}</strong></p>}
+                                    {customPm.email && <p>Correo: <strong>{customPm.email}</strong></p>}
+                                    {customPm.holder && <p>Titular: <strong>{customPm.holder}</strong></p>}
+                                    {customPm.instructions && <p className="italic text-gray-500 pt-0.5">{customPm.instructions}</p>}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                            {customPm.requiresReference ? 'N° Referencia *' : 'Referencia (Opcional)'}
+                                        </label>
+                                        <Input
+                                            value={paymentReference}
+                                            onChange={(e) => setPaymentReference(e.target.value)}
+                                            placeholder="Ref bancaria o hash"
+                                            className="text-xs font-mono"
+                                            required={customPm.requiresReference}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Titular Emisor</label>
+                                        <Input
+                                            value={payerPhone}
+                                            onChange={(e) => setPayerPhone(e.target.value)}
+                                            placeholder="Nombre o telf"
+                                            className="text-xs"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     <div className="flex gap-2 pt-2">
                         <Button variant="secondary" className="flex-1 text-xs" onClick={() => setShowCheckoutModal(false)} disabled={processing}>

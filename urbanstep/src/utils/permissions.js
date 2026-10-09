@@ -1,7 +1,7 @@
 // Matriz de permisos centralizada - Roles: Admin, Supervisor, Cajero, Cliente
 export const RolePermissions = {
-    Admin: ['dashboard', 'pos', 'cashier', 'products', 'inventory', 'customers', 'reports', 'delivery', 'users', 'settings', 'ecommerce'],
-    Supervisor: ['dashboard', 'reports', 'inventory', 'customers', 'delivery', 'cashier'],
+    Admin: ['dashboard', 'pos', 'cashier', 'products', 'inventory', 'purchases', 'customers', 'reports', 'delivery', 'users', 'settings', 'ecommerce'],
+    Supervisor: ['dashboard', 'reports', 'inventory', 'purchases', 'customers', 'delivery', 'cashier'],
     Cajero: ['cashier', 'pos', 'customers', 'delivery', 'dashboard'],
     Cliente: ['ecommerce', 'delivery'],
 };

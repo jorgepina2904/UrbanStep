@@ -1545,6 +1545,7 @@ export default function Reports() {
                                         <th className="px-4 py-3 text-left">Calzado</th>
                                         <th className="px-4 py-3 text-left">SKU</th>
                                         <th className="px-4 py-3 text-left">Marca</th>
+                                        <th className="px-4 py-3 text-left">Proveedor</th>
                                         <th className="px-4 py-3 text-center">Stock Actual</th>
                                         <th className="px-4 py-3 text-center">Mínimo</th>
                                         <th className="px-4 py-3 text-right">Costo ($)</th>
@@ -1565,6 +1566,12 @@ export default function Reports() {
                                             </td>
                                             <td className="px-4 py-3 text-gray-500">{p.sku}</td>
                                             <td className="px-4 py-3 font-sans">{p.brand}</td>
+                                            <td className="px-4 py-3 font-sans text-xs text-gray-700 dark:text-gray-300">
+                                                <div className="flex items-center gap-1.5 truncate max-w-[150px]" title={p.supplierName}>
+                                                    <Truck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                    <span className="truncate">{p.supplierName || 'Distribuidora Ávila C.A.'}</span>
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3 text-center font-black text-amber-600">{p.stock} pares</td>
                                             <td className="px-4 py-3 text-center text-gray-400">{p.minStock}</td>
                                             <td className="px-4 py-3 text-right">{formatUSD(p.cost)}</td>
