@@ -547,22 +547,24 @@ export default function CashierTerminal() {
                                     >
                                         <div className="flex-1 min-w-0">
                                             {/* Shoe Image Thumbnail */}
-                                            <div className="h-40 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/70 mb-2.5 overflow-hidden relative flex items-center justify-center border border-gray-200/60 dark:border-gray-700/60">
+                                            {/* Shoe Image Thumbnail — Full Studio Frame */}
+                                            <div className="h-44 sm:h-48 w-full shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 mb-2.5 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
+                                                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
                                                 {imgSrc ? (
                                                     <img
                                                         src={imgSrc}
                                                         alt={product.name}
-                                                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
+                                                        className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                                         onError={(e) => { e.target.style.display = 'none'; }}
                                                     />
                                                 ) : null}
-                                                <span className={`text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
-                                                <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+                                                <span className={`text-4xl relative z-10 ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
+                                                <div className="absolute top-2 left-2 z-20 flex flex-col gap-1">
                                                     <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
                                                         {product.stock} disp.
                                                     </Badge>
                                                 </div>
-                                                <span className="absolute top-2 right-2 z-10 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white">
+                                                <span className="absolute top-2 right-2 z-20 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm shadow-sm">
                                                     {product.sku}
                                                 </span>
                                             </div>

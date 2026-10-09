@@ -1558,7 +1558,7 @@ export default function Reports() {
                                         <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                                             <td className="px-4 py-3 font-sans font-bold text-gray-900 dark:text-white flex items-center gap-3">
                                                 {p.imageUrl ? (
-                                                    <img src={p.imageUrl} alt={p.name} className="w-9 h-9 object-cover rounded-lg border border-gray-200 dark:border-gray-700 shrink-0" />
+                                                    <img src={p.imageUrl} alt={p.name} className="w-9 h-9 object-contain p-0.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0" />
                                                 ) : (
                                                     <span className="text-xl">👟</span>
                                                 )}

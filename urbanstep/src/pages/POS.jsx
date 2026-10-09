@@ -381,13 +381,14 @@ export default function POS() {
                                     className="p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-lg hover:border-blue-500/60 transition-all flex flex-col justify-between group relative overflow-hidden min-h-[380px]"
                                 >
                                     <div className="flex-1 min-w-0">
-                                        {/* Product image thumbnail */}
-                                        <div className="h-44 w-full shrink-0 rounded-xl bg-gray-50 dark:bg-gray-800/80 mb-3 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700">
+                                        {/* Product image thumbnail — Full Studio Frame */}
+                                        <div className="h-48 w-full shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 mb-3 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
+                                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
                                             {imgSrc ? (
                                                 <img
                                                     src={imgSrc}
                                                     alt={product.name}
-                                                    className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
+                                                    className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                                     onError={(e) => {
                                                         e.target.style.display = 'none';
                                                         const fb = e.target.parentElement.querySelector('.pos-fallback-icon');
@@ -397,12 +398,12 @@ export default function POS() {
                                             ) : null}
                                             <span className={`pos-fallback-icon text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
 
-                                            <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+                                            <div className="absolute top-2 left-2 z-20 flex flex-col gap-1">
                                                 <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
                                                     {product.stock} en stock
                                                 </Badge>
                                             </div>
-                                            <span className="absolute top-2 right-2 z-10 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm">
+                                            <span className="absolute top-2 right-2 z-20 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm shadow-sm">
                                                 {product.sku}
                                             </span>
                                         </div>

@@ -347,7 +347,7 @@ export default function Inventory() {
                                 <img
                                   src={product.imageUrl || product.image}
                                   alt={product.name}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain p-0.5"
                                   onError={(e) => {
                                     e.target.style.display = 'none';
                                     const fb = e.target.parentElement.querySelector('.inv-fb');

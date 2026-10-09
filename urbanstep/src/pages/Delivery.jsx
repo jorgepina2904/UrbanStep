@@ -773,7 +773,7 @@ export default function Delivery() {
                                             <tr key={`${item.productId}-${item.size}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 font-sans">
                                                 <td className="px-3 py-2 flex items-center gap-2">
                                                     {item.imageUrl ? (
-                                                        <img src={item.imageUrl} alt={item.name} className="w-7 h-7 object-cover rounded border" />
+                                                        <img src={item.imageUrl} alt={item.name} className="w-7 h-7 object-contain p-0.5 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700" />
                                                     ) : <span>👟</span>}
                                                     <span className="font-bold text-gray-900 dark:text-white truncate max-w-[150px]">{item.name}</span>
                                                 </td>

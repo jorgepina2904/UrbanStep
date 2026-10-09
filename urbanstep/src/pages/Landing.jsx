@@ -714,13 +714,17 @@ export default function Landing() {
                                     <span className={`text-xs font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Entrega 45 min en Lara</span>
                                 </div>
 
-                                <div className={`relative w-full h-56 shrink-0 flex items-center justify-center p-2 mb-4 rounded-2xl overflow-hidden border ${
-                                    isDark ? 'bg-black/40 border-white/5' : 'bg-slate-100/70 border-slate-200/60'
+                                <div className={`relative w-full h-64 sm:h-72 shrink-0 flex items-center justify-center p-3 mb-4 rounded-2xl overflow-hidden border transition-all duration-300 ${
+                                    isDark 
+                                        ? 'bg-gradient-to-b from-slate-900 via-slate-950 to-black border-white/10 shadow-inner' 
+                                        : 'bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-200 shadow-sm'
                                 }`}>
+                                    {/* Ambient spotlight */}
+                                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.18)_0%,transparent_75%)] pointer-events-none" />
                                     <img
                                         src={(products[0] || mockProducts[0])?.imageUrl}
                                         alt={(products[0] || mockProducts[0])?.name}
-                                        className="w-full h-full object-contain filter drop-shadow-2xl hover:scale-105 transition-transform"
+                                        className="w-full h-full object-contain filter drop-shadow-[0_16px_28px_rgba(0,0,0,0.35)] hover:scale-105 hover:-translate-y-1 transition-all duration-300 relative z-10"
                                     />
                                 </div>
 
@@ -810,17 +814,21 @@ export default function Landing() {
                                         </div>
                                     </div>
 
-                                    {/* Image Thumbnail wrapper — Shrink-0 and fixed height prevents responsive contracting */}
-                                    <div className={`w-full h-52 sm:h-56 shrink-0 relative overflow-hidden rounded-2xl p-4 flex items-center justify-center mb-4 border ${
-                                        isDark ? 'bg-[#080b14] border-slate-800/60' : 'bg-slate-100/80 border-slate-200/60'
+                                    {/* Image Thumbnail wrapper — High-end Sneaker Studio Frame */}
+                                    <div className={`w-full h-60 sm:h-64 shrink-0 relative overflow-hidden rounded-2xl p-3 flex items-center justify-center mb-4 border transition-all duration-300 ${
+                                        isDark 
+                                            ? 'bg-gradient-to-b from-[#0e1322] via-[#090d18] to-[#060810] border-slate-800/80 group-hover:border-blue-500/40 shadow-inner' 
+                                            : 'bg-gradient-to-b from-white via-slate-50 to-slate-100/90 border-slate-200 group-hover:border-blue-400/50 shadow-sm'
                                     }`}>
+                                        {/* Subtle ambient lighting spotlight */}
+                                        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.12)_0%,transparent_75%)] pointer-events-none" />
                                         <img
                                             src={product.imageUrl}
                                             alt={product.name}
-                                            className="w-full h-full object-contain filter drop-shadow-xl group-hover:scale-110 group-hover:-rotate-2 transition-transform duration-300"
+                                            className="w-full h-full max-h-full max-w-full object-contain filter drop-shadow-[0_14px_22px_rgba(0,0,0,0.28)] group-hover:scale-[1.04] group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                             loading="lazy"
                                         />
-                                        <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/80 text-[10px] font-mono text-emerald-400 border border-emerald-500/30">
+                                        <span className="absolute bottom-2.5 right-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 border border-emerald-500/30 shadow-sm">
                                             {product.stockBadge}
                                         </span>
                                     </div>

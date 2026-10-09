@@ -900,13 +900,14 @@ export default function Products() {
 
                     return (
                         <Card key={product.id} hover className="flex flex-col min-w-0 group overflow-hidden">
-                            {/* Product image container */}
-                            <div className="w-full h-48 shrink-0 rounded-xl bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-800/90 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center mb-3 relative overflow-hidden border border-gray-100 dark:border-gray-800">
+                            {/* Product image container — Full Studio Frame */}
+                            <div className="w-full h-52 shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 flex items-center justify-center mb-3 relative overflow-hidden border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
+                                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
                                 {imgSrc ? (
                                     <img
                                         src={imgSrc}
                                         alt={product.name}
-                                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                                        className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                         onError={(e) => {
                                             e.target.style.display = 'none';
                                             const fallback = e.target.parentElement.querySelector('.fallback-shoe-icon');
@@ -915,7 +916,7 @@ export default function Products() {
                                     />
                                 ) : null}
                                 <div
-                                    className={`fallback-shoe-icon w-full h-full items-center justify-center ${imgSrc ? 'hidden' : 'flex'}`}
+                                    className={`fallback-shoe-icon w-full h-full items-center justify-center relative z-10 ${imgSrc ? 'hidden' : 'flex'}`}
                                 >
                                     <span className="text-5xl drop-shadow-sm select-none">👟</span>
                                 </div>
@@ -1228,7 +1229,7 @@ export default function Products() {
                                                 : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300'
                                         }`}
                                     >
-                                        <img src={preset.url} alt={preset.name} className="w-10 h-10 object-cover rounded-lg" />
+                                        <img src={preset.url} alt={preset.name} className="w-10 h-10 object-contain p-0.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700" />
                                         <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 truncate">{preset.name}</span>
                                     </button>
                                 ))}
@@ -1241,7 +1242,7 @@ export default function Products() {
                                 <img
                                     src={form.imageUrl}
                                     alt="Vista previa"
-                                    className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                                    className="w-16 h-16 object-contain p-1 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
                                 />
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-bold text-gray-800 dark:text-gray-200">Vista previa del calzado</p>
