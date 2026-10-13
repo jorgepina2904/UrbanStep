@@ -38,7 +38,30 @@ export const customerService = {
 
     getById: async (id) => {
         await simulateNetworkDelay(50);
-        const customer = db.customers.find(c => c.id === id);
+        let customer = db.customers.find(c => c.id === id);
+        if (!customer && isSupabaseConfigured() && supabase) {
+            try {
+                const { data } = await supabase.from('clientes').select('*').eq('id', id).maybeSingle();
+                if (data) {
+                    customer = {
+                        id: data.id,
+                        docType: data.tipo_documento || 'V',
+                        docNumber: `${data.tipo_documento || 'V'}-${data.numero_documento || '00000000'}`,
+                        firstName: data.nombres || '',
+                        lastName: data.apellidos || '',
+                        email: data.correo || '',
+                        phone: data.telefono || '',
+                        state: data.estado || 'Distrito Capital',
+                        city: data.ciudad || 'Caracas',
+                        address: data.direccion || '',
+                        totalSpent: Number(data.total_comprado_usd || 0),
+                        purchasesCount: Number(data.cantidad_compras || 0)
+                    };
+                }
+            } catch (err) {
+                console.warn('Error consultando cliente en Supabase:', err);
+            }
+        }
         if (!customer) throw new Error('Cliente no encontrado');
         return { ...customer };
     },
@@ -212,16 +235,16 @@ export const customerService = {
         }
 
         db.customers.splice(index, 1);
-        if (isSupabaseConfigured()) {
+        if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('customers').delete().eq('id', id);
+                const { error: delErr } = await supabase.from('clientes').delete().eq('id', id);
+                if (delErr) await supabase.from('customers').delete().eq('id', id);
             } catch (err) {
                 console.warn('Error borrando cliente en Supabase:', err);
             }
         }
 
         if (typeof window !== 'undefined') {
-            db.save('customers');
             window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
         }
 
@@ -229,9 +252,29 @@ export const customerService = {
     },
 
     getPurchaseHistory: async (customerId) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => s.customerId === customerId);
-        return [...sales];
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('ventas')
+                    .select('*')
+                    .eq('cliente_id', customerId)
+                    .order('creado_el', { ascending: false });
+
+                if (!error && Array.isArray(data)) {
+                    return data.map(v => ({
+                        id: v.id,
+                        receiptNumber: v.numero_recibo,
+                        total: Number(v.total_usd) || 0,
+                        totalBs: Number(v.total_bs) || 0,
+                        date: v.creado_el,
+                        paymentMethod: v.metodo_pago_principal
+                    }));
+                }
+            } catch (err) {
+                console.warn('Error consultando historial de compras en Supabase:', err);
+            }
+        }
+        return [];
     }
 };
 

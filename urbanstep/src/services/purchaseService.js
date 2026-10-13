@@ -63,7 +63,7 @@ export const purchaseService = {
                     .select('*')
                     .order('razon_social', { ascending: true });
 
-                if (!error && Array.isArray(data) && data.length > 0) {
+                if (!error && Array.isArray(data)) {
                     const mapped = data.map(p => ({
                         id: p.id,
                         rif: p.rif,
@@ -81,7 +81,6 @@ export const purchaseService = {
                         purchasesCount: db.purchases.filter(pur => pur.supplierId === p.id).length
                     }));
                     db.suppliers = mapped;
-                    db.save('suppliers');
                     return mapped;
                 }
             } catch (err) {

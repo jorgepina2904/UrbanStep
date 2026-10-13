@@ -1,10 +1,8 @@
 /**
  * deliveryService.js — Gestión de Delivery con Geolocalización
- * Calcula distancia, precio del recorrido, y gestiona entregas
+ * Conectado 100% a la tabla 'envios' en Supabase como Fuente Única de la Verdad.
  */
-import { generateId } from '../utils/generateId';
-
-const DELIVERIES_KEY = 'urbanstep_deliveries';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 // Configuración por defecto (se puede sobreescribir desde store_settings)
 const DEFAULT_CONFIG = {
@@ -15,6 +13,36 @@ const DEFAULT_CONFIG = {
     storeLng: -69.28499381534304, // Longitud Exacta Tienda UrbanStep
     storeAddress: 'UrbanStep Store, Barquisimeto, Edo. Lara, Venezuela',
 };
+
+/**
+ * Mapea una fila de Supabase 'envios' a objeto compatible de la interfaz
+ */
+const mapEnvioFromDb = (e) => ({
+    id: e.id,
+    saleId: e.venta_id,
+    originName: e.nombre_origen || 'UrbanStep Tienda',
+    originLatitude: Number(e.latitud_origen) || 0,
+    originLongitude: Number(e.longitud_origen) || 0,
+    originAddress: e.direccion_origen || '',
+    destinationName: e.nombre_destino || '',
+    destinationLatitude: Number(e.latitud_destino) || 0,
+    destinationLongitude: Number(e.longitud_destino) || 0,
+    destinationAddress: e.direccion_destino || '',
+    distanceKm: Number(e.distancia_km) || 0,
+    estimatedTimeMin: Number(e.tiempo_estimado_min) || 30,
+    deliveryCostUsd: Number(e.costo_usd) || 0,
+    deliveryCostBs: Number(e.costo_bs) || 0,
+    status: e.estado || 'pendiente',
+    driverName: e.nombre_repartidor || null,
+    driverPhone: e.telefono_repartidor || null,
+    driverVehicle: e.vehiculo_repartidor || null,
+    customerName: e.nombre_cliente || '',
+    customerPhone: e.telefono_cliente || '',
+    specialInstructions: e.instrucciones_entrega || '',
+    deliveredAt: e.entregado_el,
+    createdAt: e.creado_el,
+    updatedAt: e.actualizado_el
+});
 
 /**
  * Calcula la distancia entre dos coordenadas usando la fórmula de Haversine
@@ -36,24 +64,13 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
  */
 function estimateTime(distanceKm) {
     if (distanceKm > 100) return Math.ceil(distanceKm / 60) * 60; // Envíos nacionales interurbanos
-    // Velocidad promedio de moto en ciudad: ~30 km/h
     const baseMinutes = 15; // Preparación y empaque
     const travelMinutes = (distanceKm / 30) * 60;
     return Math.ceil(baseMinutes + travelMinutes);
 }
 
-const getStoredDeliveries = () => {
-    try {
-        const raw = localStorage.getItem(DELIVERIES_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch {
-        return [];
-    }
-};
-
-const saveDeliveries = (deliveries) => {
-    localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries.slice(0, 200)));
-};
+// Caché en memoria para fluidez de UI
+let _cachedDeliveries = [];
 
 export const deliveryService = {
     /**
@@ -112,7 +129,7 @@ export const deliveryService = {
     },
 
     /**
-     * Crea un nuevo delivery asociado a una venta
+     * Crea un nuevo delivery asociado a una venta en Supabase Cloud
      */
     async createDelivery({
         saleId,
@@ -129,78 +146,142 @@ export const deliveryService = {
         config = {},
     }) {
         const cfg = { ...DEFAULT_CONFIG, ...config };
+        const newUuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined;
 
-        const delivery = {
-            id: generateId('DEL'),
-            saleId,
-            originName: 'UrbanStep Tienda',
-            originLatitude: cfg.storeLat,
-            originLongitude: cfg.storeLng,
-            originAddress: cfg.storeAddress,
-            destinationName: customerName,
-            destinationLatitude: destinationLat,
-            destinationLongitude: destinationLng,
-            destinationAddress,
-            distanceKm,
-            estimatedTimeMin: estimatedMinutes,
-            deliveryCostUsd,
-            deliveryCostBs,
-            status: 'pendiente',
-            driverName: null,
-            driverPhone: null,
-            driverVehicle: null,
-            customerName,
-            customerPhone,
-            specialInstructions: specialInstructions || '',
-            deliveredAt: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+        const row = {
+            venta_id: saleId || null,
+            nombre_origen: 'UrbanStep Tienda',
+            latitud_origen: cfg.storeLat,
+            longitud_origen: cfg.storeLng,
+            direccion_origen: cfg.storeAddress,
+            nombre_destino: customerName || 'Cliente',
+            latitud_destino: Number(destinationLat) || cfg.storeLat,
+            longitud_destino: Number(destinationLng) || cfg.storeLng,
+            direccion_destino: destinationAddress || 'Dirección de Entrega',
+            distancia_km: Number(distanceKm) || 0,
+            tiempo_estimado_min: Number(estimatedMinutes) || 30,
+            costo_usd: Number(deliveryCostUsd) || 0,
+            costo_bs: Number(deliveryCostBs) || 0,
+            estado: 'pendiente',
+            nombre_cliente: customerName || 'Cliente',
+            telefono_cliente: customerPhone || '',
+            instrucciones_entrega: specialInstructions || '',
+            creado_el: new Date().toISOString()
         };
 
-        const deliveries = getStoredDeliveries();
-        deliveries.unshift(delivery);
-        saveDeliveries(deliveries);
+        if (newUuid) {
+            row.id = newUuid;
+        }
 
-        return delivery;
+        let createdItem = null;
+
+        if (isSupabaseConfigured() && supabase) {
+            const { data, error } = await supabase.from('envios').insert(row).select().single();
+            if (!error && data) {
+                createdItem = mapEnvioFromDb(data);
+            } else if (error) {
+                console.error('Error insertando delivery en Supabase:', error);
+                throw new Error(`Error registrando delivery en base de datos: ${error.message}`);
+            }
+        }
+
+        if (!createdItem) {
+            createdItem = mapEnvioFromDb({ ...row, id: newUuid || `del-${Date.now()}` });
+        }
+
+        _cachedDeliveries.unshift(createdItem);
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('deliveries_updated', { detail: _cachedDeliveries }));
+        }
+
+        return createdItem;
     },
 
     /**
-     * Obtiene todos los deliveries con filtros opcionales
+     * Obtiene todos los deliveries directamente desde Supabase Cloud
      */
     async getAll({ status, from, to } = {}) {
-        let deliveries = getStoredDeliveries();
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                let query = supabase
+                    .from('envios')
+                    .select('*')
+                    .order('creado_el', { ascending: false });
 
-        if (status) {
-            deliveries = deliveries.filter(d => d.status === status);
-        }
-        if (from) {
-            deliveries = deliveries.filter(d => new Date(d.createdAt) >= new Date(from));
-        }
-        if (to) {
-            deliveries = deliveries.filter(d => new Date(d.createdAt) <= new Date(to));
-        }
+                if (status && status !== 'all') {
+                    query = query.eq('estado', status);
+                }
+                if (from) {
+                    query = query.gte('creado_el', from);
+                }
+                if (to) {
+                    query = query.lte('creado_el', to);
+                }
 
-        return deliveries;
+                const { data, error } = await query;
+                if (!error && Array.isArray(data)) {
+                    _cachedDeliveries = data.map(mapEnvioFromDb);
+                    return [..._cachedDeliveries];
+                }
+            } catch (err) {
+                console.error('Error consultando envios en Supabase:', err);
+            }
+        }
+        return [..._cachedDeliveries];
     },
 
     /**
-     * Actualiza el estado de un delivery
+     * Actualiza el estado de un delivery en Supabase Cloud
      */
     async updateStatus(deliveryId, newStatus, additionalData = {}) {
-        const deliveries = getStoredDeliveries();
-        const index = deliveries.findIndex(d => d.id === deliveryId);
-        if (index === -1) throw new Error('Delivery no encontrado');
-
-        deliveries[index] = {
-            ...deliveries[index],
-            ...additionalData,
-            status: newStatus,
-            updatedAt: new Date().toISOString(),
-            ...(newStatus === 'entregado' ? { deliveredAt: new Date().toISOString() } : {}),
+        const nowIso = new Date().toISOString();
+        const updates = {
+            estado: newStatus,
+            actualizado_el: nowIso
         };
 
-        saveDeliveries(deliveries);
-        return deliveries[index];
+        if (newStatus === 'entregado') {
+            updates.entregado_el = nowIso;
+        }
+        if (additionalData.driverName !== undefined) {
+            updates.nombre_repartidor = additionalData.driverName;
+        }
+        if (additionalData.driverPhone !== undefined) {
+            updates.telefono_repartidor = additionalData.driverPhone;
+        }
+        if (additionalData.driverVehicle !== undefined) {
+            updates.vehiculo_repartidor = additionalData.driverVehicle;
+        }
+
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('envios')
+                .update(updates)
+                .eq('id', deliveryId);
+
+            if (error) {
+                console.error('Error actualizando delivery en Supabase:', error);
+                throw new Error(`Error actualizando delivery en base de datos: ${error.message}`);
+            }
+        }
+
+        const index = _cachedDeliveries.findIndex(d => d.id === deliveryId);
+        if (index !== -1) {
+            _cachedDeliveries[index] = {
+                ..._cachedDeliveries[index],
+                ...additionalData,
+                status: newStatus,
+                updatedAt: nowIso,
+                ...(newStatus === 'entregado' ? { deliveredAt: nowIso } : {})
+            };
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('deliveries_updated', { detail: _cachedDeliveries }));
+        }
+
+        return _cachedDeliveries[index] || null;
     },
 
     /**
@@ -215,10 +296,10 @@ export const deliveryService = {
     },
 
     /**
-     * Obtiene estadísticas de delivery
+     * Obtiene estadísticas de delivery calculadas desde Supabase Cloud
      */
     async getStats() {
-        const deliveries = getStoredDeliveries();
+        const deliveries = await this.getAll();
         const today = new Date().toISOString().split('T')[0];
         const todayDeliveries = deliveries.filter(d => d.createdAt?.startsWith(today));
 

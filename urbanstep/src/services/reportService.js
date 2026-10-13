@@ -1,5 +1,9 @@
-import { simulateNetworkDelay, db } from './api';
+import { simulateNetworkDelay } from './api';
 import { cashRegisterService } from './cashRegisterService';
+import { saleService } from './saleServices';
+import { productService } from './productService';
+import { purchaseService } from './purchaseService';
+import { shiftService } from './shiftService';
 
 const isWithinRange = (isoDate, from, to) => {
     if (!isoDate) return false;
@@ -11,13 +15,19 @@ const isWithinRange = (isoDate, from, to) => {
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// Consultas unificadas a la Fuente Única de la Verdad (Supabase Cloud)
+const getSales = async () => await saleService.getAll();
+const getProducts = async () => await productService.getAll();
+const getPurchases = async () => await purchaseService.getAll();
+
 export const reportService = {
     /**
      * KPI summary: revenue, sales count, average ticket, units sold.
      */
     getSummary: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         const revenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
         const revenueBs = sales.reduce((sum, s) => sum + (s.totalBs || 0), 0);
@@ -43,7 +53,8 @@ export const reportService = {
      * Daily revenue for the last N days (defaults to 7), oldest first.
      */
     getSalesByDay: async (days = 7) => {
-        await simulateNetworkDelay(150);
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
         const result = [];
         const now = new Date();
 
@@ -52,7 +63,7 @@ export const reportService = {
             day.setDate(now.getDate() - i);
             const key = day.toISOString().split('T')[0];
 
-            const daySales = db.sales.filter(s => s.date && s.date.startsWith(key));
+            const daySales = allSales.filter(s => s.date && s.date.startsWith(key));
             result.push({
                 date: key,
                 revenue: round2(daySales.reduce((sum, s) => sum + (s.total || 0), 0)),
@@ -67,10 +78,11 @@ export const reportService = {
      * Top selling products by units sold.
      */
     getTopProducts: async (limit = 10) => {
-        await simulateNetworkDelay(150);
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
         const acc = new Map();
 
-        for (const sale of db.sales) {
+        for (const sale of allSales) {
             for (const item of sale.items || []) {
                 const key = item.productId || item.name;
                 if (!key) continue;
@@ -99,10 +111,11 @@ export const reportService = {
      * Revenue/ticket breakdown by payment method.
      */
     getPaymentMethodBreakdown: async () => {
-        await simulateNetworkDelay(150);
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
         const acc = new Map();
 
-        for (const sale of db.sales) {
+        for (const sale of allSales) {
             const method = sale.paymentMethod || 'unknown';
             const entry = acc.get(method) || {
                 method,
@@ -128,9 +141,10 @@ export const reportService = {
      * Inventory alerts: products at or below minStock.
      */
     getLowStockProducts: async () => {
-        await simulateNetworkDelay(150);
-        return db.products
-            .filter(p => p.stock <= p.minStock)
+        await simulateNetworkDelay(100);
+        const products = await getProducts();
+        return products
+            .filter(p => p.stock <= (p.minStock || 5))
             .map(p => ({
                 id: p.id,
                 sku: p.sku,
@@ -138,12 +152,10 @@ export const reportService = {
                 brand: p.brand,
                 category: p.category,
                 stock: p.stock,
-                minStock: p.minStock,
-                cost: p.cost || 0,
-                price: p.price || 0,
-                status: p.status
-            }))
-            .sort((a, b) => a.stock - b.stock);
+                minStock: p.minStock || 5,
+                cost: p.cost,
+                price: p.price
+            }));
     },
 
     // =========================================================================
@@ -154,13 +166,14 @@ export const reportService = {
      * Reporte Administrativo 1: Cierre Fiscal SENIAT (IVA 16% + IGTF 3% & Libro de Ventas)
      */
     getSeniatFiscalReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(200);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         let totalExemptUsd = 0;
         let taxableBaseUsd = 0;
-        let totalTaxUsd = 0; // 16% IVA
-        let totalIgtfUsd = 0; // 3% IGTF
+        let totalTaxUsd = 0;
+        let totalIgtfUsd = 0;
         let grandTotalUsd = 0;
 
         let totalExemptBs = 0;
@@ -235,78 +248,17 @@ export const reportService = {
     },
 
     /**
-     * Reporte Administrativo 2: Arqueo y Cierres de Caja (Cortes Z & Turnos)
+     * Reporte Administrativo 2: Arqueo y Cierres de Caja (Cortes Z & Turnos en Supabase)
      */
     getCashRegisterAuditReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(200);
-        let rawHistory = [];
-        try {
-            const raw = localStorage.getItem('urbanstep_shifts');
-            rawHistory = raw ? JSON.parse(raw) : [];
-        } catch {
-            rawHistory = [];
-        }
+        await simulateNetworkDelay(100);
+        const rawHistory = await shiftService.getHistory(100);
 
-        // Si no hay histórico en localStorage, generamos histórico consistente
-        if (rawHistory.length === 0) {
-            const allCajas = cashRegisterService.getAll();
-            rawHistory = [
-                {
-                    id: 'SHF-901',
-                    cajaId: allCajas[0]?.id || 'caja-1',
-                    cajaName: allCajas[0]?.name || 'Caja 1',
-                    cajaLocation: allCajas[0]?.location || 'Planta Baja',
-                    cashierName: 'Carlos Pérez',
-                    openedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-                    closedAt: new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString(),
-                    salesCount: 14,
-                    totalSalesUsd: 1240.00,
-                    totalSalesBs: 52700.00,
-                    initialCashUsd: 50.00,
-                    initialCashBs: 500.00,
-                    salesCashUsd: 380.00,
-                    salesCashBs: 4200.00,
-                    expectedCashUsd: 430.00,
-                    expectedCashBs: 4700.00,
-                    countedCashUsd: 430.00,
-                    countedCashBs: 4700.00,
-                    differenceUsd: 0.00,
-                    differenceBs: 0.00,
-                    status: 'closed',
-                    notes: 'Turno cuadrado sin descuadre.'
-                },
-                {
-                    id: 'SHF-902',
-                    cajaId: allCajas[1]?.id || 'caja-2',
-                    cajaName: allCajas[1]?.name || 'Caja 2',
-                    cajaLocation: allCajas[1]?.location || 'Planta Baja',
-                    cashierName: 'María González',
-                    openedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-                    closedAt: new Date(Date.now() - 40 * 60 * 60 * 1000).toISOString(),
-                    salesCount: 11,
-                    totalSalesUsd: 980.00,
-                    totalSalesBs: 41650.00,
-                    initialCashUsd: 40.00,
-                    initialCashBs: 400.00,
-                    salesCashUsd: 290.00,
-                    salesCashBs: 3100.00,
-                    expectedCashUsd: 330.00,
-                    expectedCashBs: 3500.00,
-                    countedCashUsd: 325.00,
-                    countedCashBs: 3500.00,
-                    differenceUsd: -5.00,
-                    differenceBs: 0.00,
-                    status: 'closed',
-                    notes: 'Faltante menor en efectivo de 5$ justificado en cambio rápido.'
-                }
-            ];
-        }
+        const filteredShifts = rawHistory.filter(sh => isWithinRange(sh.closedAt || sh.openedAt, from, to));
 
-        const filteredShifts = rawHistory.filter(s => isWithinRange(s.openedAt, from, to));
-
-        const totalCashCollectedUsd = filteredShifts.reduce((sum, s) => sum + (s.salesCashUsd || 0), 0);
-        const totalSalesInShiftsUsd = filteredShifts.reduce((sum, s) => sum + (s.totalSalesUsd || 0), 0);
-        const totalDifferencesUsd = filteredShifts.reduce((sum, s) => sum + (s.differenceUsd || 0), 0);
+        const totalSalesInShiftsUsd = filteredShifts.reduce((acc, s) => acc + (s.totalSalesUsd || 0), 0);
+        const totalCashCollectedUsd = filteredShifts.reduce((acc, s) => acc + (s.salesCashUsd || 0), 0);
+        const totalDifferencesUsd = filteredShifts.reduce((acc, s) => acc + (s.differenceUsd || 0), 0);
 
         return {
             shiftsCount: filteredShifts.length,
@@ -321,8 +273,9 @@ export const reportService = {
      * Reporte Administrativo 3: Auditoría y Libro de Comprobantes Emitidos
      */
     getOperationsAuditReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         const invoicesList = sales.map((sale) => ({
             id: sale.id,
@@ -357,8 +310,10 @@ export const reportService = {
      * Reporte Gerencial 1: Estado de Resultados y Rentabilidad (Ventas vs Costos COGS)
      */
     getProfitabilityMarginReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(200);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
+        const products = await getProducts();
 
         let totalRevenueUsd = 0;
         let totalCostUsd = 0;
@@ -371,8 +326,7 @@ export const reportService = {
                 const qty = item.quantity || 1;
                 const salePrice = item.price || 0;
 
-                // Buscar el costo del producto registrado
-                const product = db.products.find(p => p.id === item.productId || p.name === item.name);
+                const product = products.find(p => p.id === item.productId || p.name === item.name);
                 const unitCost = product ? (product.cost || 0) : (salePrice * 0.55);
 
                 const itemRevenue = salePrice * qty;
@@ -381,7 +335,6 @@ export const reportService = {
                 totalRevenueUsd += itemRevenue;
                 totalCostUsd += itemCost;
 
-                // Acumulador por Marca
                 const brand = item.brand || product?.brand || 'Otras';
                 const bEntry = brandStats.get(brand) || { brand, revenue: 0, cost: 0, units: 0 };
                 bEntry.revenue += itemRevenue;
@@ -389,7 +342,6 @@ export const reportService = {
                 bEntry.units += qty;
                 brandStats.set(brand, bEntry);
 
-                // Acumulador por Categoría
                 const category = product?.category || 'Calzado General';
                 const cEntry = categoryStats.get(category) || { category, revenue: 0, cost: 0, units: 0 };
                 cEntry.revenue += itemRevenue;
@@ -438,84 +390,63 @@ export const reportService = {
      * Reporte Gerencial 2: Análisis de Ticket Promedio y Tendencia de Ventas
      */
     getSalesTrendsAndTicketReport: async ({ days = 30 } = {}) => {
-        await simulateNetworkDelay(200);
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
         const result = [];
         const now = new Date();
-
-        let totalVolume = 0;
-        let totalCount = 0;
 
         for (let i = days - 1; i >= 0; i--) {
             const day = new Date(now);
             day.setDate(now.getDate() - i);
             const key = day.toISOString().split('T')[0];
 
-            const daySales = db.sales.filter(s => s.date && s.date.startsWith(key));
-            const dayRevenue = daySales.reduce((sum, s) => sum + (s.total || 0), 0);
-            const dayCount = daySales.length;
-
-            totalVolume += dayRevenue;
-            totalCount += dayCount;
+            const daySales = allSales.filter(s => s.date && s.date.startsWith(key));
+            const vol = daySales.reduce((acc, s) => acc + (s.total || 0), 0);
+            const count = daySales.length;
 
             result.push({
                 date: key,
-                dayName: day.toLocaleDateString('es-VE', { weekday: 'short' }),
-                revenue: round2(dayRevenue),
-                salesCount: dayCount,
-                avgTicket: dayCount > 0 ? round2(dayRevenue / dayCount) : 0
+                volumeUsd: round2(vol),
+                salesCount: count,
+                avgTicketUsd: count > 0 ? round2(vol / count) : 0
             });
         }
 
-        const overallAvgTicket = totalCount > 0 ? round2(totalVolume / totalCount) : 0;
-        const projectedMonthly = round2((totalVolume / days) * 30);
-
-        return {
-            days,
-            totalVolume: round2(totalVolume),
-            totalCount,
-            overallAvgTicket,
-            projectedMonthly,
-            dailyTrend: result
-        };
+        return result;
     },
 
     /**
-     * Reporte Gerencial 3: Rendimiento y Productividad de Personal (Vendedores / Cajeros)
+     * Reporte Gerencial 3: Desempeño por Cajero y Productividad de Terminal
      */
     getCashierPerformanceReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
-        const cashiersMap = new Map();
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
+
+        const cashierStats = new Map();
 
         for (const sale of sales) {
-            const name = sale.cashier || 'Cajero General';
-            const entry = cashiersMap.get(name) || {
-                cashier: name,
-                ticketsCount: 0,
-                totalUsd: 0,
-                totalBs: 0,
-                itemsSold: 0
+            const cashier = sale.cashier || 'Cajero';
+            const entry = cashierStats.get(cashier) || {
+                cashierName: cashier,
+                salesCount: 0,
+                totalRevenueUsd: 0,
+                totalRevenueBs: 0,
+                unitsSold: 0
             };
-
-            entry.ticketsCount += 1;
-            entry.totalUsd += sale.total || 0;
-            entry.totalBs += sale.totalBs || 0;
-            entry.itemsSold += (sale.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0);
-            cashiersMap.set(name, entry);
+            entry.salesCount += 1;
+            entry.totalRevenueUsd += sale.total || 0;
+            entry.totalRevenueBs += sale.totalBs || 0;
+            entry.unitsSold += (sale.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0);
+            cashierStats.set(cashier, entry);
         }
 
-        const cashiersList = [...cashiersMap.values()].map(c => ({
+        return [...cashierStats.values()].map(c => ({
             ...c,
-            totalUsd: round2(c.totalUsd),
-            totalBs: round2(c.totalBs),
-            avgTicketUsd: c.ticketsCount > 0 ? round2(c.totalUsd / c.ticketsCount) : 0,
-            estimatedCommission: round2(c.totalUsd * 0.02) // 2% comisión estimada
-        })).sort((a, b) => b.totalUsd - a.totalUsd);
-
-        return {
-            totalCashiers: cashiersList.length,
-            cashiers: cashiersList
-        };
+            totalRevenueUsd: round2(c.totalRevenueUsd),
+            totalRevenueBs: round2(c.totalRevenueBs),
+            avgTicketUsd: c.salesCount > 0 ? round2(c.totalRevenueUsd / c.salesCount) : 0
+        })).sort((a, b) => b.totalRevenueUsd - a.totalRevenueUsd);
     },
 
     // =========================================================================
@@ -526,8 +457,8 @@ export const reportService = {
      * Reporte Operativo 1: Rotación de Inventario Crítico y Valorización de Stock
      */
     getCriticalStockReport: async () => {
-        await simulateNetworkDelay(150);
-        const products = db.products;
+        await simulateNetworkDelay(100);
+        const products = await getProducts();
 
         let totalCostValuation = 0;
         let totalPriceValuation = 0;
@@ -547,7 +478,7 @@ export const reportService = {
 
             if (stock === 0) {
                 outOfStockProducts.push(p);
-            } else if (stock <= p.minStock) {
+            } else if (stock <= (p.minStock || 5)) {
                 criticalProducts.push(p);
             }
         }
@@ -567,7 +498,7 @@ export const reportService = {
                 brand: p.brand,
                 supplierName: p.supplierName || 'Distribuidora Deportiva Ávila C.A.',
                 stock: p.stock,
-                minStock: p.minStock,
+                minStock: p.minStock || 5,
                 cost: p.cost,
                 price: p.price,
                 imageUrl: p.imageUrl || p.image || ''
@@ -578,7 +509,7 @@ export const reportService = {
                 name: p.name,
                 brand: p.brand,
                 supplierName: p.supplierName || 'Distribuidora Deportiva Ávila C.A.',
-                minStock: p.minStock,
+                minStock: p.minStock || 5,
                 cost: p.cost,
                 price: p.price
             }))
@@ -589,8 +520,9 @@ export const reportService = {
      * Reporte Operativo 2: Conciliación de Métodos de Pago y Bancos Nacionales
      */
     getPaymentMethodReconciliationReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         const methodsSummary = new Map();
         const banksSummary = new Map();
@@ -598,32 +530,36 @@ export const reportService = {
         for (const sale of sales) {
             const method = sale.paymentMethod || 'pagomovil';
             const label = sale.paymentMethodLabel || method;
-            const mEntry = methodsSummary.get(method) || { method, label, count: 0, totalUsd: 0, totalBs: 0 };
-            mEntry.count += 1;
+
+            const mEntry = methodsSummary.get(method) || { method, label, transactionsCount: 0, totalUsd: 0, totalBs: 0 };
+            mEntry.transactionsCount += 1;
             mEntry.totalUsd += sale.total || 0;
             mEntry.totalBs += sale.totalBs || 0;
             methodsSummary.set(method, mEntry);
 
-            // Resumen por Banco
-            const bank = sale.paymentBank || (method.startsWith('efectivo') ? 'Efectivo en Caja' : 'Sin Banco Especificado');
-            const bEntry = banksSummary.get(bank) || { bank, count: 0, totalUsd: 0, totalBs: 0 };
-            bEntry.count += 1;
-            bEntry.totalUsd += sale.total || 0;
-            bEntry.totalBs += sale.totalBs || 0;
-            banksSummary.set(bank, bEntry);
+            if (sale.paymentBank) {
+                const bEntry = banksSummary.get(sale.paymentBank) || { bank: sale.paymentBank, count: 0, totalBs: 0, totalUsd: 0 };
+                bEntry.count += 1;
+                bEntry.totalBs += sale.totalBs || 0;
+                bEntry.totalUsd += sale.total || 0;
+                banksSummary.set(sale.paymentBank, bEntry);
+            }
         }
 
         return {
+            totalTransactions: sales.length,
+            totalUsd: round2(sales.reduce((acc, s) => acc + (s.total || 0), 0)),
+            totalBs: round2(sales.reduce((acc, s) => acc + (s.totalBs || 0), 0)),
             methods: [...methodsSummary.values()].map(m => ({
                 ...m,
                 totalUsd: round2(m.totalUsd),
                 totalBs: round2(m.totalBs)
-            })).sort((a, b) => b.totalUsd - a.totalUsd),
+            })),
             banks: [...banksSummary.values()].map(b => ({
                 ...b,
                 totalUsd: round2(b.totalUsd),
                 totalBs: round2(b.totalBs)
-            })).sort((a, b) => b.totalUsd - a.totalUsd)
+            }))
         };
     },
 
@@ -631,8 +567,9 @@ export const reportService = {
      * Reporte Operativo 3: Logística de Envíos y Delivery Urbano
      */
     getDeliveryLogisticsReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         const carrierStats = new Map();
         let totalShippingCollectedUsd = 0;
@@ -665,15 +602,16 @@ export const reportService = {
     },
 
     // =========================================================================
-    // 4. REPORTE ADICIONAL NECESARIO: COMPRAS Y PROVEEDORES
+    // 4. REPORTE DE COMPRAS Y PROVEEDORES
     // =========================================================================
 
     /**
      * Reporte de Compras, Proveedores y Entradas de Almacén
      */
     getPurchasesReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const purchases = db.purchases.filter(p => isWithinRange(p.date, from, to));
+        await simulateNetworkDelay(100);
+        const allPurchases = await getPurchases();
+        const purchases = allPurchases.filter(p => isWithinRange(p.date, from, to));
 
         const totalSpentUsd = purchases.reduce((sum, p) => sum + (p.totalUsd || 0), 0);
         const totalSpentBs = purchases.reduce((sum, p) => sum + (p.totalBs || 0), 0);
@@ -719,8 +657,10 @@ export const reportService = {
      * Reporte Gerencial 4: Top Calzados Más Vendidos vs Rotación de Inventario
      */
     getTopProductsRotationReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
+        const products = await getProducts();
         const totalSalesRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0) || 1;
 
         const prodMap = new Map();
@@ -744,8 +684,8 @@ export const reportService = {
         }
 
         const items = [...prodMap.values()].map(p => {
-            const currentProd = db.products.find(pr => pr.id === p.id || pr.name === p.name);
-            const currentStock = currentProd ? currentProd.stock : 10;
+            const currentProd = products.find(pr => pr.id === p.id || pr.name === p.name);
+            const currentStock = currentProd ? currentProd.stock : 0;
             const share = round2((p.revenueUsd / totalSalesRevenue) * 100);
             const rotationStatus = currentStock <= p.unitsSold ? 'Alta Rotación' : (currentStock <= p.unitsSold * 2 ? 'Rotación Media' : 'Rotación Baja');
             return {
@@ -770,8 +710,9 @@ export const reportService = {
      * Reporte Gerencial 5: Ventas y Participación por Marca
      */
     getSalesByBrandReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
         const totalRev = sales.reduce((sum, s) => sum + (s.total || 0), 0) || 1;
 
         const brandMap = new Map();
@@ -807,85 +748,15 @@ export const reportService = {
         };
     },
 
-    // =========================================================================
-    // 6. REPORTES OPERATIVOS ADICIONALES (GARANTÍAS & TRÁFICO HORARIO)
-    // =========================================================================
-
     /**
      * Reporte Operativo 4: Control de Cambios de Talla y Garantías de Calzado
      */
     getWarrantyAndReturnsReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
-
-        // Registros operativos generados a partir de las transacciones
-        const records = [
-            {
-                id: 'REC-001',
-                ticketNumber: 'TKT-1042',
-                date: new Date(Date.now() - 2 * 86400000).toISOString(),
-                customer: 'María Rodríguez',
-                phone: '0414-5551234',
-                productName: 'Nike Dunk Low Retro "Panda"',
-                originalSize: '39',
-                newSize: '40',
-                reason: 'Ajuste de horma / talla pequeña',
-                type: 'Cambio de Talla',
-                status: 'Aprobado',
-                cashier: 'Carlos Gómez',
-                costDifferenceUsd: 0
-            },
-            {
-                id: 'REC-002',
-                ticketNumber: 'TKT-1049',
-                date: new Date(Date.now() - 4 * 86400000).toISOString(),
-                customer: 'Alejandro Colmenares',
-                phone: '0424-5129876',
-                productName: 'Air Jordan 1 Lost & Found',
-                originalSize: '42',
-                newSize: '42',
-                reason: 'Detalle de costura en talón (Garantía)',
-                type: 'Garantía de Fábrica',
-                status: 'Aprobado',
-                cashier: 'Valeria Morales',
-                costDifferenceUsd: 0
-            },
-            {
-                id: 'REC-003',
-                ticketNumber: 'TKT-1065',
-                date: new Date(Date.now() - 6 * 86400000).toISOString(),
-                customer: 'Daniela Mendoza',
-                phone: '0412-8889911',
-                productName: 'Adidas Samba OG White',
-                originalSize: '38',
-                newSize: '39',
-                reason: 'Regalo navideño / cambio de talla solicitado',
-                type: 'Cambio de Talla',
-                status: 'Aprobado',
-                cashier: 'Carlos Gómez',
-                costDifferenceUsd: 0
-            },
-            {
-                id: 'REC-004',
-                ticketNumber: 'TKT-1078',
-                date: new Date(Date.now() - 9 * 86400000).toISOString(),
-                customer: 'Javier Castillo',
-                phone: '0416-3334422',
-                productName: 'New Balance 550 Vintage',
-                originalSize: '41',
-                newSize: '41',
-                reason: 'Despegue leve de puntera (Reparación autorizada)',
-                type: 'Garantía de Suela',
-                status: 'Aprobado',
-                cashier: 'Valeria Morales',
-                costDifferenceUsd: 0
-            }
-        ];
-
+        await simulateNetworkDelay(100);
         return {
-            totalReturns: records.length,
-            approvedCount: records.filter(r => r.status === 'Aprobado').length,
-            records
+            totalReturns: 0,
+            approvedCount: 0,
+            records: []
         };
     },
 
@@ -893,8 +764,9 @@ export const reportService = {
      * Reporte Operativo 5: Auditoría de Tráfico Horario y Picos de Venta
      */
     getHourlyTrafficReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(150);
-        const sales = db.sales.filter(s => isWithinRange(s.date, from, to));
+        await simulateNetworkDelay(100);
+        const allSales = await getSales();
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
         const hoursMap = new Map();
         for (let h = 8; h <= 20; h++) {

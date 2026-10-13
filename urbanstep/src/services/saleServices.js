@@ -4,6 +4,8 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
 import { ensureSizeStock, calculateTotalStock, ensureColorVariants, calculateVariantsTotalStock, getAvailableStockForItem } from '../utils/shoeSizes';
 import { stockMovementService } from './stockMovementService';
+import { productService } from './productService';
+import { customerService } from './customerService';
 
 export const saleService = {
     getAll: async () => {
@@ -67,11 +69,12 @@ export const saleService = {
             throw new Error("No hay artículos en la venta para procesar.");
         }
 
-        // VALIDACIÓN ESTRICTA DE INVENTARIO: Verificar que exista stock real disponible
-        // para cada artículo, talla y color ANTES de procesar la venta.
+        // VALIDACIÓN ESTRICTA DE INVENTARIO: Consultar catálogo fresco de Supabase
+        const currentProducts = await productService.getAll();
+
         for (const item of saleData.items) {
             const prodId = item.productId || item.id;
-            const product = db.products.find(p => p.id === prodId || p.name === item.name);
+            const product = currentProducts.find(p => p.id === prodId || p.name === item.name);
             if (!product) {
                 throw new Error(`El producto "${item.name}" no fue encontrado en el catálogo.`);
             }
@@ -99,7 +102,8 @@ export const saleService = {
         let customerDoc = saleData.customerDoc || '';
         let customerPhone = saleData.customerPhone || '';
 
-        const customer = db.customers.find(c => c.id === customerId);
+        const allCustomers = await customerService.getAll();
+        const customer = allCustomers.find(c => c.id === customerId);
         if (customer) {
             customerId = customer.id;
             customerName = customer.id === 'publico' ? 'Cliente General' : `${customer.firstName} ${customer.lastName}`.trim();
@@ -286,15 +290,7 @@ export const saleService = {
             }
         }
 
-        db.save('products');
-        db.save('sales');
-        db.save('customers');
-
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('products_updated', { detail: [...db.products] }));
-            window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
-            window.dispatchEvent(new CustomEvent('sales_updated', { detail: [...db.sales] }));
-        }
+        db.sales.unshift(newSale);
 
         // Sincronizar en Supabase si está disponible
         if (isSupabaseConfigured() && supabase) {
@@ -398,7 +394,7 @@ export const saleService = {
                 const updatedProductsMap = new Map();
                 for (const item of newSale.items) {
                     const prodId = item.productId || item.id;
-                    const p = db.products.find(prod => prod.id === prodId || prod.name === item.name);
+                    const p = currentProducts.find(prod => prod.id === prodId || prod.name === item.name);
                     if (p) {
                         updatedProductsMap.set(p.id, p);
                     }
@@ -427,6 +423,13 @@ export const saleService = {
                         }).eq('id', p.id);
                     }
                 }
+
+                // Refrescar catálogo limpio en tiempo real desde Supabase
+                const freshProducts = await productService.getAll();
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('products_updated', { detail: freshProducts }));
+                    window.dispatchEvent(new CustomEvent('sales_updated', { detail: [newSale, ...db.sales] }));
+                }
             } catch (err) {
                 console.warn('Error durante sincronización Supabase de venta:', err);
             }
@@ -440,15 +443,15 @@ export const saleService = {
     },
 
     getStats: async () => {
-        await simulateNetworkDelay(100);
+        const sales = await saleService.getAll();
         const today = new Date().toISOString().split('T')[0];
-        const todaySalesList = db.sales.filter(s => s.date && s.date.startsWith(today));
+        const todaySalesList = sales.filter(s => s.date && s.date.startsWith(today));
         const todayRevenue = todaySalesList.reduce((sum, s) => sum + (s.total || 0), 0);
 
         return {
-            todaySales: todaySalesList.length || db.sales.length,
-            todayRevenue: todayRevenue || db.sales.reduce((sum, s) => sum + (s.total || 0), 0),
-            totalSalesCount: db.sales.length
+            todaySales: todaySalesList.length,
+            todayRevenue: todayRevenue,
+            totalSalesCount: sales.length
         };
     }
 };

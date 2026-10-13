@@ -1,37 +1,84 @@
 /**
  * bcvService.js — Servicio de gestión y sincronización de la Tasa Oficial del BCV
+ * Conectado 100% a 'configuracion_tienda' y 'tasas_cambio' en Supabase.
  */
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const STORAGE_KEY = 'urbanstep_bcv_rate';
-const HISTORY_KEY = 'urbanstep_bcv_history';
 const DEFAULT_RATE = 42.50;
+
+let _cachedRate = {
+    rate: DEFAULT_RATE,
+    lastUpdated: new Date().toISOString(),
+    source: 'Oficial BCV (Inicial)'
+};
+
+// Carga inicial reactiva desde Supabase Cloud
+const initRateFromCloud = async () => {
+    if (isSupabaseConfigured() && supabase) {
+        try {
+            const { data } = await supabase
+                .from('configuracion_tienda')
+                .select('tasa_bcv, actualizado_el')
+                .limit(1)
+                .single();
+
+            if (data && Number(data.tasa_bcv) > 0) {
+                _cachedRate = {
+                    rate: Number(data.tasa_bcv),
+                    lastUpdated: data.actualizado_el || new Date().toISOString(),
+                    source: 'Configuración Tienda Supabase'
+                };
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: _cachedRate }));
+                }
+            }
+        } catch (e) {
+            console.warn('Aviso cargando tasa BCV de Supabase:', e);
+        }
+    }
+};
+
+if (typeof window !== 'undefined') {
+    setTimeout(initRateFromCloud, 10);
+}
 
 export const bcvService = {
     /**
-     * Obtiene la tasa activa actual
+     * Obtiene la tasa activa actual sincrónicamente desde la memoria activa
      */
     getRate: () => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (parsed && parsed.rate > 0) return parsed;
-            }
-        } catch (e) {
-            console.error('Error al leer tasa BCV de localStorage:', e);
-        }
-
-        const initial = {
-            rate: DEFAULT_RATE,
-            lastUpdated: new Date().toISOString(),
-            source: 'Oficial BCV (Inicial)'
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-        return initial;
+        return { ..._cachedRate };
     },
 
     /**
-     * Actualiza manualmente la tasa del BCV
+     * Obtiene la tasa activa fresca directamente de Supabase
+     */
+    fetchRateFromCloud: async () => {
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('configuracion_tienda')
+                    .select('tasa_bcv, actualizado_el')
+                    .limit(1)
+                    .single();
+
+                if (!error && data && Number(data.tasa_bcv) > 0) {
+                    _cachedRate = {
+                        rate: Number(data.tasa_bcv),
+                        lastUpdated: data.actualizado_el || new Date().toISOString(),
+                        source: 'Configuración Tienda Supabase'
+                    };
+                    return { ..._cachedRate };
+                }
+            } catch (err) {
+                console.error('Error consultando tasa BCV en Supabase:', err);
+            }
+        }
+        return { ..._cachedRate };
+    },
+
+    /**
+     * Actualiza la tasa del BCV en la base de datos Supabase y registra en historial
      */
     updateRate: (newRate, source = 'Ajuste Manual') => {
         const rateNum = parseFloat(newRate);
@@ -39,33 +86,55 @@ export const bcvService = {
             throw new Error('La tasa debe ser un número positivo válido');
         }
 
+        const nowIso = new Date().toISOString();
         const updatedData = {
             rate: rateNum,
-            lastUpdated: new Date().toISOString(),
+            lastUpdated: nowIso,
             source
         };
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedData));
+        _cachedRate = updatedData;
 
-        // Guardar en histórico
-        try {
-            const rawHistory = localStorage.getItem(HISTORY_KEY);
-            const history = rawHistory ? JSON.parse(rawHistory) : [];
-            history.unshift({ ...updatedData, id: Date.now().toString() });
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 30)));
-        } catch (e) {
-            console.error('Error guardando histórico BCV:', e);
+        // Persistir en Supabase de forma asíncrona sin bloquear la UI
+        if (isSupabaseConfigured() && supabase) {
+            (async () => {
+                try {
+                    // 1. Actualizar tasa en configuracion_tienda
+                    await supabase
+                        .from('configuracion_tienda')
+                        .update({
+                            tasa_bcv: rateNum,
+                            actualizado_el: nowIso
+                        })
+                        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+                    // 2. Registrar en histórico tasas_cambio
+                    await supabase
+                        .from('tasas_cambio')
+                        .insert({
+                            tasa: rateNum,
+                            moneda_origen: 'USD',
+                            moneda_destino: 'VES',
+                            fuente: source,
+                            registrado_por: 'Administrador',
+                            creado_el: nowIso
+                        });
+                } catch (err) {
+                    console.error('Error persistiendo tasa BCV en Supabase:', err);
+                }
+            })();
         }
 
-        // Emitir evento para reactividad inmediata entre componentes
-        window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: updatedData }));
+        // Emitir evento reactivo para toda la aplicación
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: updatedData }));
+        }
 
         return updatedData;
     },
 
     /**
      * Intenta consultar la tasa oficial en vivo desde la API pública de Venezuela
-     * Si no hay internet o la API falla, mantiene la tasa actual de forma segura.
      */
     fetchOnlineRate: async () => {
         try {
@@ -85,15 +154,30 @@ export const bcvService = {
     },
 
     /**
-     * Obtiene el histórico de tasas registradas
+     * Obtiene el histórico de tasas registradas desde Supabase Cloud
      */
-    getHistory: () => {
-        try {
-            const raw = localStorage.getItem(HISTORY_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch (e) {
-            return [];
+    getHistory: async () => {
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('tasas_cambio')
+                    .select('*')
+                    .order('creado_el', { ascending: false })
+                    .limit(30);
+
+                if (!error && Array.isArray(data)) {
+                    return data.map(r => ({
+                        id: r.id,
+                        rate: Number(r.tasa),
+                        lastUpdated: r.creado_el,
+                        source: r.fuente || 'BCV Oficial'
+                    }));
+                }
+            } catch (err) {
+                console.error('Error obteniendo historial de tasas en Supabase:', err);
+            }
         }
+        return [_cachedRate];
     }
 };
 

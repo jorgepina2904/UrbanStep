@@ -1,13 +1,10 @@
 /**
  * stockMovementService.js — Kardex y Registro de Movimientos de Inventario
- * Trazabilidad completa de cada cambio de existencias: ventas, compras, ajustes y mermas.
+ * Conectado 100% a 'movimientos_inventario' (y fallback a 'auditoria') en Supabase.
  */
 import { generateId } from '../utils/generateId';
 import { auditService } from './auditService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-
-const MOVEMENTS_KEY = 'urbanstep_stock_movements';
-const MAX_MOVEMENTS = 1000;
 
 export const MOVEMENT_TYPES = {
     ajuste_manual: { label: 'Ajuste Manual', badgeVariant: 'warning', sign: '±' },
@@ -17,25 +14,54 @@ export const MOVEMENT_TYPES = {
     merma_dano: { label: 'Merma / Defecto', badgeVariant: 'danger', sign: '-' },
 };
 
-const getStoredMovements = () => {
-    try {
-        const raw = localStorage.getItem(MOVEMENTS_KEY);
-        return raw ? JSON.parse(raw) : [];
-    } catch {
-        return [];
+const mapMovFromDb = (m) => ({
+    id: m.id,
+    productId: m.producto_id,
+    productName: m.nombre_producto || 'Producto',
+    sku: m.sku || 'N/A',
+    previousStock: Number(m.stock_anterior) || 0,
+    newStock: Number(m.stock_nuevo) || 0,
+    delta: Number(m.cantidad_delta) || 0,
+    type: m.tipo_movimiento || 'ajuste_manual',
+    typeLabel: MOVEMENT_TYPES[m.tipo_movimiento]?.label || m.tipo_movimiento,
+    reason: m.motivo || 'Modificación de existencias',
+    size: m.talla ? String(m.talla) : null,
+    userName: m.usuario_nombre || 'Sistema',
+    referenceId: m.referencia_id || null,
+    createdAt: m.creado_el
+});
+
+let _cachedMovements = [];
+
+// Carga inicial reactiva desde Supabase Cloud
+const initMovementsFromCloud = async () => {
+    if (isSupabaseConfigured() && supabase) {
+        try {
+            const { data, error } = await supabase
+                .from('movimientos_inventario')
+                .select('*')
+                .order('creado_el', { ascending: false })
+                .limit(200);
+
+            if (!error && Array.isArray(data)) {
+                _cachedMovements = data.map(mapMovFromDb);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('stock_movements_updated', { detail: _cachedMovements }));
+                }
+            }
+        } catch (e) {
+            console.warn('Aviso sincronizando movimientos de inventario:', e);
+        }
     }
 };
 
-const saveMovements = (list) => {
-    localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(list.slice(0, MAX_MOVEMENTS)));
-    if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('stock_movements_updated', { detail: list }));
-    }
-};
+if (typeof window !== 'undefined') {
+    setTimeout(initMovementsFromCloud, 10);
+}
 
 export const stockMovementService = {
     /**
-     * Registra un movimiento de inventario (Kardex)
+     * Registra un movimiento de inventario (Kardex) en Supabase Cloud
      */
     record: async ({
         productId,
@@ -53,8 +79,11 @@ export const stockMovementService = {
         referenceId = null,
     }) => {
         const calculatedDelta = delta !== null ? delta : (Number(newStock) - Number(previousStock));
+        const nowIso = new Date().toISOString();
+        const movId = generateId('MOV');
+
         const movement = {
-            id: generateId('MOV'),
+            id: movId,
             productId,
             productName: productName || 'Producto',
             sku: sku || 'N/A',
@@ -69,14 +98,17 @@ export const stockMovementService = {
             userRole: userRole || null,
             userId: userId || null,
             referenceId: referenceId || null,
-            createdAt: new Date().toISOString()
+            createdAt: nowIso
         };
 
-        const list = getStoredMovements();
-        list.unshift(movement);
-        saveMovements(list);
+        _cachedMovements.unshift(movement);
+        if (_cachedMovements.length > 500) _cachedMovements.pop();
 
-        // Registrar también en auditoría general del sistema
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('stock_movements_updated', { detail: _cachedMovements }));
+        }
+
+        // Registrar en auditoría general
         try {
             auditService.log({
                 userId,
@@ -101,10 +133,9 @@ export const stockMovementService = {
             console.warn('Error registrando auditoría de stock:', e);
         }
 
-        // Sincronizar en Supabase si está disponible
+        // Persistir en Supabase Cloud
         if (isSupabaseConfigured() && supabase) {
             try {
-                // Intentar insertar en tabla especializada 'movimientos_inventario'
                 const { error: movErr } = await supabase.from('movimientos_inventario').insert({
                     id: movement.id,
                     producto_id: movement.productId,
@@ -122,7 +153,7 @@ export const stockMovementService = {
                 });
 
                 if (movErr) {
-                    // Fallback a tabla auditoria de Supabase
+                    // Fallback a tabla auditoria
                     await supabase.from('auditoria').insert({
                         id: generateId('AUD'),
                         nombre_usuario: movement.userName,
@@ -143,17 +174,48 @@ export const stockMovementService = {
     },
 
     /**
-     * Obtener movimientos con filtros opcionales
+     * Obtener movimientos con filtros desde Supabase Cloud (con respuesta inmediata de caché)
      */
-    getAll: ({ productId = null, type = 'all', search = '', limit = 100 } = {}) => {
-        let list = getStoredMovements();
+    getAll: async ({ productId = null, type = 'all', search = '', limit = 100 } = {}) => {
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                let query = supabase
+                    .from('movimientos_inventario')
+                    .select('*')
+                    .order('creado_el', { ascending: false })
+                    .limit(limit);
 
-        if (productId) {
-            list = list.filter(m => m.productId === productId);
+                if (productId) {
+                    query = query.eq('producto_id', productId);
+                }
+                if (type && type !== 'all') {
+                    query = query.eq('tipo_movimiento', type);
+                }
+
+                const { data, error } = await query;
+                if (!error && Array.isArray(data)) {
+                    let list = data.map(mapMovFromDb);
+                    if (search) {
+                        const q = search.toLowerCase().trim();
+                        list = list.filter(m =>
+                            (m.productName && m.productName.toLowerCase().includes(q)) ||
+                            (m.sku && m.sku.toLowerCase().includes(q)) ||
+                            (m.reason && m.reason.toLowerCase().includes(q)) ||
+                            (m.userName && m.userName.toLowerCase().includes(q)) ||
+                            (m.size && String(m.size).includes(q))
+                        );
+                    }
+                    _cachedMovements = list;
+                    return list;
+                }
+            } catch (err) {
+                console.error('Error consultando movimientos en Supabase:', err);
+            }
         }
-        if (type && type !== 'all') {
-            list = list.filter(m => m.type === type);
-        }
+
+        let list = [..._cachedMovements];
+        if (productId) list = list.filter(m => m.productId === productId);
+        if (type && type !== 'all') list = list.filter(m => m.type === type);
         if (search) {
             const q = search.toLowerCase().trim();
             list = list.filter(m =>
@@ -164,15 +226,14 @@ export const stockMovementService = {
                 (m.size && String(m.size).includes(q))
             );
         }
-
         return list.slice(0, limit);
     },
 
     /**
      * Resumen estadístico de movimientos
      */
-    getSummary: () => {
-        const list = getStoredMovements();
+    getSummary: async () => {
+        const list = await stockMovementService.getAll({ limit: 500 });
         const totalEntries = list.filter(m => m.delta > 0).reduce((sum, m) => sum + m.delta, 0);
         const totalExits = list.filter(m => m.delta < 0).reduce((sum, m) => sum + Math.abs(m.delta), 0);
         return {
@@ -184,7 +245,7 @@ export const stockMovementService = {
     },
 
     clearAll: () => {
-        localStorage.removeItem(MOVEMENTS_KEY);
+        _cachedMovements = [];
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('stock_movements_updated', { detail: [] }));
         }

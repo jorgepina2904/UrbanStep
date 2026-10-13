@@ -17,64 +17,32 @@ export const DEFAULT_PUBLIC_CUSTOMER = {
     purchasesCount: 0
 };
 
-// Helper to safely load collection from localStorage
-const loadStorage = (key, fallback) => {
-    if (typeof window === 'undefined') return [...fallback];
-    try {
-        const item = localStorage.getItem(key);
-        if (item !== null) {
-            const parsed = JSON.parse(item);
-            if (Array.isArray(parsed)) {
-                return parsed;
-            }
-        }
-    } catch (e) {
-        console.warn(`Error reading ${key} from localStorage:`, e);
-    }
-    return [...fallback];
-};
-
-const saveStorage = (key, data) => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(key, JSON.stringify(data));
-    } catch (e) {
-        console.warn(`Error saving ${key} to localStorage:`, e);
-    }
-};
-
-// Database with local persistence and cross-tab/cross-module sync
+/**
+ * InMemoryDB — Adaptador de memoria volatil para desarrollo y fallback.
+ * IMPORTANTE: Ya NO persiste en localStorage para evitar colisiones y datos cruzados
+ * con la base de datos relacional de Supabase (Fuente Única de la Verdad).
+ */
 class InMemoryDB {
     constructor() {
-        this.users = loadStorage('urbanstep_users', mockUsers);
-        this.products = loadStorage('urbanstep_products', []);
-        this.customers = loadStorage('urbanstep_customers', [DEFAULT_PUBLIC_CUSTOMER]);
-        this.sales = loadStorage('urbanstep_sales', []);
-        this.purchases = loadStorage('urbanstep_purchases', []);
-        this.suppliers = loadStorage('urbanstep_suppliers', mockSuppliers);
-
-        if (typeof window !== 'undefined') {
-            window.addEventListener('storage', (e) => {
-                if (e.key === 'urbanstep_products') this.products = loadStorage('urbanstep_products', []);
-                if (e.key === 'urbanstep_sales') this.sales = loadStorage('urbanstep_sales', []);
-                if (e.key === 'urbanstep_purchases') this.purchases = loadStorage('urbanstep_purchases', []);
-                if (e.key === 'urbanstep_customers') this.customers = loadStorage('urbanstep_customers', [DEFAULT_PUBLIC_CUSTOMER]);
-                if (e.key === 'urbanstep_users') this.users = loadStorage('urbanstep_users', mockUsers);
-            });
-        }
+        this.users = [...mockUsers];
+        this.products = [];
+        this.customers = [DEFAULT_PUBLIC_CUSTOMER];
+        this.sales = [];
+        this.purchases = [];
+        this.suppliers = [...mockSuppliers];
     }
 
+    // No-op seguro para llamadas legacy: no contamina localStorage
     save(collection) {
-        if (this[collection] !== undefined) {
-            saveStorage(`urbanstep_${collection}`, this[collection]);
-        }
+        // Mantiene datos solo en memoria de sesión si se llama
     }
 }
 
 export const db = new InMemoryDB();
 
 /**
- * Limpia y vacía el almacenamiento local para iniciar con base limpia
+ * Limpia y purga totalmente cualquier residuo en localStorage para garantizar
+ * que la aplicación opere 100% conectada a Supabase en la nube.
  */
 export const clearAllLocalData = (keepAuth = true) => {
     if (typeof window === 'undefined') return;
@@ -86,14 +54,23 @@ export const clearAllLocalData = (keepAuth = true) => {
         'urbanstep_stock_movements',
         'urbanstep_deliveries',
         'urbanstep_shifts',
+        'urbanstep_active_shift',
+        'urbanstep_last_sale',
         'urbanstep_audit_logs',
+        'urbanstep_cash_registers',
+        'urbanstep_bcv_rate',
+        'urbanstep_bcv_history',
+        'urbanstep_system_users',
         'urbanstep_cart_storage',
-        'urbanstep_orders'
+        'urbanstep_orders',
+        'urbanstep_suppliers',
+        'urbanstep_customers'
     ];
 
     if (!keepAuth) {
         keysToPurge.push('urbanstep_users');
-        keysToPurge.push('urbanstep_customers');
+        keysToPurge.push('us_user');
+        keysToPurge.push('us_token');
     }
 
     keysToPurge.forEach(k => {
@@ -102,17 +79,11 @@ export const clearAllLocalData = (keepAuth = true) => {
         } catch {}
     });
 
-    // Resetear en memoria
+    // Resetear memoria local
     db.products = [];
     db.sales = [];
     db.purchases = [];
     db.customers = [DEFAULT_PUBLIC_CUSTOMER];
-
-    // Persistir estado vacío limpio
-    db.save('products');
-    db.save('sales');
-    db.save('purchases');
-    db.save('customers');
 
     // Notificar reactivamente a toda la aplicación
     window.dispatchEvent(new CustomEvent('products_updated', { detail: [] }));
@@ -120,11 +91,11 @@ export const clearAllLocalData = (keepAuth = true) => {
     window.dispatchEvent(new CustomEvent('purchases_updated', { detail: [] }));
     window.dispatchEvent(new CustomEvent('customers_updated', { detail: [DEFAULT_PUBLIC_CUSTOMER] }));
     window.dispatchEvent(new CustomEvent('stock_movements_updated', { detail: [] }));
+    window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: [] }));
+    window.dispatchEvent(new CustomEvent('deliveries_updated', { detail: [] }));
+    window.dispatchEvent(new CustomEvent('shift_status_changed', { detail: null }));
 };
 
-// Simulated network delay
-export const simulateNetworkDelay = async (ms = 100) => {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
-};
+// Retardo simulado para operaciones asíncronas
+export const simulateNetworkDelay = (ms = 150) =>
+    new Promise(resolve => setTimeout(resolve, ms));

@@ -1,75 +1,96 @@
-import { cashRegisters as defaultRegisters } from '../data/mockUsers';
 import { auditService } from './auditService';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const CAJAS_STORAGE_KEY = 'urbanstep_cash_registers';
+const mapCajaFromDb = (c) => ({
+    id: c.id,
+    name: c.nombre,
+    location: c.ubicacion || 'Planta Principal',
+    pin: c.clave_pin || '1234',
+    active: c.activa !== undefined ? c.activa : true,
+    createdAt: c.creada_el,
+    updatedAt: c.actualizada_el
+});
 
-/**
- * Obtiene las cajas registradoras iniciales asegurando persistencia en localStorage
- */
-const getStoredRegisters = () => {
-    try {
-        const stored = localStorage.getItem(CAJAS_STORAGE_KEY);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                return parsed;
+// Semilla en memoria para disponibilidad síncrona en primer renderizado
+let _cachedRegisters = [
+    { id: 'caja-1', name: 'Caja 1 - Principal', location: 'Área de Cobro Principal', pin: '1234', active: true },
+    { id: 'caja-2', name: 'Caja 2 - Express', location: 'Área Express y Retiro', pin: '1234', active: true },
+    { id: 'caja-3', name: 'Caja 3 - Planta Alta', location: 'Planta Alta', pin: '1234', active: true }
+];
+
+// Carga inicial reactiva desde Supabase en cuanto el módulo se carga
+const initLoadFromSupabase = async () => {
+    if (isSupabaseConfigured() && supabase) {
+        try {
+            const { data, error } = await supabase
+                .from('cajas')
+                .select('*')
+                .order('creada_el', { ascending: true });
+
+            if (!error && Array.isArray(data) && data.length > 0) {
+                _cachedRegisters = data.map(mapCajaFromDb);
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: _cachedRegisters }));
+                }
             }
+        } catch (e) {
+            console.warn('Aviso cargando cajas desde Supabase:', e);
         }
-    } catch (e) {
-        console.error('Error leyendo cajas de localStorage:', e);
     }
-    // Si no existen, sembramos con las cajas por defecto
-    const initial = defaultRegisters.map(c => ({
-        ...c,
-        pin: c.pin || '1234',
-        active: c.active !== undefined ? c.active : true,
-    }));
-    try {
-        localStorage.setItem(CAJAS_STORAGE_KEY, JSON.stringify(initial));
-    } catch (e) {
-        console.error('Error guardando cajas iniciales:', e);
-    }
-    return initial;
 };
 
-const saveRegisters = (registers) => {
-    try {
-        localStorage.setItem(CAJAS_STORAGE_KEY, JSON.stringify(registers));
-        window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: registers }));
-    } catch (e) {
-        console.error('Error guardando cajas en localStorage:', e);
-    }
-};
+if (typeof window !== 'undefined') {
+    setTimeout(initLoadFromSupabase, 10);
+}
 
 export const cashRegisterService = {
     /**
-     * Obtener todas las cajas registradoras
+     * Obtener todas las cajas registradoras (sincrónico desde caché en memoria)
      */
     getAll: () => {
-        return getStoredRegisters();
+        return [..._cachedRegisters];
+    },
+
+    /**
+     * Obtener todas las cajas directamente desde Supabase Cloud
+     */
+    fetchAll: async () => {
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('cajas')
+                    .select('*')
+                    .order('creada_el', { ascending: true });
+
+                if (!error && Array.isArray(data)) {
+                    _cachedRegisters = data.map(mapCajaFromDb);
+                    return [..._cachedRegisters];
+                }
+            } catch (e) {
+                console.error('Error consultando cajas en Supabase:', e);
+            }
+        }
+        return [..._cachedRegisters];
     },
 
     /**
      * Obtener solo cajas activas disponibles para apertura
      */
     getActive: () => {
-        return getStoredRegisters().filter(c => c.active);
+        return _cachedRegisters.filter(c => c.active);
     },
 
     /**
      * Obtener una caja por su ID
      */
     getById: (id) => {
-        const registers = getStoredRegisters();
-        return registers.find(c => c.id === id) || null;
+        return _cachedRegisters.find(c => c.id === id) || null;
     },
 
     /**
-     * Crear una nueva caja registradora
+     * Crear una nueva caja registradora en Supabase
      */
     create: async ({ name, location, pin, active = true, user = null }) => {
-        const registers = getStoredRegisters();
-
         if (!name || !name.trim()) {
             throw new Error('El nombre de la caja es obligatorio');
         }
@@ -77,8 +98,7 @@ export const cashRegisterService = {
             throw new Error('El PIN o clave debe tener al menos 4 dígitos');
         }
 
-        // Generar ID único incremental
-        const nextNum = registers.length + 1;
+        const nextNum = _cachedRegisters.length + 1;
         const newId = `caja-${nextNum}-${Date.now().toString(36).slice(-4)}`;
 
         const newRegister = {
@@ -90,8 +110,25 @@ export const cashRegisterService = {
             createdAt: new Date().toISOString(),
         };
 
-        registers.push(newRegister);
-        saveRegisters(registers);
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase.from('cajas').insert({
+                id: newRegister.id,
+                nombre: newRegister.name,
+                ubicacion: newRegister.location,
+                clave_pin: newRegister.pin,
+                pin_hash: newRegister.pin,
+                activa: newRegister.active
+            });
+            if (error) {
+                console.error('Error insertando caja en Supabase:', error);
+                throw new Error(`Error en base de datos: ${error.message}`);
+            }
+        }
+
+        _cachedRegisters.push(newRegister);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: _cachedRegisters }));
+        }
 
         // Registro en auditoría
         auditService.log({
@@ -110,28 +147,49 @@ export const cashRegisterService = {
     },
 
     /**
-     * Actualizar datos de una caja existente
+     * Actualizar datos de una caja existente en Supabase
      */
     update: async (id, { name, location, pin, active }, user = null) => {
-        const registers = getStoredRegisters();
-        const index = registers.findIndex(c => c.id === id);
+        const index = _cachedRegisters.findIndex(c => c.id === id);
+        const prev = index !== -1 ? _cachedRegisters[index] : null;
 
-        if (index === -1) {
-            throw new Error('Caja registradora no encontrada');
-        }
-
-        const prev = registers[index];
         const updated = {
-            ...prev,
-            name: name !== undefined ? name.trim() : prev.name,
-            location: location !== undefined ? location.trim() : prev.location,
-            pin: pin !== undefined && pin.trim().length >= 4 ? pin.trim() : prev.pin,
-            active: active !== undefined ? Boolean(active) : prev.active,
+            id,
+            name: name !== undefined ? name.trim() : (prev?.name || 'Caja'),
+            location: location !== undefined ? location.trim() : (prev?.location || 'Área General'),
+            pin: pin !== undefined && pin.trim().length >= 4 ? pin.trim() : (prev?.pin || '1234'),
+            active: active !== undefined ? Boolean(active) : (prev ? prev.active : true),
             updatedAt: new Date().toISOString(),
         };
 
-        registers[index] = updated;
-        saveRegisters(registers);
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('cajas')
+                .update({
+                    nombre: updated.name,
+                    ubicacion: updated.location,
+                    clave_pin: updated.pin,
+                    pin_hash: updated.pin,
+                    activa: updated.active,
+                    actualizada_el: updated.updatedAt
+                })
+                .eq('id', id);
+
+            if (error) {
+                console.error('Error actualizando caja en Supabase:', error);
+                throw new Error(`Error actualizando caja en base de datos: ${error.message}`);
+            }
+        }
+
+        if (index !== -1) {
+            _cachedRegisters[index] = { ...prev, ...updated };
+        } else {
+            _cachedRegisters.push(updated);
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: _cachedRegisters }));
+        }
 
         auditService.log({
             userId: user?.id,
@@ -156,80 +214,108 @@ export const cashRegisterService = {
             throw new Error('La clave/PIN debe contener al menos 4 dígitos numéricos');
         }
 
-        const registers = getStoredRegisters();
-        const index = registers.findIndex(c => c.id === id);
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('cajas')
+                .update({
+                    clave_pin: newPin.trim(),
+                    pin_hash: newPin.trim(),
+                    actualizada_el: new Date().toISOString()
+                })
+                .eq('id', id);
 
-        if (index === -1) {
-            throw new Error('Caja registradora no encontrada');
+            if (error) {
+                throw new Error(`Error actualizando PIN en Supabase: ${error.message}`);
+            }
         }
 
-        registers[index].pin = newPin.trim();
-        registers[index].updatedAt = new Date().toISOString();
-        saveRegisters(registers);
+        const index = _cachedRegisters.findIndex(c => c.id === id);
+        if (index !== -1) {
+            _cachedRegisters[index].pin = newPin.trim();
+            _cachedRegisters[index].updatedAt = new Date().toISOString();
+        }
 
         auditService.log({
             userId: user?.id,
             userName: user?.name || 'Administrador',
             userRole: user?.role || 'Admin',
             action: 'update',
-            actionLabel: `Clave/PIN reasignado para caja: ${registers[index].name}`,
+            actionLabel: `Clave/PIN reasignado para caja: ${id}`,
             module: 'settings',
             entityType: 'cash_register',
             entityId: id,
         });
 
-        return registers[index];
+        return _cachedRegisters[index];
     },
 
     /**
      * Activar o desactivar una caja
      */
     toggleActive: async (id, user = null) => {
-        const registers = getStoredRegisters();
-        const index = registers.findIndex(c => c.id === id);
+        const index = _cachedRegisters.findIndex(c => c.id === id);
+        if (index === -1) throw new Error('Caja registradora no encontrada');
 
-        if (index === -1) {
-            throw new Error('Caja registradora no encontrada');
+        const newActiveState = !_cachedRegisters[index].active;
+
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('cajas')
+                .update({
+                    activa: newActiveState,
+                    actualizada_el: new Date().toISOString()
+                })
+                .eq('id', id);
+
+            if (error) throw new Error(`Error en Supabase: ${error.message}`);
         }
 
-        registers[index].active = !registers[index].active;
-        registers[index].updatedAt = new Date().toISOString();
-        saveRegisters(registers);
+        _cachedRegisters[index].active = newActiveState;
+        _cachedRegisters[index].updatedAt = new Date().toISOString();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: _cachedRegisters }));
+        }
 
         auditService.log({
             userId: user?.id,
             userName: user?.name || 'Administrador',
             userRole: user?.role || 'Admin',
             action: 'update',
-            actionLabel: `Estado de ${registers[index].name} cambiado a: ${registers[index].active ? 'Activa' : 'Inactiva'}`,
+            actionLabel: `Estado de ${_cachedRegisters[index].name} cambiado a: ${newActiveState ? 'Activa' : 'Inactiva'}`,
             module: 'settings',
             entityType: 'cash_register',
             entityId: id,
         });
 
-        return registers[index];
+        return _cachedRegisters[index];
     },
 
     /**
-     * Eliminar una caja
+     * Eliminar una caja de Supabase
      */
     delete: async (id, user = null) => {
-        const registers = getStoredRegisters();
-        const target = registers.find(c => c.id === id);
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('cajas')
+                .delete()
+                .eq('id', id);
 
-        if (!target) {
-            throw new Error('Caja no encontrada');
+            if (error) throw new Error(`Error eliminando en Supabase: ${error.message}`);
         }
 
-        const filtered = registers.filter(c => c.id !== id);
-        saveRegisters(filtered);
+        _cachedRegisters = _cachedRegisters.filter(c => c.id !== id);
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cash_registers_changed', { detail: _cachedRegisters }));
+        }
 
         auditService.log({
             userId: user?.id,
             userName: user?.name || 'Administrador',
             userRole: user?.role || 'Admin',
             action: 'delete',
-            actionLabel: `Caja registradora eliminada: ${target.name}`,
+            actionLabel: `Caja registradora eliminada: ${id}`,
             module: 'settings',
             entityType: 'cash_register',
             entityId: id,
@@ -242,9 +328,21 @@ export const cashRegisterService = {
      * Validar credenciales (PIN) de una caja
      */
     validatePin: async (cajaId, pin) => {
-        await new Promise(r => setTimeout(r, 150));
-        const registers = getStoredRegisters();
-        const caja = registers.find(c => c.id === cajaId);
+        let caja = _cachedRegisters.find(c => c.id === cajaId);
+
+        // Si está configurado Supabase, consultar el PIN más reciente
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data } = await supabase
+                    .from('cajas')
+                    .select('*')
+                    .eq('id', cajaId)
+                    .single();
+                if (data) {
+                    caja = mapCajaFromDb(data);
+                }
+            } catch {}
+        }
 
         if (!caja) {
             return { success: false, error: 'Caja registradora no encontrada' };
@@ -252,7 +350,7 @@ export const cashRegisterService = {
         if (!caja.active) {
             return { success: false, error: 'Esta caja se encuentra actualmente deshabilitada' };
         }
-        if (caja.pin !== pin) {
+        if (String(caja.pin) !== String(pin).trim()) {
             return { success: false, error: 'PIN o clave de seguridad incorrecta' };
         }
 
@@ -262,9 +360,8 @@ export const cashRegisterService = {
     /**
      * Restaurar cajas a los valores de fábrica
      */
-    resetDefaults: () => {
-        localStorage.removeItem(CAJAS_STORAGE_KEY);
-        return getStoredRegisters();
+    resetDefaults: async () => {
+        return cashRegisterService.fetchAll();
     }
 };
 

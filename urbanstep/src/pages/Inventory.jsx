@@ -58,7 +58,7 @@ export default function Inventory() {
     try {
       const data = await productService.getAll();
       setProducts(data || []);
-      const movs = stockMovementService.getAll({ limit: 200 });
+      const movs = await stockMovementService.getAll({ limit: 200 });
       setMovements(movs || []);
     } catch {
       toast.error('Error cargando el inventario');

@@ -8,6 +8,13 @@ export const ShiftProvider = ({ children }) => {
     const [lastSale, setLastSaleState] = useState(() => shiftService.getLastSale());
 
     useEffect(() => {
+        // Sincronizar inmediatamente desde Supabase en la nube
+        shiftService.fetchCurrentShift().then((cloudShift) => {
+            if (cloudShift !== undefined) {
+                setActiveShift(cloudShift);
+            }
+        });
+
         const handleShiftChange = (event) => {
             setActiveShift(event.detail);
         };
