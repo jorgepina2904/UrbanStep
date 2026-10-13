@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mockProducts } from '../data/mockProducts';
+import { getColorHex, SHOE_COLORS } from '../utils/shoeSizes';
 
 const mapProductToCatalog = (p) => ({
     id: p.id,
@@ -795,10 +796,14 @@ export default function Landing() {
                     </p>
                 </div>
 
-                {/* Sneaker Grid — Protected responsive cards (no squishing/contraction) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredProducts.map((product) => {
                         const priceBs = product.price * rate;
+                        const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
+                            ? product.colors 
+                            : (product.color ? [product.color] : ['Multicolor']);
+                        const activeColor = selectedColors[product.id] || prodColors[0];
+                        const currentVariantStock = productService.getColorSizeStock(product, activeColor);
                         const activeSize = selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
 
                         return (
@@ -813,16 +818,21 @@ export default function Landing() {
                                 <div className="min-w-0">
                                     {/* Top Tag & Rating */}
                                     <div className="flex items-center justify-between mb-3">
-                                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                                            {product.tag}
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                                {product.tag}
+                                            </span>
+                                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-500/10 text-gray-400 border border-slate-500/20">
+                                                {product.brand}
+                                            </span>
+                                        </div>
                                         <div className="flex items-center gap-1 text-xs text-amber-400 font-bold">
                                             <Star className="w-3.5 h-3.5 fill-current" />
                                             <span>{product.rating || '4.9'}</span>
                                         </div>
                                     </div>
 
-                                    {/* Image Thumbnail wrapper — High-end Sneaker Studio Frame */}
+                                    {/* Image Thumbnail wrapper — High-end Sneaker Studio Frame matching reference */}
                                     <div className={`w-full h-60 sm:h-64 shrink-0 relative overflow-hidden rounded-2xl p-3 flex items-center justify-center mb-4 border transition-all duration-300 ${
                                         isDark 
                                             ? 'bg-gradient-to-b from-[#0e1322] via-[#090d18] to-[#060810] border-slate-800/80 group-hover:border-blue-500/40 shadow-inner' 
@@ -836,14 +846,56 @@ export default function Landing() {
                                             className="w-full h-full max-h-full max-w-full object-contain filter drop-shadow-[0_14px_22px_rgba(0,0,0,0.28)] group-hover:scale-[1.04] group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                             loading="lazy"
                                         />
-                                        <span className="absolute bottom-2.5 right-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 border border-emerald-500/30 shadow-sm">
+
+                                        {/* Stock Badge on bottom-left */}
+                                        <span className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 border border-emerald-500/30 shadow-sm">
                                             {product.stockBadge}
                                         </span>
+
+                                        {/* Reference-style Vertical Circular Color Swatches Pill (floating on bottom-right of image) */}
+                                        {prodColors.length > 0 && (
+                                            <div 
+                                                className="absolute bottom-2.5 right-2.5 z-20 bg-black/60 hover:bg-black/85 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1.5 border border-white/20 shadow-lg transition-all"
+                                                title={`${prodColors.length} colores disponibles: ${prodColors.join(', ')}`}
+                                            >
+                                                {prodColors.slice(0, 3).map((colName) => {
+                                                    const hex = getColorHex(colName);
+                                                    const isSelected = activeColor.toLowerCase() === colName.toLowerCase();
+                                                    return (
+                                                        <button
+                                                            key={colName}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedColors(prev => ({ ...prev, [product.id]: colName }));
+                                                            }}
+                                                            title={`Color: ${colName}`}
+                                                            className={`w-4 h-4 rounded-full transition-transform hover:scale-125 border ${
+                                                                isSelected 
+                                                                    ? 'ring-2 ring-blue-400 border-white scale-110 shadow-sm' 
+                                                                    : 'border-white/50 hover:border-white opacity-85 hover:opacity-100'
+                                                            }`}
+                                                            style={{ background: hex }}
+                                                        />
+                                                    );
+                                                })}
+                                                {prodColors.length > 3 && (
+                                                    <span className="w-4 h-4 rounded-full bg-slate-800/90 text-white text-[8px] font-black flex items-center justify-center border border-white/30">
+                                                        +{prodColors.length - 3}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Sneaker Info */}
                                     <div className="space-y-1">
-                                        <p className="text-[10px] font-mono font-bold text-blue-500 uppercase">{product.brand}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] font-mono font-bold text-blue-500 uppercase">
+                                                {product.brand}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400">• {product.category || 'Sneaker'}</span>
+                                        </div>
                                         <h3 className={`text-base font-bold group-hover:text-blue-500 transition-colors line-clamp-1 ${
                                             isDark ? 'text-white' : 'text-slate-900'
                                         }`}>
@@ -852,81 +904,86 @@ export default function Landing() {
                                         <p className={`text-xs line-clamp-1 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{product.subtitle}</p>
                                     </div>
 
-                                    {/* Model Colors Selector */}
-                                    {(() => {
-                                        const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
-                                            ? product.colors 
-                                            : (product.color ? [product.color] : []);
-                                        if (prodColors.length <= 1) return null;
-                                        const activeColor = selectedColors[product.id] || prodColors[0];
-                                        return (
-                                            <div className="mt-2.5">
-                                                <div className="flex items-center justify-between text-[10px] font-mono mb-1">
-                                                    <span className={isDark ? "text-gray-400" : "text-slate-500"}>Color Disponible:</span>
-                                                    <span className={`font-bold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
-                                                        {activeColor}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                    {prodColors.map((cName) => {
-                                                        const isSelected = activeColor === cName;
-                                                        return (
-                                                            <button
-                                                                key={cName}
-                                                                type="button"
-                                                                onClick={() => setSelectedColors(prev => ({ ...prev, [product.id]: cName }))}
-                                                                className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all border flex items-center gap-1 ${
-                                                                    isSelected
-                                                                        ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
-                                                                        : isDark
-                                                                            ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
-                                                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                                                                }`}
-                                                            >
-                                                                <span>{cName}</span>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
+                                    {/* Color Selector */}
+                                    <div className="mt-3">
+                                        <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
+                                            <span className={isDark ? "text-gray-400" : "text-slate-500"}>Color:</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span 
+                                                    className="w-2.5 h-2.5 rounded-full border border-gray-300 dark:border-gray-600 inline-block shadow-2xs"
+                                                    style={{ background: getColorHex(activeColor) }} 
+                                                />
+                                                <span className={`font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                                                    {activeColor}
+                                                </span>
                                             </div>
-                                        );
-                                    })()}
+                                        </div>
+                                        {prodColors.length > 1 && (
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {prodColors.map((cName) => {
+                                                    const isSelected = activeColor.toLowerCase() === cName.toLowerCase();
+                                                    const hex = getColorHex(cName);
+                                                    return (
+                                                        <button
+                                                            key={cName}
+                                                            type="button"
+                                                            onClick={() => setSelectedColors(prev => ({ ...prev, [product.id]: cName }))}
+                                                            className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${
+                                                                isSelected
+                                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-500'
+                                                                    : isDark
+                                                                        ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
+                                                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                                            }`}
+                                                        >
+                                                            <span 
+                                                                className="w-3 h-3 rounded-full border border-white/60 shadow-2xs shrink-0" 
+                                                                style={{ background: hex }} 
+                                                            />
+                                                            <span>{cName}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
 
-                                    {/* Sizes Selector */}
+                                    {/* Sizes Selector with Per-Color Stock Breakdown */}
                                     <div className="mt-3">
                                         {(() => {
-                                            const activeStock = product.sizeStock ? (product.sizeStock[activeSize] ?? null) : null;
-                                            const isSelectedOutOfStock = activeStock !== null && activeStock <= 0;
+                                            const activeStock = currentVariantStock ? (currentVariantStock[activeSize] ?? 0) : (product.sizeStock ? (product.sizeStock[activeSize] ?? 0) : 0);
+                                            const isSelectedOutOfStock = activeStock <= 0;
+
                                             return (
                                                 <>
-                                                    <div className="flex items-center justify-between text-[10px] font-mono mb-1.5">
-                                                        <span className="text-gray-400">Seleccionar Talla:</span>
+                                                    <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
+                                                        <span className={isDark ? "text-gray-400" : "text-slate-500"}>
+                                                            Tallas ({activeColor}):
+                                                        </span>
                                                         <span className={`font-bold ${
                                                             isSelectedOutOfStock 
                                                                 ? 'text-rose-500' 
-                                                                : activeStock !== null 
-                                                                    ? 'text-emerald-500' 
-                                                                    : isDark ? 'text-white' : 'text-gray-900'
+                                                                : 'text-emerald-500'
                                                         }`}>
-                                                            Talla: {activeSize} {activeStock !== null ? (isSelectedOutOfStock ? '(Agotada)' : `(${activeStock} disp.)`) : ''}
+                                                            Talla {activeSize}: {isSelectedOutOfStock ? 'Agotada' : `${activeStock} disp.`}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         {(product.sizes || ['39', '40', '41', '42', '43']).map((sz) => {
-                                                            const szStock = product.sizeStock ? (product.sizeStock[sz] ?? null) : null;
-                                                            const isSzOut = szStock !== null && szStock <= 0;
+                                                            const szStock = currentVariantStock ? (currentVariantStock[sz] ?? 0) : (product.sizeStock ? (product.sizeStock[sz] ?? 0) : 0);
+                                                            const isSzOut = szStock <= 0;
                                                             const isSelected = activeSize === sz;
                                                             return (
                                                                 <button
                                                                     key={sz}
                                                                     type="button"
                                                                     onClick={() => handleSelectSize(product.id, sz)}
-                                                                    title={szStock !== null ? `${szStock} pares disponibles` : `Talla ${sz}`}
+                                                                    title={!isSzOut ? `${szStock} pares disponibles de talla ${sz} en ${activeColor}` : `Talla ${sz} agotada en ${activeColor}`}
                                                                     className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1 ${
                                                                         isSelected
                                                                             ? isSzOut
-                                                                                ? 'bg-rose-600 text-white shadow-sm'
-                                                                                : 'bg-blue-600 text-white shadow-sm'
+                                                                                ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500'
+                                                                                : 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
                                                                             : isSzOut
                                                                                 ? 'bg-white/5 text-gray-500 line-through opacity-50 border border-white/5'
                                                                                 : isDark
@@ -935,11 +992,9 @@ export default function Landing() {
                                                                     }`}
                                                                 >
                                                                     <span>{sz}</span>
-                                                                    {szStock !== null && (
-                                                                        <span className="text-[9px] opacity-75 font-normal">
-                                                                            ({szStock})
-                                                                        </span>
-                                                                    )}
+                                                                    <span className={`text-[9px] font-normal ${isSzOut ? 'opacity-60' : 'opacity-85'}`}>
+                                                                        ({szStock})
+                                                                    </span>
                                                                 </button>
                                                             );
                                                         })}

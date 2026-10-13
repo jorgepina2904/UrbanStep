@@ -15,6 +15,7 @@ import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
 import { auditService } from '../services/auditService';
+import { getColorHex } from '../utils/shoeSizes';
 import { VENEZUELA_BANKS, SHIPPING_CARRIERS } from '../data/venezuelaData';
 import { 
     Search, 
@@ -406,6 +407,41 @@ export default function POS() {
                                             <span className="absolute top-2 right-2 z-20 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm shadow-sm">
                                                 {product.sku}
                                             </span>
+
+                                            {/* Reference-style Vertical Circular Color Swatches Pill */}
+                                            {availableColors.length > 0 && (
+                                                <div 
+                                                    className="absolute bottom-2 right-2 z-20 bg-black/60 hover:bg-black/85 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1 border border-white/20 shadow-md transition-all"
+                                                    title={`${availableColors.length} colores disponibles: ${availableColors.join(', ')}`}
+                                                >
+                                                    {availableColors.slice(0, 3).map((col) => {
+                                                        const hex = getColorHex(col);
+                                                        const isColSelected = (currentColor || '').toLowerCase() === col.toLowerCase();
+                                                        return (
+                                                            <button
+                                                                key={col}
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedColor({ ...selectedColor, [product.id]: col });
+                                                                }}
+                                                                title={`Color: ${col}`}
+                                                                className={`w-3.5 h-3.5 rounded-full transition-transform hover:scale-125 border ${
+                                                                    isColSelected 
+                                                                        ? 'ring-2 ring-blue-400 border-white scale-110 shadow-sm' 
+                                                                        : 'border-white/50 hover:border-white opacity-85 hover:opacity-100'
+                                                                }`}
+                                                                style={{ background: hex }}
+                                                            />
+                                                        );
+                                                    })}
+                                                    {availableColors.length > 3 && (
+                                                        <span className="w-3.5 h-3.5 rounded-full bg-slate-800 text-white text-[7px] font-black flex items-center justify-center border border-white/30">
+                                                            +{availableColors.length - 3}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <h3 className="font-extrabold text-gray-900 dark:text-white text-sm sm:text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
@@ -423,18 +459,23 @@ export default function POS() {
                                                 <div className="flex gap-1 overflow-x-auto pb-0.5 max-w-full scrollbar-none no-scrollbar">
                                                     {availableColors.map((col) => {
                                                         const isColSelected = currentColor === col;
+                                                        const hex = getColorHex(col);
                                                         return (
                                                             <button
                                                                 key={col}
                                                                 type="button"
                                                                 onClick={() => setSelectedColor({ ...selectedColor, [product.id]: col })}
-                                                                className={`px-2 py-0.5 text-[10px] rounded-md font-bold shrink-0 transition-all ${
+                                                                className={`px-2 py-0.5 text-[10px] rounded-md font-bold shrink-0 transition-all flex items-center gap-1 ${
                                                                     isColSelected
                                                                         ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
                                                                         : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                                 }`}
                                                             >
-                                                                {col}
+                                                                <span 
+                                                                    className="w-2 h-2 rounded-full border border-white/60 shrink-0" 
+                                                                    style={{ background: hex }} 
+                                                                />
+                                                                <span>{col}</span>
                                                             </button>
                                                         );
                                                     })}
@@ -442,7 +483,10 @@ export default function POS() {
                                             </div>
                                         ) : (
                                             <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                                                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                                                <span 
+                                                    className="w-2 h-2 rounded-full shrink-0 border border-gray-300 dark:border-gray-600" 
+                                                    style={{ background: getColorHex(currentColor) }}
+                                                />
                                                 <span className="truncate">{currentColor}</span>
                                             </div>
                                         )}

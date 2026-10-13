@@ -3,6 +3,61 @@
  * Retail de calzado y moda urbana UrbanStep
  */
 
+export const SHOE_COLORS = [
+    { name: 'Negro', hex: '#1a1a1a', textColor: 'white' },
+    { name: 'Blanco', hex: '#ffffff', textColor: 'black', border: true },
+    { name: 'Gris', hex: '#64748b', textColor: 'white' },
+    { name: 'Gris Claro', hex: '#cbd5e1', textColor: 'black' },
+    { name: 'Rojo', hex: '#ef4444', textColor: 'white' },
+    { name: 'Rojo Oscuro', hex: '#991b1b', textColor: 'white' },
+    { name: 'Borgoña', hex: '#7f1d1d', textColor: 'white' },
+    { name: 'Azul', hex: '#2563eb', textColor: 'white' },
+    { name: 'Azul Marino', hex: '#1e3a5f', textColor: 'white' },
+    { name: 'Azul Cielo', hex: '#38bdf8', textColor: 'black' },
+    { name: 'Verde', hex: '#16a34a', textColor: 'white' },
+    { name: 'Verde Oliva', hex: '#4d5d2a', textColor: 'white' },
+    { name: 'Verde Menta', hex: '#a7f3d0', textColor: 'black' },
+    { name: 'Amarillo', hex: '#eab308', textColor: 'black' },
+    { name: 'Naranja', hex: '#f97316', textColor: 'white' },
+    { name: 'Rosa', hex: '#ec4899', textColor: 'white' },
+    { name: 'Rosa Pálido', hex: '#fbcfe8', textColor: 'black' },
+    { name: 'Púrpura', hex: '#9333ea', textColor: 'white' },
+    { name: 'Lavanda', hex: '#c4b5fd', textColor: 'black' },
+    { name: 'Marrón', hex: '#78350f', textColor: 'white' },
+    { name: 'Camel', hex: '#d4a574', textColor: 'black' },
+    { name: 'Beige', hex: '#f5f0e1', textColor: 'black', border: true },
+    { name: 'Dorado', hex: '#ca8a04', textColor: 'white' },
+    { name: 'Plateado', hex: '#a8a8a8', textColor: 'black' },
+    { name: 'Multicolor', hex: 'linear-gradient(135deg, #f43f5e, #3b82f6, #22c55e, #eab308)', textColor: 'white', isGradient: true },
+];
+
+export function getColorHex(colorName, fallback = '#3b82f6') {
+    if (!colorName) return fallback;
+    const lower = String(colorName).trim().toLowerCase();
+    const found = SHOE_COLORS.find(c => c.name.toLowerCase() === lower);
+    if (found) return found.hex;
+    const aliases = {
+        'white': '#ffffff',
+        'black': '#1a1a1a',
+        'red': '#ef4444',
+        'blue': '#2563eb',
+        'green': '#16a34a',
+        'yellow': '#eab308',
+        'orange': '#f97316',
+        'pink': '#ec4899',
+        'purple': '#9333ea',
+        'brown': '#78350f',
+        'grey': '#64748b',
+        'gray': '#64748b',
+        'cyan': '#06b6d4',
+        'violet': '#8b5cf6',
+        'original': '#3b82f6'
+    };
+    if (aliases[lower]) return aliases[lower];
+    if (colorName.startsWith('#') || colorName.startsWith('rgb')) return colorName;
+    return fallback;
+}
+
 export const SHOE_SIZE_CATEGORIES = [
     {
         id: 'caballero',

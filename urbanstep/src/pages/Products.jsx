@@ -26,6 +26,8 @@ import {
 import toast from 'react-hot-toast';
 import { 
     SHOE_SIZE_CATEGORIES, 
+    SHOE_COLORS,
+    getColorHex,
     ensureSizeStock, 
     calculateTotalStock, 
     detectSizeCategory, 
@@ -43,140 +45,7 @@ const PRESET_IMAGES = [
     { name: 'Urban Chunky Sneaker', url: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=600&auto=format&fit=crop&q=80' },
 ];
 
-/**
- * Paleta de colores predefinida para zapatos
- */
-const SHOE_COLORS = [
-    { name: 'Negro', hex: '#1a1a1a', textColor: 'white' },
-    { name: 'Blanco', hex: '#f5f5f5', textColor: 'black' },
-    { name: 'Gris', hex: '#6b7280', textColor: 'white' },
-    { name: 'Gris Claro', hex: '#d1d5db', textColor: 'black' },
-    { name: 'Rojo', hex: '#dc2626', textColor: 'white' },
-    { name: 'Rojo Oscuro', hex: '#991b1b', textColor: 'white' },
-    { name: 'Borgoña', hex: '#7f1d1d', textColor: 'white' },
-    { name: 'Azul', hex: '#2563eb', textColor: 'white' },
-    { name: 'Azul Marino', hex: '#1e3a5f', textColor: 'white' },
-    { name: 'Azul Cielo', hex: '#7dd3fc', textColor: 'black' },
-    { name: 'Verde', hex: '#16a34a', textColor: 'white' },
-    { name: 'Verde Oliva', hex: '#4d5d2a', textColor: 'white' },
-    { name: 'Verde Menta', hex: '#a7f3d0', textColor: 'black' },
-    { name: 'Amarillo', hex: '#eab308', textColor: 'black' },
-    { name: 'Naranja', hex: '#ea580c', textColor: 'white' },
-    { name: 'Rosa', hex: '#ec4899', textColor: 'white' },
-    { name: 'Rosa Pálido', hex: '#fbcfe8', textColor: 'black' },
-    { name: 'Púrpura', hex: '#9333ea', textColor: 'white' },
-    { name: 'Lavanda', hex: '#c4b5fd', textColor: 'black' },
-    { name: 'Marrón', hex: '#78350f', textColor: 'white' },
-    { name: 'Camel', hex: '#d4a574', textColor: 'black' },
-    { name: 'Beige', hex: '#f5f0e1', textColor: 'black' },
-    { name: 'Dorado', hex: '#ca8a04', textColor: 'white' },
-    { name: 'Plateado', hex: '#a8a8a8', textColor: 'black' },
-    { name: 'Multicolor', hex: 'linear-gradient(135deg, #f43f5e, #3b82f6, #22c55e, #eab308)', textColor: 'white', isGradient: true },
-];
 
-/**
- * Color Palette Picker component
- */
-function ColorPalette({ value, onChange }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const selectedColor = SHOE_COLORS.find(c => c.name === value) || null;
-
-    return (
-        <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
-                <Palette className="w-4 h-4 text-purple-500" />
-                Color del Calzado
-            </label>
-
-            {/* Trigger */}
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-left hover:border-gray-300 dark:hover:border-gray-600 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-                {selectedColor ? (
-                    <>
-                        <span
-                            className="w-6 h-6 rounded-full border-2 border-gray-200 dark:border-gray-600 shrink-0 shadow-sm"
-                            style={{ background: selectedColor.hex }}
-                        />
-                        <span className="text-sm text-gray-900 dark:text-white font-medium flex-1">{selectedColor.name}</span>
-                    </>
-                ) : (
-                    <>
-                        <span className="w-6 h-6 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-600 shrink-0" />
-                        <span className="text-sm text-gray-400 flex-1">Seleccionar color...</span>
-                    </>
-                )}
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Dropdown Palette */}
-            {isOpen && (
-                <div className="absolute z-50 mt-2 w-full bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl p-4 animate-in fade-in slide-in-from-top-2">
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-3 font-semibold uppercase tracking-wider">Paleta de colores</p>
-                    <div className="grid grid-cols-5 gap-2">
-                        {SHOE_COLORS.map((color) => {
-                            const isSelected = value === color.name;
-                            return (
-                                <button
-                                    key={color.name}
-                                    type="button"
-                                    title={color.name}
-                                    onClick={() => {
-                                        onChange(color.name);
-                                        setIsOpen(false);
-                                    }}
-                                    className={`relative group flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-                                        isSelected
-                                            ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                                            : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                                    }`}
-                                >
-                                    <span
-                                        className={`w-8 h-8 rounded-full border-2 shadow-sm transition-transform group-hover:scale-110 ${
-                                            isSelected ? 'border-blue-500' : 'border-gray-200 dark:border-gray-600'
-                                        }`}
-                                        style={{ background: color.hex }}
-                                    >
-                                        {isSelected && (
-                                            <span className="w-full h-full flex items-center justify-center">
-                                                <Check className="w-4 h-4" style={{ color: color.textColor }} />
-                                            </span>
-                                        )}
-                                    </span>
-                                    <span className="text-[9px] text-gray-500 dark:text-gray-400 text-center leading-tight font-medium truncate w-full">
-                                        {color.name}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Custom color input */}
-                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="text"
-                                value={value}
-                                onChange={(e) => onChange(e.target.value)}
-                                placeholder="O escribe un color personalizado..."
-                                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setIsOpen(false)}
-                                className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-colors"
-                            >
-                                Listo
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
 
 /**
  * Selector de colores para modelos de calzado (admite múltiples colores por modelo)
@@ -921,19 +790,28 @@ export default function Products() {
                                     <span className="text-5xl drop-shadow-sm select-none">👟</span>
                                 </div>
                                 
-                                {/* Model Colors indicator badge */}
+                                {/* Model Colors indicator badge — Vertical circular swatches matching reference */}
                                 {prodColors.length > 0 && (
-                                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border border-gray-200/80 dark:border-gray-700 shadow-sm max-w-[85%]">
-                                        <div className="flex items-center -space-x-1 shrink-0">
-                                            {prodColors.slice(0, 4).map((cName, idx) => (
-                                                <span key={idx} className="relative z-10 transition-transform hover:scale-125 hover:z-20">
-                                                    {getColorSwatch(cName)}
-                                                </span>
-                                            ))}
-                                        </div>
-                                        <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200 truncate">
-                                            {prodColors.length > 1 ? `${prodColors.length} colores` : prodColors[0]}
-                                        </span>
+                                    <div 
+                                        className="absolute bottom-2.5 right-2.5 z-20 bg-black/60 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1 border border-white/20 shadow-md"
+                                        title={`Colores disponibles: ${prodColors.join(', ')}`}
+                                    >
+                                        {prodColors.slice(0, 3).map((cName, idx) => {
+                                            const hex = getColorHex(cName);
+                                            return (
+                                                <span
+                                                    key={idx}
+                                                    className="w-3.5 h-3.5 rounded-full border border-white/60 shadow-2xs transition-transform hover:scale-125"
+                                                    style={{ background: hex }}
+                                                    title={cName}
+                                                />
+                                            );
+                                        })}
+                                        {prodColors.length > 3 && (
+                                            <span className="w-3.5 h-3.5 rounded-full bg-gray-800 text-white text-[8px] font-black flex items-center justify-center border border-white/30">
+                                                +{prodColors.length - 3}
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1057,26 +935,13 @@ export default function Products() {
                             </div>
                         ))}
 
-                        {/* Color Palette Picker */}
-                        <div>
-                            <ColorPalette
-                                value={form.color}
-                                onChange={(color) => setForm(prev => ({ 
-                                    ...prev, 
-                                    color,
-                                    colors: (prev.colors || []).includes(color) ? prev.colors : [color, ...(prev.colors || [])]
-                                }))}
-                            />
-                        </div>
-
                         {/* Supplier Selector */}
-                        <div className="sm:col-span-2">
+                        <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center justify-between">
                                 <span className="flex items-center gap-1.5 font-bold">
                                     <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                                     Proveedor del Calzado
                                 </span>
-                                <span className="text-[11px] text-gray-400">Vinculado a módulo de Compras / Proveedores</span>
                             </label>
                             <select
                                 value={form.supplierId || ''}
