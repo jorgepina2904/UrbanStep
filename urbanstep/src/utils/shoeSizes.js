@@ -175,31 +175,50 @@ export function ensureColorVariants(colors = [], sizes = [], existingVariants = 
 
     // Si ya existen variantes válidas
     if (Array.isArray(existingVariants) && existingVariants.length > 0) {
-        return existingVariants.map(v => {
-            const vColor = v.color || 'Original';
-            const vHex = v.hex || '#3b82f6';
-            const vStock = ensureSizeStock(safeSizes, 0, v.sizeStock || fallbackSizeStock);
+        return activeColors.map(colorName => {
+            const found = existingVariants.find(v => (v.color || '').toLowerCase() === colorName.toLowerCase());
+            const vHex = found?.hex || getColorHex(colorName);
+            const vStock = ensureSizeStock(safeSizes, 0, found?.sizeStock || fallbackSizeStock);
+            const vImage = found?.imageUrl || found?.image || '';
             return {
-                color: vColor,
+                color: colorName,
                 hex: vHex,
                 sizeStock: vStock,
-                total: calculateTotalStock(vStock)
+                total: calculateTotalStock(vStock),
+                imageUrl: vImage
             };
         });
     }
 
     // Si no existen variantes, crearlas a partir de los colores
     return activeColors.map((colorName, idx) => {
-        // Al primer color le asignamos el fallbackSizeStock si existe, a los siguientes 0 o repartido
         const baseStock = idx === 0 && fallbackSizeStock ? fallbackSizeStock : {};
         const vStock = ensureSizeStock(safeSizes, 0, baseStock);
         return {
             color: colorName,
-            hex: '#3b82f6',
+            hex: getColorHex(colorName),
             sizeStock: vStock,
-            total: calculateTotalStock(vStock)
+            total: calculateTotalStock(vStock),
+            imageUrl: ''
         };
     });
+}
+
+/**
+ * Obtiene la fotografía vinculada a un color específico del calzado
+ * Si el color no tiene fotografía específica, retorna la foto principal del producto.
+ */
+export function getColorVariantImage(product, colorName) {
+    if (!product) return '';
+    const fallback = product.imageUrl || product.imagen_url || product.image || '';
+    if (!colorName || !Array.isArray(product.colorVariants) || product.colorVariants.length === 0) {
+        return fallback;
+    }
+    const found = product.colorVariants.find(v => (v.color || '').toLowerCase() === String(colorName).trim().toLowerCase());
+    if (found && (found.imageUrl || found.image)) {
+        return found.imageUrl || found.image;
+    }
+    return fallback;
 }
 
 /**

@@ -28,6 +28,7 @@ import {
     SHOE_SIZE_CATEGORIES, 
     SHOE_COLORS,
     getColorHex,
+    getColorVariantImage,
     ensureSizeStock, 
     calculateTotalStock, 
     detectSizeCategory, 
@@ -202,6 +203,7 @@ function ModelColorsSelector({ colors, primaryColor, onChangeColors, onSetPrimar
 export default function Products() {
     const [products, setProducts] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
+    const [cardPreviewColors, setCardPreviewColors] = useState({});
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
@@ -623,6 +625,71 @@ export default function Products() {
         toast.success('URL de imagen asignada');
     };
 
+    const handleVariantImageChange = (colorName, imageUrl) => {
+        setForm(prev => {
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === colorName.toLowerCase()) {
+                    return { ...v, imageUrl: imageUrl };
+                }
+                return v;
+            });
+            return {
+                ...prev,
+                colorVariants: updatedVariants
+            };
+        });
+    };
+
+    const handleVariantFileUpload = (e, colorName) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast.error('Por favor selecciona un archivo de imagen válido (JPG, PNG, WebP)');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('La imagen no debe superar los 5MB');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width = Math.round((width * MAX_HEIGHT) / height);
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const compressed = canvas.toDataURL('image/jpeg', 0.85);
+                handleVariantImageChange(colorName, compressed);
+                toast.success(`Foto específica asignada para "${colorName}"`);
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleSave = async () => {
         if (!form.name.trim()) {
             toast.error('El nombre del producto es obligatorio');
@@ -762,20 +829,22 @@ export default function Products() {
             {/* Product Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filtered.map(product => {
-                    const imgSrc = product.imageUrl || product.image;
                     const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
                         ? product.colors 
                         : (product.color ? [product.color] : []);
+                    const activeCardColor = cardPreviewColors[product.id] || product.color || prodColors[0];
+                    const cardImg = productService.getColorVariantImage(product, activeCardColor) || product.imageUrl || product.image;
 
                     return (
                         <Card key={product.id} hover className="flex flex-col min-w-0 group overflow-hidden">
                             {/* Product image container — Full Studio Frame */}
                             <div className="w-full h-52 shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 flex items-center justify-center mb-3 relative overflow-hidden border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
                                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
-                                {imgSrc ? (
+                                {cardImg ? (
                                     <img
-                                        src={imgSrc}
-                                        alt={product.name}
+                                        src={cardImg}
+                                        alt={`${product.name} - ${activeCardColor}`}
+                                        key={cardImg}
                                         className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                         onError={(e) => {
                                             e.target.style.display = 'none';
@@ -785,25 +854,36 @@ export default function Products() {
                                     />
                                 ) : null}
                                 <div
-                                    className={`fallback-shoe-icon w-full h-full items-center justify-center relative z-10 ${imgSrc ? 'hidden' : 'flex'}`}
+                                    className={`fallback-shoe-icon w-full h-full items-center justify-center relative z-10 ${cardImg ? 'hidden' : 'flex'}`}
                                 >
                                     <span className="text-5xl drop-shadow-sm select-none">👟</span>
                                 </div>
                                 
-                                {/* Model Colors indicator badge — Vertical circular swatches matching reference */}
+                                {/* Model Colors indicator badge — Interactive vertical circular swatches */}
                                 {prodColors.length > 0 && (
                                     <div 
-                                        className="absolute bottom-2.5 right-2.5 z-20 bg-black/60 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1 border border-white/20 shadow-md"
-                                        title={`Colores disponibles: ${prodColors.join(', ')}`}
+                                        className="absolute bottom-2.5 right-2.5 z-20 bg-black/60 hover:bg-black/85 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1 border border-white/20 shadow-md transition-all"
+                                        title={`${prodColors.length} colores disponibles. Haz clic o pasa el cursor para previsualizar: ${prodColors.join(', ')}`}
                                     >
                                         {prodColors.slice(0, 3).map((cName, idx) => {
                                             const hex = getColorHex(cName);
+                                            const isColSelected = (activeCardColor || '').toLowerCase() === cName.toLowerCase();
                                             return (
-                                                <span
+                                                <button
                                                     key={idx}
-                                                    className="w-3.5 h-3.5 rounded-full border border-white/60 shadow-2xs transition-transform hover:scale-125"
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCardPreviewColors(prev => ({ ...prev, [product.id]: cName }));
+                                                    }}
+                                                    onMouseEnter={() => setCardPreviewColors(prev => ({ ...prev, [product.id]: cName }))}
+                                                    className={`w-3.5 h-3.5 rounded-full border transition-transform hover:scale-125 ${
+                                                        isColSelected 
+                                                            ? 'ring-2 ring-blue-400 border-white scale-110 shadow-sm' 
+                                                            : 'border-white/60 opacity-85 hover:opacity-100'
+                                                    }`}
                                                     style={{ background: hex }}
-                                                    title={cName}
+                                                    title={`Ver foto de ${cName}`}
                                                 />
                                             );
                                         })}
@@ -1271,7 +1351,7 @@ export default function Products() {
                             <div className="p-3.5 rounded-2xl bg-white/80 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/80 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                                        <span>Editando tallas para el color:</span>
+                                        <span>Editando para el color:</span>
                                         <span className="px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 font-black">
                                             {activeColorTab}
                                         </span>
@@ -1282,6 +1362,87 @@ export default function Products() {
                                             return v ? calculateTotalStock(v.sizeStock) : 0;
                                         })()} pares
                                     </span>
+                                </div>
+
+                                {/* Variant Image Manager for activeColorTab */}
+                                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-14 h-14 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs">
+                                            {(() => {
+                                                const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                                                const img = activeVar?.imageUrl || form.imageUrl;
+                                                return img ? (
+                                                    <img src={img} alt={activeColorTab} className="w-full h-full object-contain p-1" />
+                                                ) : (
+                                                    <span className="text-xl">👟</span>
+                                                );
+                                            })()}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 truncate">
+                                                <ImageIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                                Fotografía del calzado en <span className="text-blue-600 dark:text-blue-400 font-extrabold">{activeColorTab}</span>:
+                                            </p>
+                                            <p className="text-[11px] text-gray-400 truncate">
+                                                {(() => {
+                                                    const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                                                    return activeVar?.imageUrl 
+                                                        ? '✓ Foto específica cargada para este color' 
+                                                        : (form.imageUrl ? 'Usando imagen general del calzado' : 'Sin imagen asignada');
+                                                })()}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Buttons to assign image to this color */}
+                                    <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                                        <label className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-1">
+                                            <Upload className="w-3.5 h-3.5" />
+                                            <span>Subir para {activeColorTab}</span>
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                                onChange={(e) => handleVariantFileUpload(e, activeColorTab)} 
+                                            />
+                                        </label>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const url = window.prompt(`Ingresa el enlace / URL de la imagen para el color "${activeColorTab}":`, '');
+                                                if (url !== null && url.trim()) {
+                                                    handleVariantImageChange(activeColorTab, url.trim());
+                                                    toast.success(`URL asignada al color "${activeColorTab}"`);
+                                                }
+                                            }}
+                                            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
+                                        >
+                                            <LinkIcon className="w-3.5 h-3.5 text-gray-500" />
+                                            <span>Pegar URL</span>
+                                        </button>
+
+                                        {(() => {
+                                            const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                                            if (activeVar?.imageUrl) {
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            handleVariantImageChange(activeColorTab, '');
+                                                            toast(`Foto específica de "${activeColorTab}" removida`);
+                                                        }}
+                                                        className="px-2 py-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold transition-colors flex items-center gap-1"
+                                                        title="Eliminar foto específica y usar la foto general"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                        <span>Quitar</span>
+                                                    </button>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                    </div>
                                 </div>
 
                                 {/* Sizes Grid */}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react';
-import { getAvailableStockForItem } from '../utils/shoeSizes';
+import { getAvailableStockForItem, getColorVariantImage } from '../utils/shoeSizes';
 
 export const CartContext = createContext();
 
@@ -68,7 +68,7 @@ function cartReducer(state, action) {
                         color: itemColor,
                         quantity: initialQuantity,
                         maxStock: maxStock,
-                        imageUrl: product.imageUrl || product.imagen_url || product.image,
+                        imageUrl: getColorVariantImage(product, itemColor) || product.imageUrl || product.imagen_url || product.image,
                         sku: product.sku
                     }
                 ]

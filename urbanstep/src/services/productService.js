@@ -8,6 +8,7 @@ import {
     ensureColorVariants,
     calculateVariantsTotalStock,
     getColorVariantSizeStock,
+    getColorVariantImage,
     getAvailableStockForItem
 } from '../utils/shoeSizes';
 import { stockMovementService } from './stockMovementService';
@@ -236,6 +237,10 @@ export const productService = {
 
     getColorSizeStock: (product, colorName) => {
         return getColorVariantSizeStock(product, colorName);
+    },
+
+    getColorVariantImage: (product, colorName) => {
+        return getColorVariantImage(product, colorName);
     },
 
     /**

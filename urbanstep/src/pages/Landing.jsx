@@ -265,7 +265,12 @@ export default function Landing() {
             return;
         }
 
-        addItem(product, chosenSize, 1, chosenColor);
+        const chosenImage = productService.getColorVariantImage(product, chosenColor) || product.imageUrl || product.image;
+        addItem({
+            ...product,
+            imageUrl: chosenImage,
+            image: chosenImage
+        }, chosenSize, 1, chosenColor);
         toast.success(`Agregado a la bolsa: ${product.name} (${chosenColor} • Talla ${chosenSize})`, {
             icon: '🛍️'
         });
@@ -805,6 +810,7 @@ export default function Landing() {
                         const activeColor = selectedColors[product.id] || prodColors[0];
                         const currentVariantStock = productService.getColorSizeStock(product, activeColor);
                         const activeSize = selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
+                        const activeImage = productService.getColorVariantImage(product, activeColor) || product.imageUrl || product.image;
 
                         return (
                             <div
@@ -841,8 +847,9 @@ export default function Landing() {
                                         {/* Subtle ambient lighting spotlight */}
                                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.12)_0%,transparent_75%)] pointer-events-none" />
                                         <img
-                                            src={product.imageUrl}
-                                            alt={product.name}
+                                            src={activeImage}
+                                            alt={`${product.name} - ${activeColor}`}
+                                            key={`${product.id}-${activeColor}`}
                                             className="w-full h-full max-h-full max-w-full object-contain filter drop-shadow-[0_14px_22px_rgba(0,0,0,0.28)] group-hover:scale-[1.04] group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                             loading="lazy"
                                         />

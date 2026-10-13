@@ -372,7 +372,7 @@ export default function POS() {
                             const currentVariantStock = productService.getColorSizeStock(product, currentColor);
 
                             const currentSize = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
-                            const imgSrc = product.imageUrl || product.image;
+                            const activeImg = productService.getColorVariantImage(product, currentColor) || product.imageUrl || product.image;
                             const sizeCount = currentVariantStock ? (currentVariantStock[currentSize] ?? 0) : (product.sizeStock ? (product.sizeStock[currentSize] ?? 0) : 0);
                             const isSelectedSizeOut = sizeCount <= 0;
 
@@ -385,10 +385,11 @@ export default function POS() {
                                         {/* Product image thumbnail — Full Studio Frame */}
                                         <div className="h-48 w-full shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 mb-3 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
                                             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
-                                            {imgSrc ? (
+                                            {activeImg ? (
                                                 <img
-                                                    src={imgSrc}
-                                                    alt={product.name}
+                                                    key={`${product.id}-${currentColor}`}
+                                                    src={activeImg}
+                                                    alt={`${product.name} - ${currentColor}`}
                                                     className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                                     onError={(e) => {
                                                         e.target.style.display = 'none';
@@ -397,7 +398,7 @@ export default function POS() {
                                                     }}
                                                 />
                                             ) : null}
-                                            <span className={`pos-fallback-icon text-4xl ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
+                                            <span className={`pos-fallback-icon text-4xl ${activeImg ? 'hidden' : 'flex'}`}>👟</span>
 
                                             <div className="absolute top-2 left-2 z-20 flex flex-col gap-1">
                                                 <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">

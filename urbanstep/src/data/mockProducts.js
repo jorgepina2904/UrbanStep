@@ -7,23 +7,46 @@ export const mockProducts = [
     {
         id: 'PRD-1001',
         sku: 'US-NK-001',
-        name: 'Nike Air Force 1 07 White',
+        name: 'Nike Air Force 1 07',
         brand: 'Nike',
         category: 'Zapatillas',
         sizeCategory: 'caballero',
-        description: 'La silueta más legendaria del básquetbol retro en cuero blanco puro y amortiguación Air.',
+        description: 'La silueta más legendaria del básquetbol retro con acabado premium y amortiguación Air encapsulada.',
         cost: 65,
         price: 110,
         salePrice: 110,
         purchasePrice: 65,
-        stock: 30,
+        stock: 39,
         minStock: 5,
         sizes: ['39', '40', '41', '42', '43'],
-        sizeStock: { '39': 6, '40': 6, '41': 6, '42': 6, '43': 6 },
+        sizeStock: { '39': 7, '40': 10, '41': 10, '42': 8, '43': 4 },
         color: 'Blanco',
-        colors: ['Blanco'],
+        colors: ['Blanco', 'Negro', 'Rojo'],
         colorVariants: [
-            { color: 'Blanco', hex: '#ffffff', sizes: ['39', '40', '41', '42', '43'], total: 30, sizeStock: { '39': 6, '40': 6, '41': 6, '42': 6, '43': 6 } }
+            { 
+                color: 'Blanco', 
+                hex: '#ffffff', 
+                sizes: ['39', '40', '41', '42', '43'], 
+                total: 18, 
+                sizeStock: { '39': 4, '40': 4, '41': 4, '42': 3, '43': 3 },
+                imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Negro', 
+                hex: '#111827', 
+                sizes: ['39', '40', '41', '42'], 
+                total: 12, 
+                sizeStock: { '39': 3, '40': 3, '41': 3, '42': 3 },
+                imageUrl: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Rojo', 
+                hex: '#ef4444', 
+                sizes: ['40', '41', '42'], 
+                total: 9, 
+                sizeStock: { '40': 3, '41': 3, '42': 3 },
+                imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80'
+            }
         ],
         colorHex: '#ffffff',
         supplierId: 'PRV-101',
@@ -46,14 +69,37 @@ export const mockProducts = [
         price: 150,
         salePrice: 150,
         purchasePrice: 90,
-        stock: 9,
+        stock: 23,
         minStock: 3,
         sizes: ['40', '41', '42', '43', '44'],
-        sizeStock: { '40': 2, '41': 2, '42': 2, '43': 2, '44': 1 },
+        sizeStock: { '40': 6, '41': 6, '42': 6, '43': 4, '44': 1 },
         color: 'Negro / Core Black',
-        colors: ['Negro / Core Black'],
+        colors: ['Negro / Core Black', 'Blanco / Cloud White', 'Azul'],
         colorVariants: [
-            { color: 'Negro / Core Black', hex: '#111827', sizes: ['40', '41', '42', '43', '44'], total: 9, sizeStock: { '40': 2, '41': 2, '42': 2, '43': 2, '44': 1 } }
+            { 
+                color: 'Negro / Core Black', 
+                hex: '#111827', 
+                sizes: ['40', '41', '42', '43', '44'], 
+                total: 9, 
+                sizeStock: { '40': 2, '41': 2, '42': 2, '43': 2, '44': 1 },
+                imageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Blanco / Cloud White', 
+                hex: '#ffffff', 
+                sizes: ['40', '41', '42', '43'], 
+                total: 8, 
+                sizeStock: { '40': 2, '41': 2, '42': 2, '43': 2 },
+                imageUrl: 'https://images.unsplash.com/photo-1587563871167-1ee9c731aefb?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Azul', 
+                hex: '#2563eb', 
+                sizes: ['41', '42', '43'], 
+                total: 6, 
+                sizeStock: { '41': 2, '42': 2, '43': 2 },
+                imageUrl: 'https://images.unsplash.com/photo-1515955656352-a1fa3ffcd111?w=800&auto=format&fit=crop&q=80'
+            }
         ],
         colorHex: '#111827',
         supplierId: 'PRV-102',
@@ -83,7 +129,14 @@ export const mockProducts = [
         color: 'Blanco / Verde Vintage',
         colors: ['Blanco / Verde Vintage'],
         colorVariants: [
-            { color: 'Blanco / Verde Vintage', hex: '#f0fdf4', sizes: ['38', '39', '40', '41', '42'], total: 24, sizeStock: { '38': 5, '39': 5, '40': 5, '41': 5, '42': 4 } }
+            { 
+                color: 'Blanco / Verde Vintage', 
+                hex: '#f0fdf4', 
+                sizes: ['38', '39', '40', '41', '42'], 
+                total: 24, 
+                sizeStock: { '38': 5, '39': 5, '40': 5, '41': 5, '42': 4 },
+                imageUrl: 'https://images.unsplash.com/photo-1539185441755-769473a23570?w=800&auto=format&fit=crop&q=80'
+            }
         ],
         colorHex: '#16a34a',
         supplierId: 'PRV-101',
@@ -106,14 +159,37 @@ export const mockProducts = [
         price: 75,
         salePrice: 75,
         purchasePrice: 40,
-        stock: 12,
+        stock: 28,
         minStock: 4,
         sizes: ['37', '38', '39', '40', '41', '42'],
-        sizeStock: { '37': 2, '38': 2, '39': 2, '40': 2, '41': 2, '42': 2 },
+        sizeStock: { '37': 4, '38': 6, '39': 6, '40': 6, '41': 4, '42': 2 },
         color: 'Negro / Blanco',
-        colors: ['Negro / Blanco'],
+        colors: ['Negro / Blanco', 'Rojo', 'Azul'],
         colorVariants: [
-            { color: 'Negro / Blanco', hex: '#000000', sizes: ['37', '38', '39', '40', '41', '42'], total: 12, sizeStock: { '37': 2, '38': 2, '39': 2, '40': 2, '41': 2, '42': 2 } }
+            { 
+                color: 'Negro / Blanco', 
+                hex: '#000000', 
+                sizes: ['37', '38', '39', '40', '41', '42'], 
+                total: 12, 
+                sizeStock: { '37': 2, '38': 2, '39': 2, '40': 2, '41': 2, '42': 2 },
+                imageUrl: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Rojo', 
+                hex: '#dc2626', 
+                sizes: ['38', '39', '40', '41'], 
+                total: 8, 
+                sizeStock: { '38': 2, '39': 2, '40': 2, '41': 2 },
+                imageUrl: 'https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=800&auto=format&fit=crop&q=80'
+            },
+            { 
+                color: 'Azul', 
+                hex: '#1d4ed8', 
+                sizes: ['39', '40', '41', '42'], 
+                total: 8, 
+                sizeStock: { '39': 2, '40': 2, '41': 2, '42': 2 },
+                imageUrl: 'https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=800&auto=format&fit=crop&q=80'
+            }
         ],
         colorHex: '#000000',
         supplierId: 'PRV-103',
