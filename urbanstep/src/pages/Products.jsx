@@ -566,81 +566,50 @@ export default function Products() {
         toast(`Stock de tallas para "${activeColorTab}" reiniciado a 0`);
     };
 
-    const handleLocalFileUpload = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (!file.type.startsWith('image/')) {
-            toast.error('Por favor selecciona un archivo de imagen válido (JPG, PNG, WebP)');
-            return;
-        }
-
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error('La imagen no debe superar los 5MB');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 800;
-                const MAX_HEIGHT = 800;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                setForm(prev => ({ ...prev, imageUrl: dataUrl }));
-                toast.success('¡Imagen local cargada con éxito!');
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleApplyUrl = () => {
-        if (!urlInput.trim()) {
-            toast.error('Ingresa una URL válida');
-            return;
-        }
-        setForm(prev => ({ ...prev, imageUrl: urlInput.trim() }));
-        toast.success('URL de imagen asignada');
-    };
-
-    const handleVariantImageChange = (colorName, imageUrl) => {
+    const handleSetImageForColor = (colorName, imageUrl) => {
+        const targetColor = colorName || activeColorTab || form.color || 'Negro';
         setForm(prev => {
+            const isPrimary = (targetColor.toLowerCase() === (prev.color || '').toLowerCase()) ||
+                              (!prev.imageUrl) ||
+                              (prev.colors && prev.colors[0] && prev.colors[0].toLowerCase() === targetColor.toLowerCase());
+
             const updatedVariants = (prev.colorVariants || []).map(v => {
-                if (v.color.toLowerCase() === colorName.toLowerCase()) {
+                if (v.color.toLowerCase() === targetColor.toLowerCase()) {
                     return { ...v, imageUrl: imageUrl };
                 }
                 return v;
             });
+
             return {
                 ...prev,
+                imageUrl: isPrimary ? imageUrl : (prev.imageUrl || imageUrl),
                 colorVariants: updatedVariants
             };
         });
     };
 
-    const handleVariantFileUpload = (e, colorName) => {
+    const handleRemoveImageForColor = (colorName) => {
+        const targetColor = colorName || activeColorTab || form.color || 'Negro';
+        setForm(prev => {
+            const isPrimary = targetColor.toLowerCase() === (prev.color || '').toLowerCase();
+            const updatedVariants = (prev.colorVariants || []).map(v => {
+                if (v.color.toLowerCase() === targetColor.toLowerCase()) {
+                    return { ...v, imageUrl: '' };
+                }
+                return v;
+            });
+            const fallbackVar = updatedVariants.find(v => v.imageUrl);
+            return {
+                ...prev,
+                imageUrl: isPrimary ? (fallbackVar?.imageUrl || '') : prev.imageUrl,
+                colorVariants: updatedVariants
+            };
+        });
+        setUrlInput('');
+        toast(`Foto del color "${targetColor}" removida`);
+    };
+
+    const handleLocalFileUpload = (e, explicitColor = null) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -681,14 +650,29 @@ export default function Products() {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
 
-                const compressed = canvas.toDataURL('image/jpeg', 0.85);
-                handleVariantImageChange(colorName, compressed);
-                toast.success(`Foto específica asignada para "${colorName}"`);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                const targetColor = explicitColor || activeColorTab || form.color || 'Negro';
+                handleSetImageForColor(targetColor, dataUrl);
+                toast.success(`¡Foto para el color "${targetColor}" cargada con éxito!`);
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
+        if (e.target) e.target.value = '';
     };
+
+    const handleApplyUrl = (explicitColor = null) => {
+        if (!urlInput.trim()) {
+            toast.error('Ingresa una URL válida');
+            return;
+        }
+        const targetColor = explicitColor || activeColorTab || form.color || 'Negro';
+        handleSetImageForColor(targetColor, urlInput.trim());
+        toast.success(`URL asignada al color "${targetColor}"`);
+    };
+
+    const handleVariantImageChange = handleSetImageForColor;
+    const handleVariantFileUpload = handleLocalFileUpload;
 
     const handleSave = async () => {
         if (!form.name.trim()) {
@@ -1058,15 +1042,15 @@ export default function Products() {
                         </div>
                     </div>
 
-                    {/* Image Import Section (Local File or URL) */}
-                    <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 space-y-3">
+                    {/* Image Import Section (Local File or URL) — Per-Color Pairing */}
+                    <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 space-y-3.5">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <label className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                                 <ImageIcon className="w-4 h-4 text-blue-600" />
-                                Imagen del Calzado (Local o URL)
+                                <span>Gestor de Imágenes del Calzado por Color</span>
                             </label>
 
-                            {/* Image Mode Tabs */}
+                            {/* Image Mode Tabs: Local | URL | Presets */}
                             <div className="flex items-center gap-1 bg-white dark:bg-gray-900 p-1 rounded-xl border border-gray-200 dark:border-gray-700 text-xs">
                                 <button
                                     type="button"
@@ -1107,6 +1091,71 @@ export default function Products() {
                             </div>
                         </div>
 
+                        {/* Color Selector Strip: Seleccionar color para cargar o ver su foto */}
+                        <div className="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                                <span className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+                                    <Palette className="w-3.5 h-3.5 text-purple-500" />
+                                    <span>Selecciona el color para vincular su imagen:</span>
+                                </span>
+                                <span className="text-[11px] text-gray-500">
+                                    Editando foto de: <strong className="text-blue-600 dark:text-blue-400 font-black">{activeColorTab}</strong>
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+                                {(form.colors || [form.color || 'Negro']).map((colName) => {
+                                    const isSelected = (activeColorTab || '').toLowerCase() === colName.toLowerCase();
+                                    const hex = getColorHex(colName);
+                                    const isPrimary = (form.color || '').toLowerCase() === colName.toLowerCase();
+                                    const variant = (form.colorVariants || []).find(v => v.color.toLowerCase() === colName.toLowerCase());
+                                    const variantImg = variant?.imageUrl || (isPrimary ? form.imageUrl : '');
+
+                                    return (
+                                        <button
+                                            key={colName}
+                                            type="button"
+                                            onClick={() => {
+                                                setActiveColorTab(colName);
+                                                setUrlInput(variantImg && variantImg.startsWith('http') ? variantImg : '');
+                                            }}
+                                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 ${
+                                                isSelected
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-500/25'
+                                                    : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                            }`}
+                                        >
+                                            <span
+                                                className="w-3.5 h-3.5 rounded-full border border-white/60 shadow-2xs shrink-0"
+                                                style={{ background: hex }}
+                                            />
+                                            <span>{colName}</span>
+
+                                            {isPrimary && (
+                                                <span className={`text-[9px] font-black uppercase px-1 py-0.2 rounded ${
+                                                    isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                                }`}>
+                                                    Principal
+                                                </span>
+                                            )}
+
+                                            {variantImg ? (
+                                                <img
+                                                    src={variantImg}
+                                                    alt={colName}
+                                                    className="w-5 h-5 rounded-md object-contain bg-white dark:bg-gray-900 border border-white/40 shrink-0"
+                                                />
+                                            ) : (
+                                                <span className={`text-[10px] ${isSelected ? 'text-blue-200' : 'text-gray-400'}`}>
+                                                    + Foto
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
                         {/* Local File Tab */}
                         {imageTab === 'local' && (
                             <div>
@@ -1114,7 +1163,7 @@ export default function Products() {
                                     type="file"
                                     ref={fileInputRef}
                                     accept="image/*"
-                                    onChange={handleLocalFileUpload}
+                                    onChange={(e) => handleLocalFileUpload(e, activeColorTab)}
                                     className="hidden"
                                 />
                                 <div
@@ -1125,10 +1174,10 @@ export default function Products() {
                                         <Upload className="w-5 h-5" />
                                     </div>
                                     <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                                        Haz clic para seleccionar o arrastra una imagen desde tu computadora
+                                        Haz clic para seleccionar o arrastra la foto del calzado en color <span className="text-blue-600 dark:text-blue-400 font-bold">"{activeColorTab}"</span>
                                     </p>
                                     <p className="text-[11px] text-gray-400 mt-1">
-                                        Formatos soportados: JPG, PNG, WebP (máx. 5MB)
+                                        Formatos soportados: JPG, PNG, WebP (máx. 5MB) • Compresión automática en HD
                                     </p>
                                 </div>
                             </div>
@@ -1143,16 +1192,16 @@ export default function Products() {
                                         type="url"
                                         value={urlInput}
                                         onChange={e => setUrlInput(e.target.value)}
-                                        placeholder="https://ejemplo.com/calzado.jpg"
+                                        placeholder={`https://ejemplo.com/zapato-${(activeColorTab || 'modelo').toLowerCase()}.jpg`}
                                         className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
                                 <button
                                     type="button"
-                                    onClick={handleApplyUrl}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors"
+                                    onClick={() => handleApplyUrl(activeColorTab)}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
                                 >
-                                    Cargar URL
+                                    Asignar a {activeColorTab}
                                 </button>
                             </div>
                         )}
@@ -1160,55 +1209,86 @@ export default function Products() {
                         {/* Presets Tab */}
                         {imageTab === 'presets' && (
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {PRESET_IMAGES.map((preset) => (
-                                    <button
-                                        key={preset.name}
-                                        type="button"
-                                        onClick={() => {
-                                            setForm(prev => ({ ...prev, imageUrl: preset.url }));
-                                            toast.success(`Modelo ${preset.name} seleccionado`);
-                                        }}
-                                        className={`flex items-center gap-2 p-1.5 rounded-xl border text-left transition-all ${
-                                            form.imageUrl === preset.url
-                                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-500'
-                                                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300'
-                                        }`}
-                                    >
-                                        <img src={preset.url} alt={preset.name} className="w-10 h-10 object-contain p-0.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700" />
-                                        <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 truncate">{preset.name}</span>
-                                    </button>
-                                ))}
+                                {PRESET_IMAGES.map((preset) => {
+                                    const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                                    const isCurrent = (activeVar?.imageUrl || form.imageUrl) === preset.url;
+
+                                    return (
+                                        <button
+                                            key={preset.name}
+                                            type="button"
+                                            onClick={() => {
+                                                handleSetImageForColor(activeColorTab, preset.url);
+                                                toast.success(`Modelo ${preset.name} asignado al color "${activeColorTab}"`);
+                                            }}
+                                            className={`flex items-center gap-2 p-1.5 rounded-xl border text-left transition-all ${
+                                                isCurrent
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-500'
+                                                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-gray-300'
+                                            }`}
+                                        >
+                                            <img src={preset.url} alt={preset.name} className="w-10 h-10 object-contain p-0.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700" />
+                                            <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 truncate">{preset.name}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         )}
 
-                        {/* Image Preview Box */}
-                        {form.imageUrl && (
-                            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                                <img
-                                    src={form.imageUrl}
-                                    alt="Vista previa"
-                                    className="w-16 h-16 object-contain p-1 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                                />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200">Vista previa del calzado</p>
-                                    <p className="text-[10px] text-gray-400 truncate">
-                                        {form.imageUrl.startsWith('data:') ? 'Imagen local cargada (Base64)' : form.imageUrl}
-                                    </p>
+                        {/* Image Preview Box for activeColorTab */}
+                        {(() => {
+                            const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
+                            const isPrimary = (form.color || '').toLowerCase() === (activeColorTab || '').toLowerCase();
+                            const curImg = activeVar?.imageUrl || (isPrimary ? form.imageUrl : '');
+
+                            if (!curImg) {
+                                return (
+                                    <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-gray-900 border border-dashed border-gray-200 dark:border-gray-700 text-xs text-gray-400">
+                                        <span className="flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: getColorHex(activeColorTab) }} />
+                                            <span>El color <strong className="text-gray-700 dark:text-gray-300">{activeColorTab}</strong> aún no tiene foto específica.</span>
+                                        </span>
+                                        <span className="text-[11px] text-gray-400">
+                                            {form.imageUrl ? '(Usará la foto general del calzado)' : '(Sin foto asignada)'}
+                                        </span>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xs">
+                                    <img
+                                        src={curImg}
+                                        alt={`Vista previa ${activeColorTab}`}
+                                        className="w-16 h-16 object-contain p-1 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: getColorHex(activeColorTab) }} />
+                                            <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                                                Foto del color: <span className="text-blue-600 dark:text-blue-400 font-extrabold">{activeColorTab}</span>
+                                            </p>
+                                            {isPrimary && (
+                                                <span className="text-[9px] font-black uppercase px-1 py-0.2 bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 rounded shrink-0">
+                                                    Principal
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 truncate font-mono">
+                                            {curImg.startsWith('data:') ? 'Imagen local cargada (Base64 optimizado)' : curImg}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveImageForColor(activeColorTab)}
+                                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors shrink-0"
+                                        title={`Quitar imagen del color ${activeColorTab}`}
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setForm(prev => ({ ...prev, imageUrl: '' }));
-                                        setUrlInput('');
-                                        toast('Imagen removida');
-                                    }}
-                                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                                    title="Quitar imagen"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
+                            );
+                        })()}
                     </div>
 
                     {/* Size Categories & Per-Color Per-Size Availability Section */}
@@ -1364,7 +1444,7 @@ export default function Products() {
                                     </span>
                                 </div>
 
-                                {/* Variant Image Manager for activeColorTab */}
+                                {/* Variant Image Card for activeColorTab */}
                                 <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0">
                                         <div className="w-14 h-14 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden flex items-center justify-center shrink-0 relative shadow-2xs">
@@ -1381,46 +1461,31 @@ export default function Products() {
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 truncate">
                                                 <ImageIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                                Fotografía del calzado en <span className="text-blue-600 dark:text-blue-400 font-extrabold">{activeColorTab}</span>:
+                                                <span>Foto para el color <strong className="text-blue-600 dark:text-blue-400 font-extrabold">{activeColorTab}</strong>:</span>
                                             </p>
-                                            <p className="text-[11px] text-gray-400 truncate">
+                                            <p className="text-[11px] text-gray-400 truncate mt-0.5">
                                                 {(() => {
                                                     const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
                                                     return activeVar?.imageUrl 
-                                                        ? '✓ Foto específica cargada para este color' 
-                                                        : (form.imageUrl ? 'Usando imagen general del calzado' : 'Sin imagen asignada');
+                                                        ? '✓ Foto específica vinculada para este color' 
+                                                        : (form.imageUrl ? 'Usando la foto principal del calzado' : 'Sin foto cargada aún');
                                                 })()}
                                             </p>
                                         </div>
                                     </div>
 
-                                    {/* Buttons to assign image to this color */}
+                                    {/* Quick actions for activeColorTab */}
                                     <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                                        <label className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-1">
+                                        <label className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors flex items-center gap-1">
                                             <Upload className="w-3.5 h-3.5" />
-                                            <span>Subir para {activeColorTab}</span>
+                                            <span>Subir Foto ({activeColorTab})</span>
                                             <input 
                                                 type="file" 
                                                 accept="image/*" 
                                                 className="hidden" 
-                                                onChange={(e) => handleVariantFileUpload(e, activeColorTab)} 
+                                                onChange={(e) => handleLocalFileUpload(e, activeColorTab)} 
                                             />
                                         </label>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const url = window.prompt(`Ingresa el enlace / URL de la imagen para el color "${activeColorTab}":`, '');
-                                                if (url !== null && url.trim()) {
-                                                    handleVariantImageChange(activeColorTab, url.trim());
-                                                    toast.success(`URL asignada al color "${activeColorTab}"`);
-                                                }
-                                            }}
-                                            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
-                                        >
-                                            <LinkIcon className="w-3.5 h-3.5 text-gray-500" />
-                                            <span>Pegar URL</span>
-                                        </button>
 
                                         {(() => {
                                             const activeVar = (form.colorVariants || []).find(v => v.color.toLowerCase() === (activeColorTab || '').toLowerCase());
@@ -1428,15 +1493,12 @@ export default function Products() {
                                                 return (
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
-                                                            handleVariantImageChange(activeColorTab, '');
-                                                            toast(`Foto específica de "${activeColorTab}" removida`);
-                                                        }}
-                                                        className="px-2 py-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold transition-colors flex items-center gap-1"
-                                                        title="Eliminar foto específica y usar la foto general"
+                                                        onClick={() => handleRemoveImageForColor(activeColorTab)}
+                                                        className="px-2.5 py-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold transition-colors flex items-center gap-1 border border-red-200 dark:border-red-900/40"
+                                                        title="Quitar foto de este color"
                                                     >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                        <span>Quitar</span>
+                                                        <X className="w-3.5 h-3.5" />
+                                                        <span>Quitar Foto</span>
                                                     </button>
                                                 );
                                             }
