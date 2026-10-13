@@ -39,7 +39,9 @@ import {
     LogOut,
     Sun,
     Moon,
-    Package
+    Package,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mockProducts } from '../data/mockProducts';
@@ -52,6 +54,7 @@ const mapProductToCatalog = (p) => ({
     subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
     color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
     colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
+    colorVariants: p.colorVariants || p.variantes_color || [],
     price: Number(p.price) || 120,
     tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
     imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
@@ -79,6 +82,68 @@ export default function Landing() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSizes, setSelectedSizes] = useState({});
     const [selectedColors, setSelectedColors] = useState({});
+
+    // Top 6 Best-selling Products Carousel for Hero
+    const [bestsellerProducts, setBestsellerProducts] = useState([]);
+    const [featuredIndex, setFeaturedIndex] = useState(0);
+    const [featuredColor, setFeaturedColor] = useState(null);
+    const [isHeroPaused, setIsHeroPaused] = useState(false);
+
+    // Compute top 6 best-selling products based on sales history & popularity
+    useEffect(() => {
+        const computeBestsellers = async () => {
+            try {
+                const sales = await saleService.getAll();
+                const salesMap = {};
+                if (Array.isArray(sales)) {
+                    sales.forEach(sale => {
+                        if (Array.isArray(sale.items)) {
+                            sale.items.forEach(it => {
+                                const pId = it.productId || it.id;
+                                if (pId) {
+                                    salesMap[pId] = (salesMap[pId] || 0) + (Number(it.quantity) || 1);
+                                }
+                            });
+                        }
+                    });
+                }
+
+                const pool = (products.length > 0 ? products : mockProducts.map(mapProductToCatalog))
+                    .filter(p => !p.disabled && p.stock > 0);
+
+                if (pool.length === 0) return;
+
+                // Sort by sales count descending; fallback to stock
+                const sorted = [...pool].sort((a, b) => {
+                    const salesA = salesMap[a.id] || 0;
+                    const salesB = salesMap[b.id] || 0;
+                    if (salesB !== salesA) return salesB - salesA;
+                    return (b.stock || 0) - (a.stock || 0);
+                });
+
+                const top6 = sorted.slice(0, Math.min(6, sorted.length));
+                setBestsellerProducts(top6);
+            } catch (err) {
+                console.warn('Error calculating top 6 bestsellers:', err);
+                const pool = (products.length > 0 ? products : mockProducts.map(mapProductToCatalog)).slice(0, 6);
+                setBestsellerProducts(pool);
+            }
+        };
+
+        computeBestsellers();
+    }, [products]);
+
+    // Automatic rotator timer for the top 6 bestsellers (every 4.5 seconds)
+    useEffect(() => {
+        if (!bestsellerProducts || bestsellerProducts.length <= 1 || isHeroPaused) return;
+
+        const timer = setInterval(() => {
+            setFeaturedIndex(prev => (prev + 1) % bestsellerProducts.length);
+            setFeaturedColor(null);
+        }, 4500);
+
+        return () => clearInterval(timer);
+    }, [bestsellerProducts.length, isHeroPaused]);
 
     // Dynamic payment methods from settings
     const [paymentMethods, setPaymentMethods] = useState(() => 
@@ -165,25 +230,7 @@ export default function Landing() {
         const syncProductsList = (rawList) => {
             if (!Array.isArray(rawList)) return;
             const activeDbProducts = rawList.filter(p => !p.disabled && p.stock > 0);
-            const mappedDb = activeDbProducts.map(p => ({
-                id: p.id,
-                brand: (p.brand || 'URBANSTEP').toUpperCase(),
-                name: p.name,
-                subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
-                color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
-                colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
-                price: Number(p.price) || 120,
-                tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
-                imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
-                sizes: p.sizes || ['39', '40', '41', '42', '43'],
-                sizeStock: p.sizeStock || null,
-                sizeCategory: p.sizeCategory || null,
-                rating: 4.8,
-                reviewsCount: 120,
-                stockBadge: `${p.stock} pares disponibles`,
-                stock: p.stock,
-                description: p.description || 'Calzado original garantizado UrbanStep Store.'
-            }));
+            const mappedDb = activeDbProducts.map(mapProductToCatalog);
             setProducts(mappedDb);
         };
 
@@ -240,12 +287,12 @@ export default function Landing() {
     };
 
     // Add to cart handler with color variant support and strict stock checking
-    const handleAddToCart = (product) => {
-        const chosenSize = selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
+    const handleAddToCart = (product, explicitColor = null, explicitSize = null) => {
         const prodColors = Array.isArray(product.colors) && product.colors.length > 0 
             ? product.colors 
             : (product.color ? [product.color] : ['Original']);
-        const chosenColor = selectedColors[product.id] || prodColors[0];
+        const chosenColor = explicitColor || selectedColors[product.id] || prodColors[0];
+        const chosenSize = explicitSize || selectedSizes[product.id] || (product.sizes && product.sizes[0]) || '41';
         const availableStock = productService.getAvailableStock(product, chosenSize, chosenColor);
 
         if (availableStock <= 0) {
@@ -460,6 +507,52 @@ export default function Landing() {
             console.error('Error al procesar pedido:', err);
             toast.error('Error al registrar pedido. Intenta nuevamente.');
         }
+    };
+
+    // Current featured bestseller product for Hero rotator
+    const currentFeatured = (bestsellerProducts && bestsellerProducts.length > 0)
+        ? (bestsellerProducts[featuredIndex % bestsellerProducts.length] || bestsellerProducts[0])
+        : (products[0] || mockProducts[0]);
+
+    const featuredColors = useMemo(() => {
+        if (!currentFeatured) return [];
+        if (Array.isArray(currentFeatured.colors) && currentFeatured.colors.length > 0) {
+            return currentFeatured.colors;
+        }
+        if (currentFeatured.color) return [currentFeatured.color];
+        return [];
+    }, [currentFeatured]);
+
+    const activeFeaturedColor = featuredColor || (featuredColors.length > 0 ? featuredColors[0] : (currentFeatured?.color || 'Original'));
+
+    const activeFeaturedImage = useMemo(() => {
+        if (!currentFeatured) return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800';
+        return productService.getColorVariantImage(currentFeatured, activeFeaturedColor) ||
+            currentFeatured.imageUrl ||
+            currentFeatured.image ||
+            'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800';
+    }, [currentFeatured, activeFeaturedColor]);
+
+    const handleNextFeatured = () => {
+        if (!bestsellerProducts || bestsellerProducts.length === 0) return;
+        setFeaturedIndex(prev => (prev + 1) % bestsellerProducts.length);
+        setFeaturedColor(null);
+    };
+
+    const handlePrevFeatured = () => {
+        if (!bestsellerProducts || bestsellerProducts.length === 0) return;
+        setFeaturedIndex(prev => (prev - 1 + bestsellerProducts.length) % bestsellerProducts.length);
+        setFeaturedColor(null);
+    };
+
+    const handleRandomFeatured = () => {
+        if (!bestsellerProducts || bestsellerProducts.length <= 1) return;
+        setFeaturedIndex(prev => {
+            let next = Math.floor(Math.random() * bestsellerProducts.length);
+            if (next === prev) next = (prev + 1) % bestsellerProducts.length;
+            return next;
+        });
+        setFeaturedColor(null);
     };
 
     return (
@@ -714,59 +807,232 @@ export default function Landing() {
                             </div>
                         </div>
 
-                        {/* Right: Featured Showcase Card */}
-                        <div className="lg:col-span-5">
-                            <div className={`p-6 rounded-3xl border shadow-2xl backdrop-blur-xl relative overflow-hidden transition-colors ${
+                        {/* Right: Featured Showcase Card — Top 6 Bestsellers Animated Rotator */}
+                        <div 
+                            className="lg:col-span-5"
+                            onMouseEnter={() => setIsHeroPaused(true)}
+                            onMouseLeave={() => setIsHeroPaused(false)}
+                        >
+                            <div className={`p-6 rounded-3xl border shadow-2xl backdrop-blur-xl relative overflow-hidden transition-all duration-300 ${
                                 isDark 
-                                    ? 'bg-gradient-to-b from-white/[0.05] to-white/[0.02] border-white/10' 
-                                    : 'bg-white border-slate-200/90 shadow-slate-200/60'
+                                    ? 'bg-gradient-to-b from-white/[0.07] via-white/[0.03] to-white/[0.01] border-white/10 shadow-black/60' 
+                                    : 'bg-white/95 border-slate-200/90 shadow-slate-300/50'
                             }`}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
-                                        ⚡ DROP DESTACADO
-                                    </span>
-                                    <span className={`text-xs font-mono ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Entrega 45 min en Lara</span>
+                                {/* Header with Rank Badge & Manual Rotator Controls */}
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/20 text-amber-500 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+                                            <Flame className="w-3 h-3 fill-amber-400 text-amber-400 animate-pulse" />
+                                            #{bestsellerProducts.length > 0 ? (featuredIndex % bestsellerProducts.length) + 1 : 1} MÁS VENDIDO
+                                        </span>
+                                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20">
+                                            TOP 6 DROPS
+                                        </span>
+                                    </div>
+
+                                    {/* Navigation arrows & random shuffle */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={handleRandomFeatured}
+                                            title="Cambiar a otro drop aleatorio"
+                                            className={`p-1.5 rounded-lg border transition-all active:scale-90 text-[10px] flex items-center gap-1 font-mono ${
+                                                isDark 
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10' 
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                            }`}
+                                        >
+                                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handlePrevFeatured}
+                                            title="Drop anterior"
+                                            className={`p-1.5 rounded-lg border transition-all active:scale-90 ${
+                                                isDark 
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10' 
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                            }`}
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleNextFeatured}
+                                            title="Siguiente drop"
+                                            className={`p-1.5 rounded-lg border transition-all active:scale-90 ${
+                                                isDark 
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10' 
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                            }`}
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div className={`relative w-full h-64 sm:h-72 shrink-0 flex items-center justify-center p-3 mb-4 rounded-2xl overflow-hidden border transition-all duration-300 ${
+                                {/* Sneaker Stage / Studio Frame with interactive color swapping */}
+                                <div className={`relative w-full h-64 sm:h-72 shrink-0 flex items-center justify-center p-3 mb-4 rounded-2xl overflow-hidden border transition-all duration-500 group/stage ${
                                     isDark 
-                                        ? 'bg-gradient-to-b from-slate-900 via-slate-950 to-black border-white/10 shadow-inner' 
+                                        ? 'bg-gradient-to-b from-[#111625] via-[#090d18] to-[#05070d] border-white/10 shadow-inner' 
                                         : 'bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-200 shadow-sm'
                                 }`}>
-                                    {/* Ambient spotlight */}
-                                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.18)_0%,transparent_75%)] pointer-events-none" />
+                                    {/* Ambient radial lighting spotlight */}
+                                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.18)_0%,transparent_75%)] pointer-events-none" />
+
+                                    {/* High-impact Sneaker Image that reacts immediately to active color */}
                                     <img
-                                        src={(products[0] || mockProducts[0])?.imageUrl}
-                                        alt={(products[0] || mockProducts[0])?.name}
-                                        className="w-full h-full object-contain filter drop-shadow-[0_16px_28px_rgba(0,0,0,0.35)] hover:scale-105 hover:-translate-y-1 transition-all duration-300 relative z-10"
+                                        key={`${currentFeatured?.id}-${activeFeaturedColor}`}
+                                        src={activeFeaturedImage}
+                                        alt={`${currentFeatured?.name} - ${activeFeaturedColor}`}
+                                        className="w-full h-full max-h-full max-w-full object-contain filter drop-shadow-[0_18px_30px_rgba(0,0,0,0.38)] group-hover/stage:scale-105 group-hover/stage:-translate-y-1 transition-all duration-300 relative z-10 animate-fade-in"
                                     />
+
+                                    {/* Floating Stock Badge bottom-left */}
+                                    <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-[10px] font-mono text-emerald-400 shadow-sm">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span>{currentFeatured?.stockBadge || `${currentFeatured?.stock || 0} pares disponibles`}</span>
+                                    </div>
+
+                                    {/* Reference-style Vertical Circular Color Swatches Pill (floating on bottom-right of image) */}
+                                    {featuredColors.length > 0 && (
+                                        <div 
+                                            className="absolute bottom-3 right-3 z-20 bg-black/70 hover:bg-black/90 backdrop-blur-md p-1.5 rounded-2xl flex flex-col items-center gap-1.5 border border-white/20 shadow-xl transition-all"
+                                            title={`${featuredColors.length} colores disponibles: ${featuredColors.join(', ')}`}
+                                        >
+                                            {featuredColors.map((colName) => {
+                                                const hex = getColorHex(colName);
+                                                const isSelected = activeFeaturedColor.toLowerCase() === colName.toLowerCase();
+                                                return (
+                                                    <button
+                                                        key={colName}
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFeaturedColor(colName);
+                                                        }}
+                                                        title={`Ver en color ${colName}`}
+                                                        className={`w-5 h-5 rounded-full transition-transform hover:scale-125 border ${
+                                                            isSelected 
+                                                                ? 'ring-2 ring-blue-400 border-white scale-110 shadow-md' 
+                                                                : 'border-white/50 hover:border-white opacity-80 hover:opacity-100'
+                                                        }`}
+                                                        style={{ background: hex }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="space-y-1">
-                                    <p className="text-xs font-mono text-blue-600 dark:text-blue-400 uppercase font-bold">{(products[0] || mockProducts[0])?.brand}</p>
-                                    <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{(products[0] || mockProducts[0])?.name}</h3>
-                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{(products[0] || mockProducts[0])?.subtitle || (products[0] || mockProducts[0])?.category}</p>
+                                {/* Sneaker Info & Selected Color */}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-xs font-mono text-blue-600 dark:text-blue-400 uppercase font-black tracking-wider">
+                                            {currentFeatured?.brand}
+                                        </p>
+                                        <div className="flex items-center gap-1 text-xs text-amber-400 font-bold font-mono">
+                                            <Star className="w-3.5 h-3.5 fill-current" />
+                                            <span>4.9 / 5.0</span>
+                                        </div>
+                                    </div>
+                                    <h3 className={`text-lg font-black tracking-tight line-clamp-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                        {currentFeatured?.name}
+                                    </h3>
+                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
+                                        {currentFeatured?.subtitle || currentFeatured?.category || 'Sneaker Edición Especial'}
+                                    </p>
                                 </div>
 
-                                <div className={`mt-4 pt-4 border-t flex items-center justify-between ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+                                {/* Interactive Color Chips if multiple colors available */}
+                                {featuredColors.length > 1 && (
+                                    <div className="mt-3 pt-3 border-t border-white/10 dark:border-white/10 border-slate-200/80">
+                                        <div className="flex items-center justify-between text-[11px] font-mono mb-2">
+                                            <span className={isDark ? "text-gray-400" : "text-slate-500"}>Color activo:</span>
+                                            <span className={`font-bold uppercase ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                                                {activeFeaturedColor}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {featuredColors.map((cName) => {
+                                                const isSelected = activeFeaturedColor.toLowerCase() === cName.toLowerCase();
+                                                const hex = getColorHex(cName);
+                                                return (
+                                                    <button
+                                                        key={cName}
+                                                        type="button"
+                                                        onClick={() => setFeaturedColor(cName)}
+                                                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${
+                                                            isSelected
+                                                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-500'
+                                                                : isDark
+                                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
+                                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                                        }`}
+                                                    >
+                                                        <span 
+                                                            className="w-3 h-3 rounded-full border border-white/60 shadow-2xs shrink-0" 
+                                                            style={{ background: hex }} 
+                                                        />
+                                                        <span>{cName}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Price and Buy CTA */}
+                                <div className={`mt-4 pt-4 border-t flex items-center justify-between gap-3 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
                                     <div>
-                                        <p className="text-[11px] text-gray-500 font-mono">Precio Oficial</p>
-                                        <p className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>
-                                            ${(products[0] || mockProducts[0])?.price}{' '}
+                                        <p className="text-[10px] text-gray-400 font-mono uppercase tracking-wider">Precio Drop Oficial</p>
+                                        <p className={`text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-950'}`}>
+                                            ${currentFeatured?.price}{' '}
                                             <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                                                ({formatBs(((products[0] || mockProducts[0])?.price || 0) * rate)})
+                                                ({formatBs(((currentFeatured?.price || 0) * rate))})
                                             </span>
                                         </p>
                                     </div>
 
                                     <button
-                                        onClick={() => handleAddToCart(products[0] || mockProducts[0])}
-                                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg shadow-blue-600/30 active:scale-95"
+                                        type="button"
+                                        onClick={() => handleAddToCart(currentFeatured, activeFeaturedColor)}
+                                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
                                     >
-                                        <Plus className="w-4 h-4" />
-                                        Comprar
+                                        <ShoppingBag className="w-4 h-4" />
+                                        <span>Comprar</span>
                                     </button>
                                 </div>
+
+                                {/* 6 Bestseller Dots / Indicator Pills */}
+                                {bestsellerProducts.length > 1 && (
+                                    <div className="mt-4 pt-3 border-t border-dashed border-white/10 dark:border-white/10 border-slate-200 flex items-center justify-between">
+                                        <span className="text-[10px] font-mono text-gray-400">
+                                            {isHeroPaused ? '⏸ En pausa (explorando)' : '⚡ Rotando Drops Top 6'}
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            {bestsellerProducts.map((p, idx) => {
+                                                const isActive = (featuredIndex % bestsellerProducts.length) === idx;
+                                                return (
+                                                    <button
+                                                        key={p.id || idx}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFeaturedIndex(idx);
+                                                            setFeaturedColor(null);
+                                                        }}
+                                                        title={`Ver #${idx + 1}: ${p.name}`}
+                                                        className={`h-2 rounded-full transition-all duration-300 ${
+                                                            isActive
+                                                                ? 'w-6 bg-blue-600 shadow-sm shadow-blue-500/50'
+                                                                : 'w-2 bg-gray-400/40 hover:bg-gray-400'
+                                                        }`}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
