@@ -204,36 +204,70 @@ export const settingsService = {
     },
 
     getSettings: async () => {
-        await simulateNetworkDelay(100);
+        await simulateNetworkDelay(50);
 
-        if (isSupabaseConfigured()) {
+        if (isSupabaseConfigured() && supabase) {
             try {
+                // Intentar leer tabla base 'configuracion_tienda'
                 const { data, error } = await supabase
-                    .from('store_settings')
+                    .from('configuracion_tienda')
                     .select('*')
                     .limit(1)
-                    .single();
+                    .maybeSingle();
                 
                 if (!error && data) {
                     const currentMethods = settingsService.getPaymentMethods();
                     return {
-                        storeName: data.store_name,
-                        legalName: data.legal_name,
+                        storeName: data.nombre_tienda || data.store_name,
+                        legalName: data.razon_social || data.legal_name,
                         rif: data.rif,
-                        fiscalAddress: data.fiscal_address,
-                        phone: data.phone,
-                        email: data.email,
-                        ivaRate: Number(data.iva_rate),
-                        igtfRate: Number(data.igtf_rate),
-                        igtfActive: data.igtf_active,
-                        pagomovilBank: data.pagomovil_bank,
-                        pagomovilPhone: data.pagomovil_phone,
+                        fiscalAddress: data.direccion_fiscal || data.fiscal_address,
+                        phone: data.telefono || data.phone,
+                        email: data.correo || data.email,
+                        ivaRate: Number(data.tasa_iva ?? data.iva_rate ?? 0.16),
+                        igtfRate: Number(data.tasa_igtf ?? data.igtf_rate ?? 0.03),
+                        igtfActive: data.igtf_activo ?? data.igtf_active ?? true,
+                        pagomovilBank: data.pagomovil_banco || data.pagomovil_bank,
+                        pagomovilPhone: data.pagomovil_telefono || data.pagomovil_phone,
                         pagomovilRif: data.pagomovil_rif,
-                        zelleEmail: data.zelle_email,
-                        zelleHolder: data.zelle_holder,
-                        transferBank: data.transfer_bank,
-                        transferAccount: data.transfer_account,
-                        ticketFooter: data.ticket_footer_note,
+                        zelleEmail: data.zelle_correo || data.zelle_email,
+                        zelleHolder: data.zelle_titular || data.zelle_holder,
+                        transferBank: data.transferencia_banco || data.transfer_bank,
+                        transferAccount: data.transferencia_cuenta || data.transfer_account,
+                        ticketFooter: data.nota_pie_ticket || data.ticket_footer_note,
+                        enabledCarriers: DEFAULT_SETTINGS.enabledCarriers,
+                        localDeliveryCost: DEFAULT_SETTINGS.localDeliveryCost,
+                        paymentMethods: currentMethods,
+                    };
+                }
+
+                // Fallback a vista 'store_settings'
+                const { data: viewData, error: viewErr } = await supabase
+                    .from('store_settings')
+                    .select('*')
+                    .limit(1)
+                    .maybeSingle();
+
+                if (!viewErr && viewData) {
+                    const currentMethods = settingsService.getPaymentMethods();
+                    return {
+                        storeName: viewData.store_name,
+                        legalName: viewData.legal_name,
+                        rif: viewData.rif,
+                        fiscalAddress: viewData.fiscal_address,
+                        phone: viewData.phone,
+                        email: viewData.email,
+                        ivaRate: Number(viewData.iva_rate),
+                        igtfRate: Number(viewData.igtf_rate),
+                        igtfActive: viewData.igtf_active,
+                        pagomovilBank: viewData.pagomovil_bank,
+                        pagomovilPhone: viewData.pagomovil_phone,
+                        pagomovilRif: viewData.pagomovil_rif,
+                        zelleEmail: viewData.zelle_email,
+                        zelleHolder: viewData.zelle_holder,
+                        transferBank: viewData.transfer_bank,
+                        transferAccount: viewData.transfer_account,
+                        ticketFooter: viewData.ticket_footer_note,
                         enabledCarriers: DEFAULT_SETTINGS.enabledCarriers,
                         localDeliveryCost: DEFAULT_SETTINGS.localDeliveryCost,
                         paymentMethods: currentMethods,
@@ -264,7 +298,7 @@ export const settingsService = {
     },
 
     saveSettings: async (newSettings) => {
-        await simulateNetworkDelay(200);
+        await simulateNetworkDelay(100);
         const merged = { ...DEFAULT_SETTINGS, ...newSettings };
         
         if (newSettings.paymentMethods) {
@@ -273,27 +307,51 @@ export const settingsService = {
 
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
 
-        if (isSupabaseConfigured()) {
+        if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('store_settings').upsert({
-                    store_name: merged.storeName,
-                    legal_name: merged.legalName,
+                // Actualizar tabla base 'configuracion_tienda' directamente
+                const { error: cfgErr } = await supabase.from('configuracion_tienda').update({
+                    nombre_tienda: merged.storeName,
+                    razon_social: merged.legalName,
                     rif: merged.rif,
-                    fiscal_address: merged.fiscalAddress,
-                    phone: merged.phone,
-                    email: merged.email,
-                    iva_rate: merged.ivaRate,
-                    igtf_rate: merged.igtfRate,
-                    igtf_active: merged.igtfActive,
-                    pagomovil_bank: merged.pagomovilBank,
-                    pagomovil_phone: merged.pagomovilPhone,
+                    direccion_fiscal: merged.fiscalAddress,
+                    telefono: merged.phone,
+                    correo: merged.email,
+                    tasa_iva: merged.ivaRate,
+                    tasa_igtf: merged.igtfRate,
+                    igtf_activo: merged.igtfActive,
+                    pagomovil_banco: merged.pagomovilBank,
+                    pagomovil_telefono: merged.pagomovilPhone,
                     pagomovil_rif: merged.pagomovilRif,
-                    zelle_email: merged.zelleEmail,
-                    zelle_holder: merged.zelleHolder,
-                    transfer_bank: merged.transferBank,
-                    transfer_account: merged.transferAccount,
-                    ticket_footer_note: merged.ticketFooter,
-                });
+                    zelle_correo: merged.zelleEmail,
+                    zelle_titular: merged.zelleHolder,
+                    transferencia_banco: merged.transferBank,
+                    transferencia_cuenta: merged.transferAccount,
+                    nota_pie_ticket: merged.ticketFooter,
+                    actualizado_el: new Date().toISOString()
+                }).neq('id', '00000000-0000-0000-0000-000000000000');
+
+                if (cfgErr) {
+                    await supabase.from('store_settings').upsert({
+                        store_name: merged.storeName,
+                        legal_name: merged.legalName,
+                        rif: merged.rif,
+                        fiscal_address: merged.fiscalAddress,
+                        phone: merged.phone,
+                        email: merged.email,
+                        iva_rate: merged.ivaRate,
+                        igtf_rate: merged.igtfRate,
+                        igtf_active: merged.igtfActive,
+                        pagomovil_bank: merged.pagomovilBank,
+                        pagomovil_phone: merged.pagomovilPhone,
+                        pagomovil_rif: merged.pagomovilRif,
+                        zelle_email: merged.zelleEmail,
+                        zelle_holder: merged.zelleHolder,
+                        transfer_bank: merged.transferBank,
+                        transfer_account: merged.transferAccount,
+                        ticket_footer_note: merged.ticketFooter,
+                    });
+                }
             } catch (err) {
                 console.warn('No se pudo sincronizar configuración con Supabase:', err);
             }
