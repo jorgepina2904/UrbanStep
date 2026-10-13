@@ -160,7 +160,7 @@ export const productService = {
                     .select('*')
                     .order('creado_el', { ascending: false });
 
-                if (!error && Array.isArray(data) && data.length > 0) {
+                if (!error && Array.isArray(data)) {
                     const mapped = data.map(mapSupabaseProduct);
                     // Actualizar memoria y caché local
                     db.products = mapped;
@@ -303,10 +303,10 @@ export const productService = {
             createdAt: new Date().toISOString()
         };
 
-        // Insertar en Supabase si está disponible
+        // Insertar en Supabase si está disponible de forma resiliente
         if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('productos').insert({
+                const fullPayload = {
                     id: newProduct.id,
                     sku: newProduct.sku,
                     nombre: newProduct.name,
@@ -328,7 +328,30 @@ export const productService = {
                     imagen_url: newProduct.imageUrl,
                     descripcion: newProduct.description,
                     estado: newProduct.disabled ? 'deshabilitado' : (newProduct.stock > 0 ? 'in_stock' : 'out_of_stock')
-                });
+                };
+
+                const { error: supInsertErr } = await supabase.from('productos').insert(fullPayload);
+                if (supInsertErr) {
+                    console.warn('Inserción completa falló, reintentando con columnas base garantizadas:', supInsertErr.message);
+                    await supabase.from('productos').insert({
+                        id: newProduct.id,
+                        sku: newProduct.sku,
+                        nombre: newProduct.name,
+                        marca_nombre: newProduct.brand,
+                        categoria_nombre: newProduct.category,
+                        precio_usd: newProduct.price,
+                        costo_usd: newProduct.cost,
+                        stock: newProduct.stock,
+                        stock_minimo: newProduct.minStock,
+                        tallas: newProduct.sizes,
+                        color: newProduct.color,
+                        color_hex: newProduct.colorHex,
+                        proveedor_id: newProduct.supplierId,
+                        imagen_url: newProduct.imageUrl,
+                        descripcion: newProduct.description,
+                        estado: newProduct.disabled ? 'deshabilitado' : (newProduct.stock > 0 ? 'in_stock' : 'out_of_stock')
+                    });
+                }
             } catch (supErr) {
                 console.warn('Error al guardar producto en Supabase:', supErr);
             }
@@ -448,10 +471,10 @@ export const productService = {
             }
         }
 
-        // Actualizar en Supabase si está disponible
+        // Actualizar en Supabase si está disponible de forma resiliente
         if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('productos').update({
+                const fullUpdate = {
                     nombre: updated.name,
                     sku: updated.sku,
                     marca_nombre: updated.brand,
@@ -473,7 +496,29 @@ export const productService = {
                     descripcion: updated.description,
                     estado: updated.disabled ? 'deshabilitado' : (updated.stock > 0 ? 'in_stock' : 'out_of_stock'),
                     actualizado_el: new Date().toISOString()
-                }).eq('id', id);
+                };
+
+                const { error: supUpErr } = await supabase.from('productos').update(fullUpdate).eq('id', id);
+                if (supUpErr) {
+                    console.warn('Actualización completa falló, aplicando columnas base:', supUpErr.message);
+                    await supabase.from('productos').update({
+                        nombre: updated.name,
+                        sku: updated.sku,
+                        marca_nombre: updated.brand,
+                        categoria_nombre: updated.category,
+                        precio_usd: updated.price,
+                        costo_usd: updated.cost,
+                        stock: updated.stock,
+                        stock_minimo: updated.minStock,
+                        tallas: updated.sizes,
+                        color: updated.color,
+                        color_hex: updated.colorHex,
+                        imagen_url: updated.imageUrl,
+                        descripcion: updated.description,
+                        estado: updated.disabled ? 'deshabilitado' : (updated.stock > 0 ? 'in_stock' : 'out_of_stock'),
+                        actualizado_el: new Date().toISOString()
+                    }).eq('id', id);
+                }
             } catch (supErr) {
                 console.warn('Error al actualizar en Supabase:', supErr);
             }
@@ -623,7 +668,7 @@ export const productService = {
 
         if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('productos').update({
+                const { error: upStockErr } = await supabase.from('productos').update({
                     stock: safeStock,
                     variantes_color: product.colorVariants,
                     tallas_stock: product.sizeStock,
@@ -631,6 +676,14 @@ export const productService = {
                     estado: product.disabled ? 'deshabilitado' : (safeStock > 0 ? 'in_stock' : 'out_of_stock'),
                     actualizado_el: new Date().toISOString()
                 }).eq('id', id);
+
+                if (upStockErr) {
+                    await supabase.from('productos').update({
+                        stock: safeStock,
+                        estado: product.disabled ? 'deshabilitado' : (safeStock > 0 ? 'in_stock' : 'out_of_stock'),
+                        actualizado_el: new Date().toISOString()
+                    }).eq('id', id);
+                }
             } catch (e) {
                 console.warn('Error updateStock Supabase:', e);
             }

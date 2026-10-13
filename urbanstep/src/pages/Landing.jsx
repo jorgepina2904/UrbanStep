@@ -71,8 +71,8 @@ export default function Landing() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Catalog state — Inicializado con catálogo oficial unificado
-    const [products, setProducts] = useState(() => mockProducts.map(mapProductToCatalog));
+    // Catalog state — Inicializado vacío para reflejar el estado real de la base de datos
+    const [products, setProducts] = useState([]);
     const [selectedBrand, setSelectedBrand] = useState('TODAS');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSizes, setSelectedSizes] = useState({});
@@ -160,52 +160,59 @@ export default function Landing() {
 
     // Load products from DB and keep synchronized in real time
     useEffect(() => {
+        const syncProductsList = (rawList) => {
+            if (!Array.isArray(rawList)) return;
+            const activeDbProducts = rawList.filter(p => !p.disabled && p.stock > 0);
+            const mappedDb = activeDbProducts.map(p => ({
+                id: p.id,
+                brand: (p.brand || 'URBANSTEP').toUpperCase(),
+                name: p.name,
+                subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
+                color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
+                colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
+                price: Number(p.price) || 120,
+                tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
+                imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
+                sizes: p.sizes || ['39', '40', '41', '42', '43'],
+                sizeStock: p.sizeStock || null,
+                sizeCategory: p.sizeCategory || null,
+                rating: 4.8,
+                reviewsCount: 120,
+                stockBadge: `${p.stock} pares disponibles`,
+                stock: p.stock,
+                description: p.description || 'Calzado original garantizado UrbanStep Store.'
+            }));
+            setProducts(mappedDb);
+        };
+
         const loadProducts = async () => {
             try {
                 const dbProducts = await productService.getAll();
-                if (dbProducts && dbProducts.length > 0) {
-                    // Filter to active items with positive stock
-                    const activeDbProducts = dbProducts.filter(p => !p.disabled && p.stock > 0);
-
-                    const mappedDb = activeDbProducts.map(p => ({
-                        id: p.id,
-                        brand: (p.brand || 'URBANSTEP').toUpperCase(),
-                        name: p.name,
-                        subtitle: p.color ? `${p.color} • ${p.category || 'Sneaker'}` : (p.category || 'Edición 2026'),
-                        color: p.color || (Array.isArray(p.colors) && p.colors[0]) || 'Multicolor',
-                        colors: Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : (p.color ? [p.color] : []),
-                        price: Number(p.price) || 120,
-                        tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
-                        imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
-                        sizes: p.sizes || ['39', '40', '41', '42', '43'],
-                        sizeStock: p.sizeStock || null,
-                        sizeCategory: p.sizeCategory || null,
-                        rating: 4.8,
-                        reviewsCount: 120,
-                        stockBadge: `${p.stock} pares disponibles`,
-                        stock: p.stock,
-                        description: p.description || 'Calzado original garantizado UrbanStep Store.'
-                    }));
-
-                    setProducts(mappedDb);
-                } else {
-                    setProducts(mockProducts.map(mapProductToCatalog));
-                }
+                syncProductsList(dbProducts || []);
             } catch (err) {
-                console.warn('Usando catálogo inicial:', err);
-                setProducts(mockProducts.map(mapProductToCatalog));
+                console.warn('Error cargando productos en landing:', err);
+                setProducts([]);
             }
         };
 
         loadProducts();
 
+        const handleRealtimeUpdate = (e) => {
+            if (e.detail) {
+                syncProductsList(e.detail);
+            } else {
+                loadProducts();
+            }
+        };
+
         const handleSync = () => loadProducts();
-        window.addEventListener('products_updated', handleSync);
+
+        window.addEventListener('products_updated', handleRealtimeUpdate);
         window.addEventListener('sales_updated', handleSync);
         window.addEventListener('storage', handleSync);
 
         return () => {
-            window.removeEventListener('products_updated', handleSync);
+            window.removeEventListener('products_updated', handleRealtimeUpdate);
             window.removeEventListener('sales_updated', handleSync);
             window.removeEventListener('storage', handleSync);
         };
@@ -1000,17 +1007,27 @@ export default function Landing() {
                 </div>
 
                 {filteredProducts.length === 0 && (
-                    <div className="text-center py-16 space-y-3">
-                        <p className="text-lg font-bold text-gray-400">No encontramos sneakers con ese filtro.</p>
-                        <button
-                            onClick={() => {
-                                setSelectedBrand('TODAS');
-                                setSearchQuery('');
-                            }}
-                            className="text-xs text-blue-400 hover:underline font-bold"
-                        >
-                            Ver todo el catálogo
-                        </button>
+                    <div className={`text-center py-16 px-6 space-y-3 rounded-3xl border transition-colors ${isDark ? 'border-slate-800 bg-[#0b0e18]' : 'border-slate-200 bg-white shadow-sm'}`}>
+                        <Package className="w-12 h-12 mx-auto text-blue-500/50" />
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            {products.length === 0 ? 'Catálogo en Preparación' : 'No encontramos sneakers con ese filtro.'}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+                            {products.length === 0 
+                                ? 'Actualmente no hay calzados registrados con inventario en la tienda. Agrega tus modelos desde el panel administrativo para verlos aquí.'
+                                : 'Intenta seleccionando otra marca o limpiando los términos de búsqueda.'}
+                        </p>
+                        {products.length > 0 && (
+                            <button
+                                onClick={() => {
+                                    setSelectedBrand('TODAS');
+                                    setSearchQuery('');
+                                }}
+                                className="text-xs text-blue-400 hover:underline font-bold"
+                            >
+                                Ver todo el catálogo
+                            </button>
+                        )}
                     </div>
                 )}
             </main>

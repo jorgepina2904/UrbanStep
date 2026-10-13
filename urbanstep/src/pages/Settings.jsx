@@ -9,7 +9,8 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useShift } from '../contexts/ShiftContext';
 import { cashRegisterService } from '../services/cashRegisterService';
-import { testSupabaseConnection, isSupabaseConfigured } from '../services/supabaseClient';
+import { testSupabaseConnection, isSupabaseConfigured, supabase } from '../services/supabaseClient';
+import { clearAllLocalData } from '../services/api';
 import { VENEZUELA_BANKS, SHIPPING_CARRIERS } from '../data/venezuelaData';
 import { auditService } from '../services/auditService';
 import { 
@@ -353,6 +354,72 @@ export default function Settings() {
     const copySchemaInstructions = () => {
         navigator.clipboard.writeText('supabase_schema.sql');
         toast.success('Nombre del archivo copiado al portapapeles');
+    };
+
+    const [wipingData, setWipingData] = useState(false);
+
+    const handleClearLocalStorage = () => {
+        if (!window.confirm('¿Confirmas que deseas vaciar todo el almacenamiento local de prueba? Tus productos, ventas y compras locales se restablecerán a 0 para que puedas empezar a cargar datos reales.')) {
+            return;
+        }
+        clearAllLocalData(true);
+        toast.success('¡Almacenamiento local limpiado! Inventario, ventas y compras en 0.');
+    };
+
+    const handleWipeSupabaseData = async () => {
+        if (!isSupabaseConfigured() || !supabase) {
+            toast.error('Supabase no está configurado en las variables de entorno');
+            return;
+        }
+
+        const confirmText = prompt('Escribe "VACIAR" para confirmar el vaciado completo de la base de datos Supabase:');
+        if (confirmText !== 'VACIAR') {
+            toast('Operación cancelada');
+            return;
+        }
+
+        setWipingData(true);
+        try {
+            // Vaciar transaccionales y productos
+            await supabase.from('detalles_venta').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await supabase.from('pagos_venta').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await supabase.from('ventas').delete().neq('id', '___none___');
+            await supabase.from('detalles_compra').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await supabase.from('compras').delete().neq('id', '___none___');
+            await supabase.from('envios').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            try {
+                await supabase.from('movimientos_inventario').delete().neq('id', '___none___');
+            } catch {}
+            await supabase.from('productos').delete().neq('id', '___none___');
+            await supabase.from('clientes').delete().neq('id', 'publico');
+
+            // Limpiar también almacenamiento local sincronizado
+            clearAllLocalData(true);
+
+            toast.success('¡Base de datos Supabase y almacenamiento local vaciados exitosamente!');
+        } catch (err) {
+            console.error('Error vaciando Supabase:', err);
+            toast.error('Error vaciando Supabase: ' + err.message);
+        } finally {
+            setWipingData(false);
+        }
+    };
+
+    const handleCopyCleanupSql = () => {
+        const cleanupSql = `-- SCRIPT PARA VACIAR SUPABASE (Ejecutar en Supabase SQL Editor):
+TRUNCATE TABLE pagos_venta CASCADE;
+TRUNCATE TABLE detalles_venta CASCADE;
+TRUNCATE TABLE ventas CASCADE;
+TRUNCATE TABLE detalles_compra CASCADE;
+TRUNCATE TABLE compras CASCADE;
+TRUNCATE TABLE envios CASCADE;
+TRUNCATE TABLE auditoria CASCADE;
+TRUNCATE TABLE turnos_caja CASCADE;
+TRUNCATE TABLE productos CASCADE;
+DELETE FROM clientes WHERE id <> 'publico';
+`;
+        navigator.clipboard.writeText(cleanupSql);
+        toast.success('Script SQL de vaciado copiado al portapapeles');
     };
 
     // Handlers para Cajas Registradoras
@@ -1639,53 +1706,127 @@ export default function Settings() {
 
             {/* Tab 6: Supabase Cloud & Vercel */}
             {activeTab === 'database' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="p-6 space-y-4">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Database className="w-5 h-5 text-blue-600" />
-                            Estado de la Conexión Supabase
-                        </h2>
-                        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-3">
-                            <div className={`w-3 h-3 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card className="p-6 space-y-4">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Database className="w-5 h-5 text-blue-600" />
+                                Estado de la Conexión Supabase
+                            </h2>
+                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-3">
+                                <div className={`w-3 h-3 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                                <div>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                        {isSupabaseConfigured() ? 'Modo Supabase Cloud Conectado' : 'Modo Almacenamiento Local (Local/Demo)'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {isSupabaseConfigured()
+                                            ? 'Tus datos se sincronizan con la base de datos PostgreSQL de Supabase en tiempo real.'
+                                            : 'El sistema funciona de forma autónoma con persistencia local en tu navegador. Puedes conectar Supabase cuando desees.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button variant="secondary" onClick={handleTestSupabase} disabled={testingDb} className="w-full flex items-center justify-center gap-2">
+                                <RefreshCw className={`w-4 h-4 ${testingDb ? 'animate-spin' : ''}`} />
+                                {testingDb ? 'Verificando...' : 'Probar Conectividad con Supabase'}
+                            </Button>
+                            {dbStatus && (
+                                <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${dbStatus.success ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'}`}>
+                                    {dbStatus.success ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                                    <span>{dbStatus.message}</span>
+                                </div>
+                            )}
+                        </Card>
+                        <Card className="p-6 space-y-4">
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <ExternalLink className="w-5 h-5 text-indigo-600" />
+                                Configuración para Vercel & Supabase
+                            </h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Para pasar a producción en Vercel con base de datos real:</p>
+                            <div className="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs font-mono space-y-2">
+                                <p className="text-gray-400"># 1. Ejecutar script en Supabase SQL Editor:</p>
+                                <div className="flex justify-between items-center bg-gray-800 px-3 py-1.5 rounded">
+                                    <span>urbanstep/supabase_schema.sql</span>
+                                    <button onClick={copySchemaInstructions} className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                                        <Copy className="w-3.5 h-3.5" /> Copiar
+                                    </button>
+                                </div>
+                                <p className="text-gray-400 pt-2"># 2. Agregar en Vercel Environment Variables:</p>
+                                <p className="text-emerald-400">VITE_SUPABASE_URL=https://tu-id.supabase.co</p>
+                                <p className="text-emerald-400">VITE_SUPABASE_ANON_KEY=tu-anon-key</p>
+                            </div>
+                        </Card>
+                    </div>
+
+                    {/* Vaciado y Limpieza de Datos */}
+                    <Card className="p-6 space-y-5 border-red-200/50 dark:border-red-900/30">
+                        <div className="flex items-start justify-between gap-4">
                             <div>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">
-                                    {isSupabaseConfigured() ? 'Modo Supabase Cloud Conectado' : 'Modo Almacenamiento Local (Local/Demo)'}
-                                </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {isSupabaseConfigured()
-                                        ? 'Tus datos se sincronizan con la base de datos PostgreSQL de Supabase en tiempo real.'
-                                        : 'El sistema funciona de forma autónoma con persistencia local en tu navegador. Puedes conectar Supabase cuando desees.'}
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 text-red-600 dark:text-red-400">
+                                    <Trash2 className="w-5 h-5 text-red-500" />
+                                    Limpieza y Vaciamiento de Datos para Pruebas Limpias
+                                </h2>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
+                                    Elimina los productos de prueba, ventas y compras ficticias tanto del almacenamiento local como de Supabase Cloud. Te permite empezar con el catálogo en 0 para cargar calzados reales y testear ventas e inventario con total precisión.
                                 </p>
                             </div>
+                            <span className="px-2.5 py-1 text-[10px] font-black uppercase rounded bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 shrink-0">
+                                Zona de Mantenimiento
+                            </span>
                         </div>
-                        <Button variant="secondary" onClick={handleTestSupabase} disabled={testingDb} className="w-full flex items-center justify-center gap-2">
-                            <RefreshCw className={`w-4 h-4 ${testingDb ? 'animate-spin' : ''}`} />
-                            {testingDb ? 'Verificando...' : 'Probar Conectividad con Supabase'}
-                        </Button>
-                        {dbStatus && (
-                            <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${dbStatus.success ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'}`}>
-                                {dbStatus.success ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                                <span>{dbStatus.message}</span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col justify-between">
+                                <div>
+                                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">1. Limpiar Caché Local</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Vacía los datos en el navegador (localStorage) dejando productos, ventas y compras en 0. Conserva tu usuario admin.
+                                    </p>
+                                </div>
+                                <Button 
+                                    variant="secondary" 
+                                    onClick={handleClearLocalStorage}
+                                    className="mt-4 w-full flex items-center justify-center gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                >
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                    Vaciar Datos Locales
+                                </Button>
                             </div>
-                        )}
-                    </Card>
-                    <Card className="p-6 space-y-4">
-                        <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <ExternalLink className="w-5 h-5 text-indigo-600" />
-                            Configuración para Vercel & Supabase
-                        </h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Para pasar a producción en Vercel con base de datos real:</p>
-                        <div className="bg-gray-900 text-gray-100 p-4 rounded-xl text-xs font-mono space-y-2">
-                            <p className="text-gray-400"># 1. Ejecutar script en Supabase SQL Editor:</p>
-                            <div className="flex justify-between items-center bg-gray-800 px-3 py-1.5 rounded">
-                                <span>urbanstep/supabase_schema.sql</span>
-                                <button onClick={copySchemaInstructions} className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                                    <Copy className="w-3.5 h-3.5" /> Copiar
-                                </button>
+
+                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col justify-between">
+                                <div>
+                                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">2. Vaciar Supabase Cloud</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Borra directamente todas las ventas, pagos, detalles y productos en la base de datos Supabase conectada.
+                                    </p>
+                                </div>
+                                <Button 
+                                    variant="danger" 
+                                    onClick={handleWipeSupabaseData}
+                                    disabled={wipingData || !isSupabaseConfigured()}
+                                    className="mt-4 w-full flex items-center justify-center gap-2"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                    {wipingData ? 'Vaciando...' : 'Vaciar Supabase Cloud'}
+                                </Button>
                             </div>
-                            <p className="text-gray-400 pt-2"># 2. Agregar en Vercel Environment Variables:</p>
-                            <p className="text-emerald-400">VITE_SUPABASE_URL=https://tu-id.supabase.co</p>
-                            <p className="text-emerald-400">VITE_SUPABASE_ANON_KEY=tu-anon-key</p>
+
+                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col justify-between">
+                                <div>
+                                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">3. Script SQL (TRUNCATE)</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Copia el script SQL de vaciado para ejecutarlo en el SQL Editor de tu consola Supabase (<code className="text-xs">limpiar_base_datos.sql</code>).
+                                    </p>
+                                </div>
+                                <Button 
+                                    variant="secondary" 
+                                    onClick={handleCopyCleanupSql}
+                                    className="mt-4 w-full flex items-center justify-center gap-2 border-blue-300 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                >
+                                    <Copy className="w-4 h-4 text-blue-500" />
+                                    Copiar SQL de Vaciado
+                                </Button>
+                            </div>
                         </div>
                     </Card>
                 </div>

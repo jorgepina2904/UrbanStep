@@ -14,7 +14,7 @@ export const saleService = {
                     .select('*')
                     .order('creado_el', { ascending: false });
 
-                if (!error && Array.isArray(data) && data.length > 0) {
+                if (!error && Array.isArray(data)) {
                     const mapped = data.map(v => ({
                         id: v.id,
                         receiptNumber: v.numero_recibo,
@@ -302,14 +302,45 @@ export const saleService = {
                 const validEnums = ['pagomovil', 'zelle', 'punto_venta', 'efectivo_usd', 'efectivo_bs', 'transferencia', 'mixto'];
                 const dbPaymentMethod = validEnums.includes(newSale.paymentMethod) ? newSale.paymentMethod : 'pagomovil';
 
+                // Validar claves foráneas antes de insertar en ventas
+                let validClienteId = null;
+                if (customerId && customerId !== 'publico') {
+                    try {
+                        const { data: cExists } = await supabase.from('clientes').select('id').eq('id', customerId).maybeSingle();
+                        if (cExists) validClienteId = customerId;
+                    } catch {
+                        validClienteId = null;
+                    }
+                }
+
+                let validCajaId = null;
+                if (newSale.cajaId) {
+                    try {
+                        const { data: cajaExists } = await supabase.from('cajas').select('id').eq('id', newSale.cajaId).maybeSingle();
+                        if (cajaExists) validCajaId = newSale.cajaId;
+                    } catch {
+                        validCajaId = null;
+                    }
+                }
+
+                let validTurnoId = null;
+                if (newSale.shiftId) {
+                    try {
+                        const { data: turnoExists } = await supabase.from('turnos_caja').select('id').eq('id', newSale.shiftId).maybeSingle();
+                        if (turnoExists) validTurnoId = newSale.shiftId;
+                    } catch {
+                        validTurnoId = null;
+                    }
+                }
+
                 // 1. Insertar en tabla relacional 'ventas'
                 const { error: saleErr } = await supabase.from('ventas').insert({
                     id: newSale.id,
                     numero_recibo: newSale.receiptNumber,
-                    cliente_id: customerId === 'publico' ? null : customerId,
+                    cliente_id: validClienteId,
                     nombre_cliente: newSale.customer,
-                    caja_id: newSale.cajaId || null,
-                    turno_id: newSale.shiftId || null,
+                    caja_id: validCajaId,
+                    turno_id: validTurnoId,
                     nombre_cajero: newSale.cashier,
                     tasa_bcv: bcvRate,
                     subtotal_usd: newSale.subtotal,
@@ -332,14 +363,14 @@ export const saleService = {
                 if (saleErr) {
                     console.warn('Aviso guardando en ventas Supabase:', saleErr);
                 } else {
-                    // 2. Insertar detalles_venta (dispara trigger de stock en Supabase)
+                    // 2. Insertar detalles_venta (dispara trigger de stock fn_descontar_stock_venta en Supabase)
                     if (newSale.items && newSale.items.length > 0) {
                         const itemsToInsert = newSale.items.map(item => ({
                             venta_id: newSale.id,
                             producto_id: item.productId || item.id,
                             nombre_producto: item.name,
                             marca: item.brand || 'UrbanStep',
-                            talla: item.size || item.talla || '41',
+                            talla: String(item.size || item.talla || '41'),
                             color: item.color || 'Multicolor',
                             cantidad: Number(item.quantity) || 1,
                             precio_unitario_usd: Number(item.price) || 0,
@@ -363,7 +394,7 @@ export const saleService = {
                     });
                 }
 
-                // 4. Asegurar actualización directa del stock, variantes y estado en tabla 'productos' de Supabase
+                // 4. Asegurar actualización directa y resiliente del stock en tabla 'productos' de Supabase
                 const updatedProductsMap = new Map();
                 for (const item of newSale.items) {
                     const prodId = item.productId || item.id;
@@ -374,14 +405,27 @@ export const saleService = {
                 }
 
                 for (const p of updatedProductsMap.values()) {
-                    await supabase.from('productos').update({
-                        stock: p.stock,
+                    const safeStock = Math.max(0, Number(p.stock) || 0);
+                    const safeEstado = safeStock <= 0 ? 'deshabilitado' : (safeStock > (p.minStock || 5) ? 'in_stock' : 'low_stock');
+                    
+                    // Intento 1: actualizar con todas las variantes si la tabla las soporta
+                    const { error: fullStockErr } = await supabase.from('productos').update({
+                        stock: safeStock,
                         tallas_stock: p.sizeStock,
                         variantes_color: p.colorVariants,
                         colores: p.colors || [p.color || 'Negro'],
-                        estado: p.stock <= 0 ? 'deshabilitado' : (p.stock > p.minStock ? 'in_stock' : 'low_stock'),
+                        estado: safeEstado,
                         actualizado_el: new Date().toISOString()
                     }).eq('id', p.id);
+
+                    // Si falla por columna inexistente, fallback a columnas base de productos
+                    if (fullStockErr) {
+                        await supabase.from('productos').update({
+                            stock: safeStock,
+                            estado: safeEstado,
+                            actualizado_el: new Date().toISOString()
+                        }).eq('id', p.id);
+                    }
                 }
             } catch (err) {
                 console.warn('Error durante sincronización Supabase de venta:', err);

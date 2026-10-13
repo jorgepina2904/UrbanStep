@@ -17,7 +17,7 @@ export const purchaseService = {
                     .select('*')
                     .order('creado_el', { ascending: false });
 
-                if (!error && Array.isArray(data) && data.length > 0) {
+                if (!error && Array.isArray(data)) {
                     const mapped = data.map(c => ({
                         id: c.id,
                         invoiceNumber: c.numero_factura,

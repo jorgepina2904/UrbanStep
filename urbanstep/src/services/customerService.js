@@ -6,42 +6,45 @@ const PUBLIC_CUSTOMER_ID = 'publico';
 
 export const customerService = {
     getAll: async () => {
-        await simulateNetworkDelay(150);
-        if (isSupabaseConfigured()) {
+        await simulateNetworkDelay(50);
+        if (isSupabaseConfigured() && supabase) {
             try {
-                const { data, error } = await supabase.from('customers').select('*');
-                if (!error && data && data.length > 0) {
-                    return data.map(c => ({
+                const { data, error } = await supabase.from('clientes').select('*');
+                if (!error && Array.isArray(data)) {
+                    const mapped = data.map(c => ({
                         id: c.id,
-                        docType: c.doc_type,
-                        docNumber: `${c.doc_type}-${c.doc_number}`,
-                        firstName: c.first_name,
-                        lastName: c.last_name,
-                        email: c.email,
-                        phone: c.phone,
-                        state: c.state,
-                        city: c.city,
-                        address: c.address,
-                        totalSpent: Number(c.total_spent_usd || 0),
-                        purchasesCount: Number(c.purchases_count || 0),
+                        docType: c.tipo_documento || c.doc_type || 'V',
+                        docNumber: `${c.tipo_documento || c.doc_type || 'V'}-${c.numero_documento || c.doc_number || '00000000'}`,
+                        firstName: c.nombres || c.first_name || '',
+                        lastName: c.apellidos || c.last_name || '',
+                        email: c.correo || c.email || '',
+                        phone: c.telefono || c.phone || '',
+                        state: c.estado || c.state || 'Distrito Capital',
+                        city: c.ciudad || c.city || 'Caracas',
+                        address: c.direccion || c.address || '',
+                        totalSpent: Number(c.total_comprado_usd ?? c.total_spent_usd ?? 0),
+                        purchasesCount: Number(c.cantidad_compras ?? c.purchases_count ?? 0),
                     }));
+                    db.customers = mapped;
+                    db.save('customers');
+                    return mapped;
                 }
             } catch (err) {
-                console.warn('Fallo Supabase customers, usando datos locales:', err);
+                console.warn('Fallo Supabase clientes, usando datos locales:', err);
             }
         }
         return [...db.customers];
     },
 
     getById: async (id) => {
-        await simulateNetworkDelay(100);
+        await simulateNetworkDelay(50);
         const customer = db.customers.find(c => c.id === id);
         if (!customer) throw new Error('Cliente no encontrado');
         return { ...customer };
     },
 
     create: async (data) => {
-        await simulateNetworkDelay(250);
+        await simulateNetworkDelay(100);
         const newCustomer = {
             id: generateId('CLT'),
             docType:        data.docType || 'V',
@@ -61,22 +64,39 @@ export const customerService = {
         db.customers.push(newCustomer);
         db.save('customers');
 
-        if (isSupabaseConfigured()) {
+        if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('customers').insert({
+                const { error: cliErr } = await supabase.from('clientes').insert({
                     id: newCustomer.id,
-                    doc_type: newCustomer.docType,
-                    doc_number: newCustomer.docNumber.replace(/^[VEJGP]-/, ''),
-                    first_name: newCustomer.firstName,
-                    last_name: newCustomer.lastName,
-                    email: newCustomer.email,
-                    phone: newCustomer.phone,
-                    state: newCustomer.state,
-                    city: newCustomer.city,
-                    address: newCustomer.address,
-                    total_spent_usd: 0,
-                    purchases_count: 0
+                    tipo_documento: newCustomer.docType,
+                    numero_documento: newCustomer.docNumber.replace(/^[VEJGP]-/, ''),
+                    nombres: newCustomer.firstName,
+                    apellidos: newCustomer.lastName,
+                    correo: newCustomer.email,
+                    telefono: newCustomer.phone,
+                    estado: newCustomer.state,
+                    ciudad: newCustomer.city,
+                    direccion: newCustomer.address,
+                    total_comprado_usd: 0,
+                    cantidad_compras: 0
                 });
+
+                if (cliErr) {
+                    await supabase.from('customers').insert({
+                        id: newCustomer.id,
+                        doc_type: newCustomer.docType,
+                        doc_number: newCustomer.docNumber.replace(/^[VEJGP]-/, ''),
+                        first_name: newCustomer.firstName,
+                        last_name: newCustomer.lastName,
+                        email: newCustomer.email,
+                        phone: newCustomer.phone,
+                        state: newCustomer.state,
+                        city: newCustomer.city,
+                        address: newCustomer.address,
+                        total_spent_usd: 0,
+                        purchases_count: 0
+                    });
+                }
             } catch (err) {
                 console.warn('Error insertando cliente en Supabase:', err);
             }
@@ -86,7 +106,7 @@ export const customerService = {
     },
 
     update: async (id, data) => {
-        await simulateNetworkDelay(250);
+        await simulateNetworkDelay(100);
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser editado');
 
         const index = db.customers.findIndex(c => c.id === id);
@@ -106,19 +126,33 @@ export const customerService = {
         };
         db.customers[index] = updated;
 
-        if (isSupabaseConfigured()) {
+        if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('customers').update({
-                    doc_type: updated.docType,
-                    doc_number: updated.docNumber.replace(/^[VEJGP]-/, ''),
-                    first_name: updated.firstName,
-                    last_name: updated.lastName,
-                    email: updated.email,
-                    phone: updated.phone,
-                    state: updated.state,
-                    city: updated.city,
-                    address: updated.address
+                const { error: upCliErr } = await supabase.from('clientes').update({
+                    tipo_documento: updated.docType,
+                    numero_documento: updated.docNumber.replace(/^[VEJGP]-/, ''),
+                    nombres: updated.firstName,
+                    apellidos: updated.lastName,
+                    correo: updated.email,
+                    telefono: updated.phone,
+                    estado: updated.state,
+                    ciudad: updated.city,
+                    direccion: updated.address
                 }).eq('id', id);
+
+                if (upCliErr) {
+                    await supabase.from('customers').update({
+                        doc_type: updated.docType,
+                        doc_number: updated.docNumber.replace(/^[VEJGP]-/, ''),
+                        first_name: updated.firstName,
+                        last_name: updated.lastName,
+                        email: updated.email,
+                        phone: updated.phone,
+                        state: updated.state,
+                        city: updated.city,
+                        address: updated.address
+                    }).eq('id', id);
+                }
             } catch (err) {
                 console.warn('Error actualizando cliente en Supabase:', err);
             }
