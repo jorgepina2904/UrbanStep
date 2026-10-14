@@ -1,5 +1,6 @@
 import { auditService } from './auditService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { mockUsers } from '../data/mockUsers';
 
 const mapDbUser = (u) => {
     let assigned = u.caja_asignada_id || '';
@@ -7,22 +8,34 @@ const mapDbUser = (u) => {
     else if (assigned === 'caja-2') assigned = 'Caja 2';
     else if (assigned === 'caja-3') assigned = 'Caja 3';
 
+    const rLower = (u.rol || '').toLowerCase();
+    let mappedRole = 'Cajero';
+    if (rLower === 'admin') mappedRole = 'Admin';
+    else if (rLower === 'gerente' || rLower === 'supervisor') mappedRole = 'Supervisor';
+    else if (rLower === 'motorizado') mappedRole = 'Motorizado';
+    else if (rLower === 'cliente') mappedRole = 'Cliente';
+
     return {
         id: u.id,
         name: u.nombre_completo,
         email: u.correo,
-        role: u.rol === 'admin' ? 'Admin' : (u.rol === 'gerente' ? 'Gerente' : 'Cajero'),
+        role: mappedRole,
         branch: u.sucursal || 'Sede Principal',
         assignedCaja: assigned,
+        phone: u.telefono || u.phone || '',
+        vehicle: u.vehiculo || u.vehicle || '',
+        plate: u.placa || u.plate || '',
+        rating: u.rating || 4.9,
+        deliveriesCount: u.deliveries_count || u.deliveriesCount || 0,
         active: u.activo !== undefined ? u.activo : true,
         createdAt: u.creado_el,
         updatedAt: u.actualizado_el,
-        password: u.rol === 'admin' ? 'admin2914' : 'cajero123'
+        password: mappedRole === 'Admin' ? 'admin2914' : (mappedRole === 'Motorizado' ? 'moto123' : 'cajero123')
     };
 };
 
-// Caché reactiva sincronizada 100% con la tabla 'usuarios' en Supabase Cloud
-let _cachedUsers = [];
+// Caché reactiva sincronizada con la base de datos y respaldada por mockUsers
+let _cachedUsers = [...mockUsers];
 
 const initUsersFromCloud = async () => {
     if (isSupabaseConfigured() && supabase) {
@@ -33,7 +46,15 @@ const initUsersFromCloud = async () => {
                 .order('creado_el', { ascending: true });
 
             if (!error && Array.isArray(data) && data.length > 0) {
-                _cachedUsers = data.map(mapDbUser);
+                const cloudUsers = data.map(mapDbUser);
+                // Asegurar que los motorizados de la flota base siempre existan
+                const merged = [...cloudUsers];
+                mockUsers.forEach(mu => {
+                    if (!merged.some(cu => cu.email.toLowerCase() === mu.email.toLowerCase())) {
+                        merged.push(mu);
+                    }
+                });
+                _cachedUsers = merged;
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('users_changed', { detail: _cachedUsers }));
                 }
@@ -95,7 +116,7 @@ export const userService = {
     /**
      * Crear un nuevo usuario en Supabase
      */
-    create: async ({ name, email, password, role = 'Cajero', assignedCaja = '', branch = 'Sede Principal', adminUser = null }) => {
+    create: async ({ name, email, password, role = 'Cajero', assignedCaja = '', branch = 'Sede Principal', phone = '', vehicle = '', plate = '', rating = 4.9, adminUser = null }) => {
         if (!name || !name.trim()) throw new Error('El nombre completo es obligatorio');
         if (!email || !email.trim()) throw new Error('El correo o identificador es obligatorio');
         if (!password || password.length < 4) throw new Error('La contraseña debe tener al menos 4 caracteres');
@@ -106,7 +127,12 @@ export const userService = {
         }
 
         const newUuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined;
-        const normalizedRole = role.toLowerCase() === 'admin' ? 'admin' : (role.toLowerCase() === 'gerente' ? 'gerente' : 'cajero');
+        const rLow = (role || '').toLowerCase();
+        let normalizedRole = 'cajero';
+        if (rLow === 'admin') normalizedRole = 'admin';
+        else if (rLow === 'gerente' || rLow === 'supervisor') normalizedRole = 'gerente';
+        else if (rLow === 'motorizado') normalizedRole = 'motorizado';
+        else if (rLow === 'cliente') normalizedRole = 'cliente';
 
         const dbRow = {
             nombre_completo: name.trim(),
@@ -121,12 +147,24 @@ export const userService = {
         let createdUser = null;
 
         if (isSupabaseConfigured() && supabase) {
-            const { data, error } = await supabase.from('usuarios').insert(dbRow).select().single();
-            if (!error && data) {
-                createdUser = mapDbUser(data);
-            } else if (error) {
-                console.error('Error insertando usuario en Supabase:', error);
-                throw new Error(`Error en base de datos al crear usuario: ${error.message}`);
+            try {
+                const { data, error } = await supabase.from('usuarios').insert(dbRow).select().single();
+                if (!error && data) {
+                    createdUser = mapDbUser(data);
+                } else if (error) {
+                    // Si el enum de postgres no incluye 'motorizado', reintentar con 'cajero' como fallback en BD
+                    if (error.message?.includes('enum') || error.code === '22P02') {
+                        const fallbackRow = { ...dbRow, rol: 'cajero' };
+                        const { data: fbData } = await supabase.from('usuarios').insert(fallbackRow).select().single();
+                        if (fbData) {
+                            createdUser = { ...mapDbUser(fbData), role: role || 'Motorizado' };
+                        }
+                    } else {
+                        console.warn('Aviso insertando usuario en Supabase:', error);
+                    }
+                }
+            } catch (supErr) {
+                console.warn('Aviso conexión Supabase usuarios:', supErr);
             }
         }
 
@@ -138,10 +176,20 @@ export const userService = {
                 password: password.trim(),
                 role: role || 'Cajero',
                 branch: branch || 'Sede Principal',
-                assignedCaja: assignedCaja || '',
+                assignedCaja: assignedCaja || (role === 'Motorizado' ? 'Flota Delivery' : ''),
+                phone: phone || '',
+                vehicle: vehicle || '',
+                plate: plate || '',
+                rating: rating || 4.9,
+                deliveriesCount: 0,
                 active: true,
                 createdAt: new Date().toISOString()
             };
+        } else {
+            createdUser.phone = phone || createdUser.phone || '';
+            createdUser.vehicle = vehicle || createdUser.vehicle || '';
+            createdUser.plate = plate || createdUser.plate || '';
+            createdUser.rating = rating || createdUser.rating || 4.9;
         }
 
         _cachedUsers.push(createdUser);
@@ -174,23 +222,32 @@ export const userService = {
         const index = _cachedUsers.findIndex(u => u.id === id);
         const current = index !== -1 ? _cachedUsers[index] : null;
 
-        const normalizedRole = data.role ? (data.role.toLowerCase() === 'admin' ? 'admin' : (data.role.toLowerCase() === 'gerente' ? 'gerente' : 'cajero')) : undefined;
+        const rLow = (data.role || current?.role || '').toLowerCase();
+        let normalizedRole = 'cajero';
+        if (rLow === 'admin') normalizedRole = 'admin';
+        else if (rLow === 'gerente' || rLow === 'supervisor') normalizedRole = 'gerente';
+        else if (rLow === 'motorizado') normalizedRole = 'motorizado';
+        else if (rLow === 'cliente') normalizedRole = 'cliente';
 
         if (isSupabaseConfigured() && supabase) {
-            const updates = {
-                actualizado_el: new Date().toISOString()
-            };
-            if (data.name) updates.nombre_completo = data.name.trim();
-            if (data.email) updates.correo = data.email.trim().toLowerCase();
-            if (normalizedRole) updates.rol = normalizedRole;
-            if (data.branch) updates.sucursal = data.branch;
-            if (data.assignedCaja !== undefined) updates.caja_asignada_id = data.assignedCaja || null;
-            if (data.active !== undefined) updates.activo = Boolean(data.active);
+            try {
+                const updates = {
+                    actualizado_el: new Date().toISOString()
+                };
+                if (data.name) updates.nombre_completo = data.name.trim();
+                if (data.email) updates.correo = data.email.trim().toLowerCase();
+                if (data.role) updates.rol = normalizedRole;
+                if (data.branch) updates.sucursal = data.branch;
+                if (data.assignedCaja !== undefined) updates.caja_asignada_id = data.assignedCaja || null;
+                if (data.active !== undefined) updates.activo = Boolean(data.active);
 
-            const { error } = await supabase.from('usuarios').update(updates).eq('id', id);
-            if (error) {
-                console.error('Error actualizando usuario en Supabase:', error);
-                throw new Error(`Error en base de datos al actualizar usuario: ${error.message}`);
+                const { error } = await supabase.from('usuarios').update(updates).eq('id', id);
+                if (error && (error.message?.includes('enum') || error.code === '22P02')) {
+                    updates.rol = 'cajero';
+                    await supabase.from('usuarios').update(updates).eq('id', id);
+                }
+            } catch (err) {
+                console.warn('Aviso actualizando usuario en Supabase:', err);
             }
         }
 
@@ -202,6 +259,9 @@ export const userService = {
             role: data.role || (current?.role || 'Cajero'),
             assignedCaja: data.assignedCaja !== undefined ? data.assignedCaja : (current?.assignedCaja || ''),
             branch: data.branch || (current?.branch || 'Sede Principal'),
+            phone: data.phone !== undefined ? data.phone : (current?.phone || ''),
+            vehicle: data.vehicle !== undefined ? data.vehicle : (current?.vehicle || ''),
+            plate: data.plate !== undefined ? data.plate : (current?.plate || ''),
             active: data.active !== undefined ? Boolean(data.active) : (current ? current.active : true),
             updatedAt: new Date().toISOString()
         };

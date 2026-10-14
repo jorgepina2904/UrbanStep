@@ -125,6 +125,9 @@ export default function Settings() {
         role: 'Cajero',
         assignedCaja: '',
         branch: 'Sede Principal',
+        phone: '',
+        vehicle: '',
+        plate: '',
         active: true
     });
     const [userRoleFilter, setUserRoleFilter] = useState('all');
@@ -263,35 +266,53 @@ export default function Settings() {
         loadSettings();
     }, [loadSettings]);
 
-    const loadAuditData = useCallback(() => {
-        const logs = auditService.getLogs({
-            module: auditModuleFilter !== 'all' ? auditModuleFilter : undefined,
-            search: auditSearch || undefined,
-            limit: 100,
-        });
-        const summary = auditService.getSummary();
-        setAuditLogs(logs);
-        setAuditSummary(summary);
+    const loadAuditData = useCallback(async () => {
+        try {
+            const logs = await auditService.getLogs({
+                module: auditModuleFilter !== 'all' ? auditModuleFilter : undefined,
+                search: auditSearch || undefined,
+                limit: 100,
+            });
+            const summary = await auditService.getSummary();
+            setAuditLogs(Array.isArray(logs) ? logs : []);
+            setAuditSummary(summary || { totalLogs: 0, todayCount: 0, weekCount: 0, byModule: [], byAction: [], byUser: [] });
+        } catch (e) {
+            console.error('Error cargando auditoría:', e);
+            setAuditLogs([]);
+        }
     }, [auditModuleFilter, auditSearch]);
 
-    // Load audit data when tab is active
+    // Load audit data when tab is active and listen to updates
     useEffect(() => {
         if (activeTab === 'audit') {
             loadAuditData();
         }
+        const handler = () => {
+            if (activeTab === 'audit') loadAuditData();
+        };
+        window.addEventListener('audit_updated', handler);
+        return () => window.removeEventListener('audit_updated', handler);
     }, [activeTab, loadAuditData]);
 
-    const handleGenerateDemoAudit = () => {
-        auditService.generateDemoData(user);
-        toast.success('Datos de demostración generados');
-        loadAuditData();
+    const handleGenerateDemoAudit = async () => {
+        try {
+            await auditService.generateDemoData(user);
+            toast.success('Eventos de demostración de auditoría generados exitosamente');
+            await loadAuditData();
+        } catch (err) {
+            toast.error('Error al generar auditoría demo: ' + err.message);
+        }
     };
 
-    const handleClearAudit = () => {
+    const handleClearAudit = async () => {
         if (window.confirm('¿Estás seguro de eliminar todos los registros de auditoría?')) {
-            auditService.clearAll();
-            toast.success('Registros de auditoría eliminados');
-            loadAuditData();
+            try {
+                await auditService.clearAll();
+                toast.success('Registros de auditoría eliminados');
+                await loadAuditData();
+            } catch (err) {
+                toast.error('Error al limpiar auditoría');
+            }
         }
     };
 
@@ -546,6 +567,9 @@ DELETE FROM clientes WHERE id <> 'publico';
             role: 'Cajero',
             assignedCaja: cajas[0]?.name || 'Caja 1',
             branch: 'Sede Principal',
+            phone: '',
+            vehicle: '',
+            plate: '',
             active: true
         });
         setShowUserModal(true);
@@ -560,6 +584,9 @@ DELETE FROM clientes WHERE id <> 'publico';
             role: u.role,
             assignedCaja: u.assignedCaja || '',
             branch: u.branch || 'Sede Principal',
+            phone: u.phone || '',
+            vehicle: u.vehicle || '',
+            plate: u.plate || '',
             active: u.active
         });
         setShowUserModal(true);
@@ -588,6 +615,8 @@ DELETE FROM clientes WHERE id <> 'publico';
                 }
             } else if (payload.role === 'Cliente') {
                 payload.assignedCaja = 'Tienda Online';
+            } else if (payload.role === 'Motorizado') {
+                payload.assignedCaja = 'Flota Delivery';
             }
 
             if (editingUser) {
@@ -878,7 +907,7 @@ DELETE FROM clientes WHERE id <> 'publico';
                     )}
 
                     {/* KPI mini-cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <Card className="p-3.5">
                             <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Total Cuentas</p>
                             <p className="text-xl font-black text-gray-900 dark:text-white mt-1">{users.length}</p>
@@ -905,6 +934,13 @@ DELETE FROM clientes WHERE id <> 'publico';
                             </p>
                             <p className="text-[10px] text-gray-400 mt-0.5">Acceso general</p>
                         </Card>
+                        <Card className="p-3.5 border-l-4 border-l-amber-500">
+                            <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Motorizados Flota</p>
+                            <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                                {users.filter(u => u.role === 'Motorizado').length}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">Envíos & Delivery</p>
+                        </Card>
                         <Card className="p-3.5 border-l-4 border-l-cyan-500">
                             <p className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">Clientes Ecommerce</p>
                             <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
@@ -922,6 +958,7 @@ DELETE FROM clientes WHERE id <> 'publico';
                                 { id: 'Admin', label: '👑 Admins' },
                                 { id: 'Cajero', label: '⚡ Cajeros' },
                                 { id: 'Supervisor', label: '💼 Supervisores' },
+                                { id: 'Motorizado', label: '🛵 Motorizados' },
                                 { id: 'Cliente', label: '🛍️ Clientes' }
                             ].map(filter => (
                                 <button
@@ -984,6 +1021,7 @@ DELETE FROM clientes WHERE id <> 'publico';
                                             Admin: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200',
                                             Supervisor: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200',
                                             Cajero: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200',
+                                            Motorizado: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200',
                                             Cliente: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200',
                                         };
 
@@ -1018,6 +1056,10 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                         <Store className="w-3.5 h-3.5 text-gray-400" />
                                                         {u.role === 'Cliente' ? (
                                                             <span className="text-cyan-600 dark:text-cyan-400 font-semibold">🛍️ Tienda Online</span>
+                                                        ) : u.role === 'Motorizado' ? (
+                                                            <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                                                                🛵 {u.vehicle || 'Flota Delivery'} {u.plate ? `(${u.plate})` : ''}
+                                                            </span>
                                                         ) : (
                                                             u.assignedCaja || (u.role === 'Cajero' ? <span className="text-amber-500 font-bold">¡Asignar Caja!</span> : 'Sin caja fija')
                                                         )}
@@ -2054,6 +2096,7 @@ DELETE FROM clientes WHERE id <> 'publico';
                                     <option value="Admin">👑 Administrador (Acceso Total)</option>
                                     <option value="Cajero">⚡ Cajero (Asignado al Módulo de Caja & POS)</option>
                                     <option value="Supervisor">💼 Supervisor (Reportes & Auditoría)</option>
+                                    <option value="Motorizado">🛵 Motorizado (Repartidor / Conductor de Flota)</option>
                                     <option value="Cliente">🛍️ Cliente (Experiencia Ecommerce Online)</option>
                                 </select>
                             </div>
@@ -2067,6 +2110,13 @@ DELETE FROM clientes WHERE id <> 'publico';
                                         type="text"
                                         disabled
                                         value="Tienda Online / Ecommerce"
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-gray-100 dark:bg-gray-800/50 text-gray-500 cursor-not-allowed"
+                                    />
+                                ) : userForm.role === 'Motorizado' ? (
+                                    <input
+                                        type="text"
+                                        disabled
+                                        value="Flota Delivery / Despacho"
                                         className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-gray-100 dark:bg-gray-800/50 text-gray-500 cursor-not-allowed"
                                     />
                                 ) : (
@@ -2088,6 +2138,53 @@ DELETE FROM clientes WHERE id <> 'publico';
                             </div>
                         </div>
 
+                        {/* Campos específicos de Motorizado */}
+                        {userForm.role === 'Motorizado' && (
+                            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 space-y-3">
+                                <p className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                                    <span>🛵 Ficha de Conductor / Repartidor de Flota</span>
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                                            Teléfono / WhatsApp
+                                        </label>
+                                        <Input
+                                            type="text"
+                                            value={userForm.phone || ''}
+                                            onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
+                                            placeholder="+58 412-1234567"
+                                            className="text-xs bg-white dark:bg-gray-900"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                                            Vehículo (Modelo y Color)
+                                        </label>
+                                        <Input
+                                            type="text"
+                                            value={userForm.vehicle || ''}
+                                            onChange={(e) => setUserForm({ ...userForm, vehicle: e.target.value })}
+                                            placeholder="Bera SBR 150 Azul"
+                                            className="text-xs bg-white dark:bg-gray-900"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                                            Placa de Circulación
+                                        </label>
+                                        <Input
+                                            type="text"
+                                            value={userForm.plate || ''}
+                                            onChange={(e) => setUserForm({ ...userForm, plate: e.target.value.toUpperCase() })}
+                                            placeholder="AD2X89K"
+                                            className="text-xs font-mono uppercase bg-white dark:bg-gray-900"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Callout de asistencia según rol */}
                         {userForm.role === 'Cajero' && (
                             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
@@ -2096,6 +2193,17 @@ DELETE FROM clientes WHERE id <> 'publico';
                                 </p>
                                 <p>
                                     Este usuario será asignado al módulo de caja registradora (<strong>/cashier</strong>) para apertura de turnos, cobros multimoneda ($/Bs) y facturación fiscal en el terminal seleccionado.
+                                </p>
+                            </div>
+                        )}
+
+                        {userForm.role === 'Motorizado' && (
+                            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                                <p className="font-bold flex items-center gap-1.5">
+                                    <span>🛵 Conductor de Flota Delivery</span>
+                                </p>
+                                <p>
+                                    Asignado a la flota logística de despacho (<strong>/delivery</strong>). Podrá ser seleccionado para entregas a domicilio en el Estado Lara y consultar sus rutas activas.
                                 </p>
                             </div>
                         )}

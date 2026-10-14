@@ -2843,27 +2843,28 @@ export default function Reports() {
                                     { key: 'admin', header: 'Administrador' },
                                     { key: 'cashier', header: 'Cajero POS' },
                                     { key: 'auditor', header: 'Auditor Fiscal' },
-                                    { key: 'warehouse', header: 'Almacenista' }
+                                    { key: 'warehouse', header: 'Almacenista' },
+                                    { key: 'courier', header: 'Motorizado Delivery' }
                                 ]}
                                 rows={[
-                                    { layer: 'Capa 1: Contabilidad Formal VEN-NIIF', admin: 'Acceso Total (Lectura / Asientos)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
-                                    { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: 'Acceso Total (Libros / Cierre)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
-                                    { layer: 'Capa 3: Tesorería & Arqueos (Cortes Z)', admin: 'Acceso Total', cashier: 'Operativo (Apertura / Arqueo)', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
-                                    { layer: 'Capa 4: Operaciones & Kardex Valorizado', admin: 'Acceso Total', cashier: 'Consulta Stock', auditor: 'Solo Lectura Oficial', warehouse: 'Gestión de Almacén' },
-                                    { layer: 'Capa 5: BI / Dashboards Ejecutivos', admin: 'Acceso Total', cashier: 'Acceso a Metas', auditor: 'Solo Lectura Oficial', warehouse: 'Consulta' },
-                                    { layer: 'Capa 6: Administración, Impuestos & Logs', admin: 'Acceso Total (Config / Backup)', cashier: 'Sin Acceso', auditor: 'Auditoría de Logs', warehouse: 'Sin Acceso' }
+                                    { layer: 'Capa 1: Contabilidad Formal VEN-NIIF', admin: 'Acceso Total (Lectura / Asientos)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
+                                    { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: 'Acceso Total (Libros / Cierre)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
+                                    { layer: 'Capa 3: Tesorería & Arqueos (Cortes Z)', admin: 'Acceso Total', cashier: 'Operativo (Apertura / Arqueo)', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
+                                    { layer: 'Capa 4: Operaciones & Logística Delivery', admin: 'Acceso Total', cashier: 'Consulta Stock', auditor: 'Solo Lectura Oficial', warehouse: 'Gestión de Almacén', courier: 'Despacho & Rutas' },
+                                    { layer: 'Capa 5: BI / Dashboards Ejecutivos', admin: 'Acceso Total', cashier: 'Acceso a Metas', auditor: 'Solo Lectura Oficial', warehouse: 'Consulta', courier: 'Sin Acceso' },
+                                    { layer: 'Capa 6: Administración, Impuestos & Logs', admin: 'Acceso Total (Config / Backup)', cashier: 'Sin Acceso', auditor: 'Auditoría de Logs', warehouse: 'Sin Acceso', courier: 'Sin Acceso' }
                                 ]}
                                 summaryCards={[
-                                    { label: 'Roles de Usuario', value: '4' },
+                                    { label: 'Roles de Usuario', value: '5' },
                                     { label: 'Capas Protegidas', value: '6' }
                                 ]}
                                 filename="Matriz_Roles_Permisos_RBAC"
                                 bcvRate={bcvRate}
                                 onExportCSV={() => handleExportCSV([
-                                    { Capa: 'Contabilidad', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura' },
-                                    { Capa: 'Fiscal', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura' },
-                                    { Capa: 'Tesoreria', Admin: 'Total', Cajero: 'Arqueo', Auditor: 'Lectura' },
-                                    { Capa: 'Operaciones', Admin: 'Total', Cajero: 'Consulta', Auditor: 'Lectura' }
+                                    { Capa: 'Contabilidad', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura', Motorizado: 'No' },
+                                    { Capa: 'Fiscal', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura', Motorizado: 'No' },
+                                    { Capa: 'Tesoreria', Admin: 'Total', Cajero: 'Arqueo', Auditor: 'Lectura', Motorizado: 'No' },
+                                    { Capa: 'Operaciones/Delivery', Admin: 'Total', Cajero: 'Consulta', Auditor: 'Lectura', Motorizado: 'Rutas/Despacho' }
                                 ], 'Matriz_RBAC')}
                             />
                         </div>
@@ -2877,16 +2878,17 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-center">Cajero POS</th>
                                         <th className="px-3 py-3 text-center">Auditor Fiscal</th>
                                         <th className="px-3 py-3 text-center">Almacenista</th>
+                                        <th className="px-3 py-3 text-center">Motorizado Flota</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
                                     {[
-                                        { layer: 'Capa 1: Contabilidad Formal', admin: true, cashier: false, auditor: true, warehouse: false },
-                                        { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: true, cashier: false, auditor: true, warehouse: false },
-                                        { layer: 'Capa 3: Tesorería & Arqueos', admin: true, cashier: true, auditor: true, warehouse: false },
-                                        { layer: 'Capa 4: Operaciones & Kardex', admin: true, cashier: false, auditor: true, warehouse: true },
-                                        { layer: 'Capa 5: BI / Dashboards', admin: true, cashier: true, auditor: true, warehouse: true },
-                                        { layer: 'Capa 6: Administración & Logs', admin: true, cashier: false, auditor: true, warehouse: false },
+                                        { layer: 'Capa 1: Contabilidad Formal', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
+                                        { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
+                                        { layer: 'Capa 3: Tesorería & Arqueos', admin: true, cashier: true, auditor: true, warehouse: false, courier: false },
+                                        { layer: 'Capa 4: Operaciones & Delivery', admin: true, cashier: false, auditor: true, warehouse: true, courier: true },
+                                        { layer: 'Capa 5: BI / Dashboards', admin: true, cashier: true, auditor: true, warehouse: true, courier: false },
+                                        { layer: 'Capa 6: Administración & Logs', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
                                     ].map((row, rIdx) => (
                                         <tr key={rIdx} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                                             <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">{row.layer}</td>
@@ -2894,6 +2896,7 @@ export default function Reports() {
                                             <td className="px-3 py-3 text-center font-bold">{row.cashier ? <span className="text-emerald-600">Operativo ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
                                             <td className="px-3 py-3 text-center font-bold text-blue-600">{row.auditor ? 'Solo Lectura ✓' : '—'}</td>
                                             <td className="px-3 py-3 text-center font-bold">{row.warehouse ? <span className="text-emerald-600">Almacén ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
+                                            <td className="px-3 py-3 text-center font-bold">{row.courier ? <span className="text-amber-600">Delivery ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
                                         </tr>
                                     ))}
                                 </tbody>

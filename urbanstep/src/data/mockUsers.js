@@ -7,6 +7,10 @@ export const mockUsers = [
     { id: 'u2', name: 'Carlos Pérez', email: 'cajero1@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 1', active: true },
     { id: 'u3', name: 'María González', email: 'cajero2@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 2', active: true },
     { id: 'u4', name: 'José Rodríguez', email: 'cajero3@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 3', active: true },
+    { id: 'u-mot1', name: 'Carlos Mendoza', email: 'motorizado1@urbanstep.com', password: 'moto123', role: 'Motorizado', branch: 'Sede Barquisimeto', phone: '0412-5551234', vehicle: 'Bera SBR 150 Azul', plate: 'AB1C23D', rating: 4.9, deliveriesCount: 142, active: true },
+    { id: 'u-mot2', name: 'Pedro Yépez', email: 'motorizado2@urbanstep.com', password: 'moto123', role: 'Motorizado', branch: 'Sede Barquisimeto', phone: '0414-9876543', vehicle: 'Keeway Horse 150 Rojo', plate: 'XY9Z87W', rating: 4.8, deliveriesCount: 98, active: true },
+    { id: 'u-mot3', name: 'Roberto Gómez', email: 'motorizado3@urbanstep.com', password: 'moto123', role: 'Motorizado', branch: 'Sede Barquisimeto', phone: '0416-5554321', vehicle: 'Suzuki AX4 115 Negro', plate: 'JK4M56N', rating: 5.0, deliveriesCount: 215, active: true },
+    { id: 'u-mot4', name: 'Juan Alvarado', email: 'motorizado4@urbanstep.com', password: 'moto123', role: 'Motorizado', branch: 'Sede Barquisimeto', phone: '0424-7778899', vehicle: 'Bera Merú 150 Blanco', plate: 'CD5E67F', rating: 4.9, deliveriesCount: 76, active: true },
 ];
 
 /**
