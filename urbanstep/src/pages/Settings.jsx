@@ -140,8 +140,11 @@ export default function Settings() {
         notes: 'Aperturado por Administrador General'
     });
 
-    // Keep cajas and users in sync
+    // Keep cajas and users in sync with Supabase Cloud
     useEffect(() => {
+        cashRegisterService.fetchAll().then(fresh => setCajas(fresh)).catch(() => {});
+        userService.fetchAll().then(fresh => setUsers(fresh)).catch(() => {});
+
         const cajaHandler = () => setCajas(cashRegisterService.getAll());
         const userHandler = () => setUsers(userService.getAll());
         window.addEventListener('cash_registers_changed', cajaHandler);
@@ -611,6 +614,27 @@ DELETE FROM clientes WHERE id <> 'publico';
         }
     };
 
+    const handleDeleteUser = async (id) => {
+        const target = users.find(u => u.id === id);
+        if (!target) return;
+
+        if (target.id === user?.id) {
+            toast.error('No puedes eliminar tu propia cuenta en sesión activa');
+            return;
+        }
+
+        if (window.confirm(`¿Estás seguro de eliminar permanentemente al usuario "${target.name}" (${target.role}) de Supabase Cloud? Esta acción no se puede deshacer.`)) {
+            try {
+                await userService.delete(id, user);
+                const fresh = await userService.fetchAll();
+                setUsers(fresh);
+                toast.success(`Usuario ${target.name} eliminado`);
+            } catch (err) {
+                toast.error(err.message);
+            }
+        }
+    };
+
     // Apertura de Caja ejecutada por el Administrador
     const handleOpenAdminShiftModal = (preselectedCajaId = null, preselectedCashierId = null) => {
         const caja = (preselectedCajaId && cajas.find(c => c.id === preselectedCajaId)) || cajas.find(c => c.active) || cajas[0];
@@ -1034,6 +1058,14 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                             className="px-2.5 py-1 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                                                         >
                                                             Editar
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteUser(u.id)}
+                                                            className="p-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                                                            title="Eliminar usuario"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
                                                 </td>

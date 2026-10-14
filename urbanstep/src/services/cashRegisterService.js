@@ -11,12 +11,8 @@ const mapCajaFromDb = (c) => ({
     updatedAt: c.actualizada_el
 });
 
-// Semilla en memoria para disponibilidad síncrona en primer renderizado
-let _cachedRegisters = [
-    { id: 'caja-1', name: 'Caja 1 - Principal', location: 'Área de Cobro Principal', pin: '1234', active: true },
-    { id: 'caja-2', name: 'Caja 2 - Express', location: 'Área Express y Retiro', pin: '1234', active: true },
-    { id: 'caja-3', name: 'Caja 3 - Planta Alta', location: 'Planta Alta', pin: '1234', active: true }
-];
+// Caché reactiva sincronizada 100% con la tabla 'cajas' en Supabase Cloud
+let _cachedRegisters = [];
 
 // Carga inicial reactiva desde Supabase en cuanto el módulo se carga
 const initLoadFromSupabase = async () => {
@@ -40,7 +36,7 @@ const initLoadFromSupabase = async () => {
 };
 
 if (typeof window !== 'undefined') {
-    setTimeout(initLoadFromSupabase, 10);
+    initLoadFromSupabase();
 }
 
 export const cashRegisterService = {

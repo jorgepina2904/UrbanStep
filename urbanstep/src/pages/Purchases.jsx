@@ -232,6 +232,19 @@ export default function Purchases() {
         }
     };
 
+    const handleDeleteSupplier = async (supId, supName) => {
+        if (!window.confirm(`¿Estás seguro de que deseas eliminar al proveedor "${supName}"? Esta acción se sincronizará con Supabase.`)) {
+            return;
+        }
+        try {
+            await purchaseService.deleteSupplier(supId);
+            toast.success(`Proveedor "${supName}" eliminado exitosamente`);
+            await loadData();
+        } catch (err) {
+            toast.error('Error al eliminar proveedor: ' + err.message);
+        }
+    };
+
     // Total stats
     const totalPurchasedUsd = purchases.reduce((s, p) => s + (p.totalUsd || 0), 0);
     const totalUnitsReceived = purchases.reduce((s, p) => s + (p.itemsCount || 0), 0);
@@ -544,27 +557,37 @@ export default function Purchases() {
                                     <span className="text-[11px] text-gray-400 font-mono">
                                         ID: {sup.id}
                                     </span>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setEditingSupplier(sup);
-                                            setSupplierForm({
-                                                rif: sup.rif || '',
-                                                companyName: sup.name || sup.companyName || '',
-                                                commercialName: sup.commercialName || '',
-                                                contactName: sup.contactName || '',
-                                                phone: sup.phone || '',
-                                                email: sup.email || '',
-                                                address: sup.address || '',
-                                                city: sup.city || 'Caracas',
-                                                creditDays: String(sup.creditDays || '15')
-                                            });
-                                            setShowSupplierModal(true);
-                                        }}
-                                        className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-                                    >
-                                        Editar
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingSupplier(sup);
+                                                setSupplierForm({
+                                                    rif: sup.rif || '',
+                                                    companyName: sup.name || sup.companyName || '',
+                                                    commercialName: sup.commercialName || '',
+                                                    contactName: sup.contactName || '',
+                                                    phone: sup.phone || '',
+                                                    email: sup.email || '',
+                                                    address: sup.address || '',
+                                                    city: sup.city || 'Caracas',
+                                                    creditDays: String(sup.creditDays || '15')
+                                                });
+                                                setShowSupplierModal(true);
+                                            }}
+                                            className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                                        >
+                                            Editar
+                                        </button>
+                                        <span className="text-gray-300 dark:text-gray-600">•</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteSupplier(sup.id, sup.name || sup.companyName)}
+                                            className="text-xs font-semibold text-rose-500 hover:text-rose-700 hover:underline"
+                                        >
+                                            Eliminar
+                                        </button>
+                                    </div>
                                 </div>
                             </Card>
                         ))}

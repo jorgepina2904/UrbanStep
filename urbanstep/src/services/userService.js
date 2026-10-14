@@ -1,26 +1,28 @@
-import { mockUsers as defaultUsers } from '../data/mockUsers';
 import { auditService } from './auditService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const mapDbUser = (u) => ({
-    id: u.id,
-    name: u.nombre_completo,
-    email: u.correo,
-    role: u.rol === 'admin' ? 'Admin' : (u.rol === 'gerente' ? 'Gerente' : 'Cajero'),
-    branch: u.sucursal || 'Sede Principal',
-    assignedCaja: u.caja_asignada_id || '',
-    active: u.activo !== undefined ? u.activo : true,
-    createdAt: u.creado_el,
-    updatedAt: u.actualizado_el,
-    password: u.rol === 'admin' ? 'admin123' : 'cajero123'
-});
+const mapDbUser = (u) => {
+    let assigned = u.caja_asignada_id || '';
+    if (assigned === 'caja-1') assigned = 'Caja 1';
+    else if (assigned === 'caja-2') assigned = 'Caja 2';
+    else if (assigned === 'caja-3') assigned = 'Caja 3';
 
-// Semilla inicial en memoria para arranque instantáneo
-let _cachedUsers = defaultUsers.map(u => ({
-    ...u,
-    active: u.active !== undefined ? u.active : true,
-    createdAt: new Date().toISOString()
-}));
+    return {
+        id: u.id,
+        name: u.nombre_completo,
+        email: u.correo,
+        role: u.rol === 'admin' ? 'Admin' : (u.rol === 'gerente' ? 'Gerente' : 'Cajero'),
+        branch: u.sucursal || 'Sede Principal',
+        assignedCaja: assigned,
+        active: u.activo !== undefined ? u.activo : true,
+        createdAt: u.creado_el,
+        updatedAt: u.actualizado_el,
+        password: u.rol === 'admin' ? 'admin2914' : 'cajero123'
+    };
+};
+
+// Caché reactiva sincronizada 100% con la tabla 'usuarios' en Supabase Cloud
+let _cachedUsers = [];
 
 const initUsersFromCloud = async () => {
     if (isSupabaseConfigured() && supabase) {
@@ -43,7 +45,7 @@ const initUsersFromCloud = async () => {
 };
 
 if (typeof window !== 'undefined') {
-    setTimeout(initUsersFromCloud, 10);
+    initUsersFromCloud();
 }
 
 export const userService = {
@@ -246,6 +248,49 @@ export const userService = {
      */
     assignCaja: async (userId, cajaName, adminUser = null) => {
         return userService.update(userId, { assignedCaja: cajaName }, adminUser);
+    },
+
+    /**
+     * Eliminar usuario de Supabase Cloud
+     */
+    delete: async (id, adminUser = null) => {
+        const user = _cachedUsers.find(u => u.id === id);
+        if (!user) throw new Error('Usuario no encontrado');
+
+        if (user.role === 'Admin' && _cachedUsers.filter(u => u.role === 'Admin' && u.active).length <= 1) {
+            throw new Error('No es posible eliminar al único Administrador activo del sistema.');
+        }
+        if (adminUser && adminUser.id === id) {
+            throw new Error('No puedes eliminar tu propia cuenta en sesión activa.');
+        }
+
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase.from('usuarios').delete().eq('id', id);
+            if (error) {
+                console.error('Error eliminando usuario en Supabase:', error);
+                throw new Error(`Error en base de datos al eliminar usuario: ${error.message}`);
+            }
+        }
+
+        _cachedUsers = _cachedUsers.filter(u => u.id !== id);
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('users_changed', { detail: _cachedUsers }));
+        }
+
+        auditService.log({
+            userId: adminUser?.id,
+            userName: adminUser?.name || 'Administrador General',
+            userRole: adminUser?.role || 'Admin',
+            action: 'delete',
+            actionLabel: `Eliminó el usuario ${user.name} (${user.role})`,
+            module: 'settings',
+            entityType: 'user',
+            entityId: id,
+            details: { name: user.name, email: user.email, role: user.role }
+        });
+
+        return true;
     }
 };
 

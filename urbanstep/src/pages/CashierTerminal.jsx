@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import Modal from '../ui/Modal';
@@ -19,6 +20,7 @@ import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
 import { auditService } from '../services/auditService';
+import { getColorHex } from '../utils/shoeSizes';
 import { VENEZUELA_BANKS, SHIPPING_CARRIERS } from '../data/venezuelaData';
 import {
     Store,
@@ -541,87 +543,171 @@ export default function CashierTerminal() {
                                 const isSelectedSizeOut = sizeCount <= 0;
 
                                 return (
-                                    <div
+                                    <Card
                                         key={product.id}
-                                        className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col justify-between group shadow-sm relative min-h-[380px]"
+                                        hover
+                                        className="p-3.5 flex flex-col justify-between group overflow-hidden transition-all duration-300"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            {/* Shoe Image Thumbnail */}
                                             {/* Shoe Image Thumbnail — Full Studio Frame */}
-                                            <div className="h-44 sm:h-48 w-full shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 mb-2.5 overflow-hidden relative flex items-center justify-center border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
-                                                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.08)_0%,transparent_70%)] pointer-events-none" />
-                                                {imgSrc ? (
-                                                    <img
-                                                        src={imgSrc}
-                                                        alt={product.name}
-                                                        className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
-                                                        onError={(e) => { e.target.style.display = 'none'; }}
-                                                    />
-                                                ) : null}
-                                                <span className={`text-4xl relative z-10 ${imgSrc ? 'hidden' : 'flex'}`}>👟</span>
-                                                <div className="absolute top-2 left-2 z-20 flex flex-col gap-1">
-                                                    <Badge variant={product.stock > 5 ? 'success' : 'warning'} className="text-[10px] shadow-sm font-bold">
-                                                        {product.stock} disp.
-                                                    </Badge>
+                                            <div className="w-full h-48 shrink-0 rounded-xl bg-gradient-to-b from-gray-50 to-gray-100/90 dark:from-gray-800/90 dark:to-gray-900 flex items-center justify-center mb-2.5 relative overflow-hidden border border-gray-200/80 dark:border-gray-700/80 group-hover:border-blue-500/40 transition-all shadow-sm">
+                                                {/* Ambient spotlight */}
+                                                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.12)_0%,transparent_70%)] pointer-events-none" />
+
+                                                {(() => {
+                                                    const activeCardImg = productService.getColorVariantImage(product, currentColor) || product.imageUrl || product.image;
+                                                    return activeCardImg ? (
+                                                        <img
+                                                            key={`${product.id}-${currentColor}`}
+                                                            src={activeCardImg}
+                                                            alt={`${product.name} - ${currentColor}`}
+                                                            className="w-full h-full max-h-full max-w-full object-contain p-2 filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.22)] group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 relative z-10"
+                                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                                        />
+                                                    ) : null;
+                                                })()}
+                                                <span className={`text-4xl relative z-10 ${(productService.getColorVariantImage(product, currentColor) || product.imageUrl || product.image) ? 'hidden' : 'flex'}`}>👟</span>
+
+                                                {/* Top-left Stock Status Badge matching Products.jsx */}
+                                                <div className="absolute top-2 left-2 z-20">
+                                                    {product.stock <= 0 ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 shadow-xs">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                                            Agotado
+                                                        </span>
+                                                    ) : product.stock <= (parseInt(product.minStock) || 3) ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 shadow-xs">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                                            Bajo Stock ({product.stock})
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 shadow-xs">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                            En Stock ({product.stock})
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <span className="absolute top-2 right-2 z-20 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm shadow-sm">
+
+                                                {/* Top-right SKU Tag */}
+                                                <span className="absolute top-2 right-2 z-20 text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/75 text-white backdrop-blur-sm border border-white/10 shadow-sm">
                                                     {product.sku}
                                                 </span>
+
+                                                {/* Floating Vertical Circular Color Swatches Pill */}
+                                                {availableColors.length > 0 && (
+                                                    <div 
+                                                        className="absolute bottom-2 right-2 z-20 bg-black/60 hover:bg-black/85 backdrop-blur-md p-1 rounded-full flex flex-col items-center gap-1 border border-white/20 shadow-md transition-all"
+                                                        title={`${availableColors.length} colores disponibles: ${availableColors.join(', ')}`}
+                                                    >
+                                                        {availableColors.slice(0, 4).map((col) => {
+                                                            const hex = getColorHex(col);
+                                                            const isColSelected = (currentColor || '').toLowerCase() === col.toLowerCase();
+                                                            return (
+                                                                <button
+                                                                    key={col}
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedColor({ ...selectedColor, [product.id]: col });
+                                                                    }}
+                                                                    onMouseEnter={() => setSelectedColor({ ...selectedColor, [product.id]: col })}
+                                                                    title={`Ver foto de ${col}`}
+                                                                    className={`w-3 h-3 rounded-full border transition-transform hover:scale-125 ${
+                                                                        isColSelected 
+                                                                            ? 'ring-2 ring-blue-400 border-white scale-110 shadow-sm' 
+                                                                            : 'border-white/60 opacity-85 hover:opacity-100'
+                                                                    }`}
+                                                                    style={{ background: hex }}
+                                                                />
+                                                            );
+                                                        })}
+                                                        {availableColors.length > 4 && (
+                                                            <span className="w-3 h-3 rounded-full bg-gray-800 text-white text-[7px] font-black flex items-center justify-center border border-white/30">
+                                                                +{availableColors.length - 4}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
 
-                                            <h4 className="font-extrabold text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                                                {product.name}
-                                            </h4>
-                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                                                {product.brand} • {product.category}
-                                            </p>
+                                            {/* Product Meta & Title */}
+                                            <div className="space-y-0.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                                                        {product.brand}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400 dark:text-gray-500">• {product.category || 'Sneaker'}</span>
+                                                    {product.sizeCategory && (
+                                                        <span className="ml-auto text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50">
+                                                            {product.sizeCategory}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h4 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" title={product.name}>
+                                                    {product.name}
+                                                </h4>
+                                            </div>
 
                                             {/* Model Color Options */}
                                             {availableColors.length > 1 ? (
-                                                <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
-                                                    <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                                                        <span>Color:</span>
-                                                        <span className="text-blue-600 dark:text-blue-400 font-bold truncate max-w-[120px]">{currentColor}</span>
+                                                <div className="mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                                                    <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                                                        <span className="text-gray-400">Color:</span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span 
+                                                                className="w-2 h-2 rounded-full border border-gray-300 dark:border-gray-600 inline-block shadow-xs"
+                                                                style={{ background: getColorHex(currentColor) }} 
+                                                            />
+                                                            <span className="text-blue-600 dark:text-blue-400 font-bold truncate max-w-[120px]">{currentColor}</span>
+                                                        </div>
                                                     </div>
                                                     <div className="flex gap-1 overflow-x-auto pb-0.5 max-w-full scrollbar-none no-scrollbar">
                                                         {availableColors.map((col) => {
-                                                            const isColSelected = currentColor === col;
+                                                            const isColSelected = (currentColor || '').toLowerCase() === col.toLowerCase();
+                                                            const hex = getColorHex(col);
                                                             return (
                                                                 <button
                                                                     key={col}
                                                                     type="button"
                                                                     onClick={() => setSelectedColor({ ...selectedColor, [product.id]: col })}
-                                                                    className={`px-2 py-0.5 text-[9px] sm:text-[10px] rounded-md font-bold shrink-0 transition-all ${
+                                                                    className={`px-2 py-0.5 text-[10px] rounded-lg font-semibold shrink-0 transition-all flex items-center gap-1 border ${
                                                                         isColSelected
-                                                                            ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
-                                                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-500'
+                                                                            : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
                                                                     }`}
                                                                 >
-                                                                    {col}
+                                                                    <span 
+                                                                        className="w-2 h-2 rounded-full border border-white/60 shrink-0" 
+                                                                        style={{ background: hex }} 
+                                                                    />
+                                                                    <span>{col}</span>
                                                                 </button>
                                                             );
                                                         })}
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                                                    <span className="truncate">{currentColor}</span>
+                                                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                                    <span 
+                                                        className="w-2 h-2 rounded-full shrink-0 border border-gray-300 dark:border-gray-600" 
+                                                        style={{ background: getColorHex(currentColor) }}
+                                                    />
+                                                    <span className="font-medium truncate">{currentColor}</span>
                                                 </div>
                                             )}
 
                                             {/* Size Selector with Per-Color Stock Breakdown */}
                                             {product.sizes && product.sizes.length > 0 && (
                                                 <div className="mt-2">
-                                                    <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                                                        <span>Tallas ({currentColor}):</span>
-                                                        <span className={!isSelectedSizeOut ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : "text-rose-500 font-extrabold"}>
+                                                    <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                                                        <span className="text-gray-400">Tallas ({currentColor}):</span>
+                                                        <span className={!isSelectedSizeOut ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-rose-500 font-bold"}>
                                                             {!isSelectedSizeOut 
                                                                 ? `${sizeCount} disp.` 
                                                                 : 'Agotado'}
                                                         </span>
                                                     </div>
-                                                    <div className="flex gap-1 overflow-x-auto pb-1 max-w-full scrollbar-none no-scrollbar">
+                                                    <div className="flex gap-1 overflow-x-auto pb-0.5 max-w-full scrollbar-none no-scrollbar">
                                                         {product.sizes.map((s) => {
                                                             const sStock = currentVariantStock ? (currentVariantStock[s] ?? 0) : (product.sizeStock ? (product.sizeStock[s] ?? 0) : 0);
                                                             const isOutOfStock = sStock <= 0;
@@ -632,14 +718,14 @@ export default function CashierTerminal() {
                                                                     type="button"
                                                                     onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
                                                                     title={sStock > 0 ? `${sStock} pares disponibles de talla ${s} en ${currentColor}` : `Talla ${s} agotada`}
-                                                                    className={`px-1.5 py-0.5 text-[10px] sm:text-[11px] rounded-md font-bold shrink-0 transition-colors flex items-center gap-0.5 ${
+                                                                    className={`px-2 py-0.5 text-[10px] rounded-lg font-bold shrink-0 transition-colors flex items-center gap-1 border ${
                                                                         isSelected
                                                                             ? isOutOfStock
-                                                                                ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500'
-                                                                                : 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
+                                                                                ? 'bg-rose-600 text-white border-rose-600 shadow-sm ring-1 ring-rose-500'
+                                                                                : 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-500'
                                                                             : isOutOfStock
-                                                                                ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through opacity-60'
-                                                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                                                ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-400 line-through opacity-50'
+                                                                                : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                                     }`}
                                                                 >
                                                                     <span>{s}</span>
@@ -655,12 +741,12 @@ export default function CashierTerminal() {
                                         </div>
 
                                         {/* Pricing & Fast Add */}
-                                        <div className="relative z-20 mt-3 pt-2.5 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0 bg-inherit">
+                                        <div className="relative z-20 mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-700/80 flex items-center justify-between gap-2 shrink-0">
                                             <div className="min-w-0 pr-1">
-                                                <span className="text-sm sm:text-base font-black text-gray-900 dark:text-white block leading-tight truncate">
+                                                <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white block leading-tight truncate tracking-tight">
                                                     {formatUSD(product.price)}
                                                 </span>
-                                                <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block truncate">
+                                                <span className="text-[10px] sm:text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 block truncate">
                                                     {formatBs(toBs(product.price))}
                                                 </span>
                                             </div>
@@ -680,12 +766,12 @@ export default function CashierTerminal() {
                                                         size="sm"
                                                         variant={isButtonDisabled ? "secondary" : "primary"}
                                                         disabled={isButtonDisabled}
-                                                        className={`flex items-center gap-1 font-bold shadow-md shrink-0 px-3.5 py-1.5 text-xs uppercase tracking-wide whitespace-nowrap active:scale-95 ${
+                                                        className={`flex items-center gap-1.5 font-bold shadow-md shrink-0 px-3.5 py-1.5 text-xs uppercase tracking-wide whitespace-nowrap rounded-xl active:scale-95 transition-all ${
                                                             isSelectedSizeOut
                                                                 ? 'opacity-50 cursor-not-allowed bg-gray-200 dark:bg-gray-800 text-gray-400'
                                                                 : isMaxInCart
                                                                     ? 'opacity-70 cursor-not-allowed bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                                                                    : 'shadow-blue-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
+                                                                    : 'shadow-blue-500/20 bg-blue-600 hover:bg-blue-500 text-white'
                                                         }`}
                                                         onClick={() => handleAddToCart(product)}
                                                     >
@@ -695,7 +781,7 @@ export default function CashierTerminal() {
                                                 );
                                             })()}
                                         </div>
-                                    </div>
+                                    </Card>
                                 );
                             })
                         )}

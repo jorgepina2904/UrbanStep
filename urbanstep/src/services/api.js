@@ -1,6 +1,3 @@
-import { mockUsers } from '../data/mockUsers';
-import { mockSuppliers } from '../data/mockPurchases';
-
 // Cliente general por defecto para venta en mostrador
 export const DEFAULT_PUBLIC_CUSTOMER = {
     id: 'publico',
@@ -24,12 +21,12 @@ export const DEFAULT_PUBLIC_CUSTOMER = {
  */
 class InMemoryDB {
     constructor() {
-        this.users = [...mockUsers];
+        this.users = [];
         this.products = [];
         this.customers = [DEFAULT_PUBLIC_CUSTOMER];
         this.sales = [];
         this.purchases = [];
-        this.suppliers = [...mockSuppliers];
+        this.suppliers = [];
     }
 
     // No-op seguro para llamadas legacy: no contamina localStorage

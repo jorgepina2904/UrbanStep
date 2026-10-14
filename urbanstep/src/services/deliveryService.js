@@ -4,14 +4,58 @@
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
+// Flota oficial de motorizados UrbanStep (Barquisimeto / Cabudare)
+export const FLEET_DRIVERS = [
+    {
+        id: 'mot-1',
+        name: 'Carlos Mendoza',
+        phone: '0412-5551234',
+        vehicle: 'Bera SBR 150 Azul',
+        plate: 'AB1C23D',
+        rating: 4.9,
+        deliveriesCount: 142,
+        active: true
+    },
+    {
+        id: 'mot-2',
+        name: 'Pedro Yépez',
+        phone: '0414-9876543',
+        vehicle: 'Keeway Horse 150 Rojo',
+        plate: 'XY9Z87W',
+        rating: 4.8,
+        deliveriesCount: 98,
+        active: true
+    },
+    {
+        id: 'mot-3',
+        name: 'Roberto Gómez',
+        phone: '0416-5554321',
+        vehicle: 'Suzuki AX4 115 Negro',
+        plate: 'JK4M56N',
+        rating: 5.0,
+        deliveriesCount: 215,
+        active: true
+    },
+    {
+        id: 'mot-4',
+        name: 'Juan Alvarado',
+        phone: '0424-7778899',
+        vehicle: 'Bera Merú 150 Blanco',
+        plate: 'CD5E67F',
+        rating: 4.9,
+        deliveriesCount: 76,
+        active: true
+    }
+];
+
 // Configuración por defecto (se puede sobreescribir desde store_settings)
 const DEFAULT_CONFIG = {
     baseRateUsd: 2.00,      // Tarifa base en USD
     perKmUsd: 0.40,          // Costo por km en Lara
     maxDistanceKm: 99999,    // Deslimitado: cubre todo el Estado Lara y Venezuela
-    storeLat: 10.068330144675503,  // Latitud Exacta Tienda UrbanStep
+    storeLat: 10.068330144675503,  // Latitud Exacta Tienda UrbanStep (C.C. Las Trinitarias)
     storeLng: -69.28499381534304, // Longitud Exacta Tienda UrbanStep
-    storeAddress: 'UrbanStep Store, Barquisimeto, Edo. Lara, Venezuela',
+    storeAddress: 'UrbanStep Store, C.C. Las Trinitarias, Barquisimeto, Edo. Lara, Venezuela',
 };
 
 /**
@@ -307,6 +351,7 @@ export const deliveryService = {
             total: deliveries.length,
             todayCount: todayDeliveries.length,
             pendientes: deliveries.filter(d => d.status === 'pendiente').length,
+            asignados: deliveries.filter(d => d.status === 'asignado').length,
             enCamino: deliveries.filter(d => d.status === 'en_camino').length,
             entregados: deliveries.filter(d => d.status === 'entregado').length,
             cancelados: deliveries.filter(d => d.status === 'cancelado').length,
@@ -317,6 +362,55 @@ export const deliveryService = {
                 ? deliveries.reduce((sum, d) => sum + (d.distanceKm || 0), 0) / deliveries.length
                 : 0,
         };
+    },
+
+    /**
+     * Obtiene los productos (calzados) asociados a la venta del delivery desde Supabase Cloud
+     */
+    async getDeliveryOrderItems(saleId) {
+        if (!saleId) return [];
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('detalles_venta')
+                    .select('*')
+                    .eq('venta_id', saleId);
+
+                if (!error && Array.isArray(data) && data.length > 0) {
+                    return data.map(i => ({
+                        productId: i.producto_id,
+                        name: i.nombre_producto,
+                        brand: i.marca || 'UrbanStep',
+                        size: i.talla,
+                        color: i.color,
+                        quantity: Number(i.cantidad) || 1,
+                        price: Number(i.precio_unitario_usd) || 0,
+                        subtotal: Number(i.subtotal_usd) || 0
+                    }));
+                }
+            } catch (err) {
+                console.warn('Aviso buscando detalles_venta en Supabase:', err);
+            }
+        }
+        return [];
+    },
+
+    /**
+     * Elimina un registro de delivery de Supabase Cloud
+     */
+    async deleteDelivery(deliveryId) {
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase.from('envios').delete().eq('id', deliveryId);
+            if (error) {
+                console.error('Error eliminando envio en Supabase:', error);
+                throw new Error(`Error en base de datos al eliminar entrega: ${error.message}`);
+            }
+        }
+        _cachedDeliveries = _cachedDeliveries.filter(d => d.id !== deliveryId);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('deliveries_updated', { detail: _cachedDeliveries }));
+        }
+        return true;
     },
 
     /**

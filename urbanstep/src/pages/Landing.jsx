@@ -9,6 +9,7 @@ import { userService } from '../services/userService';
 import { customerService } from '../services/customerService';
 import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
+import { deliveryService } from '../services/deliveryService';
 import { getDefaultRoute } from '../utils/permissions';
 import {
     Store,
@@ -487,6 +488,28 @@ export default function Landing() {
             };
 
             const createdSale = await saleService.create(orderPayload);
+
+            // Register delivery record in Supabase Cloud
+            if (shippingOption === 'delivery_lara' || shippingOption === 'nacional') {
+                try {
+                    await deliveryService.createDelivery({
+                        saleId: createdSale.id,
+                        customerName,
+                        customerPhone,
+                        destinationAddress: deliveryAddress,
+                        destinationLat: 10.0678,
+                        destinationLng: -69.3474,
+                        distanceKm: shippingOption === 'nacional' ? 350 : 7.2,
+                        deliveryCostUsd: shippingCostUsd,
+                        deliveryCostBs: Number(((totalCartUsd - subtotal) * rate).toFixed(2)),
+                        estimatedMinutes: shippingOption === 'nacional' ? 1440 : 35,
+                        specialInstructions: `${shippingOption === 'nacional' ? 'Envío Nacional Encomienda' : 'Delivery Local Lara'}. Notas: ${checkoutForm.notes || 'Sin instrucciones'}`,
+                    });
+                } catch (delErr) {
+                    console.warn('Aviso registrando delivery de landing:', delErr);
+                }
+            }
+
             clearCart();
             setIsCheckoutModalOpen(false);
             setIsCartOpen(false);

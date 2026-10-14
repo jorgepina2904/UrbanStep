@@ -225,8 +225,8 @@ export default function Products() {
         minStock: '3', 
         color: 'Negro', 
         colors: ['Negro'],
-        supplierId: 'PRV-101',
-        supplierName: 'Distribuidora Deportiva Ávila C.A.',
+        supplierId: '',
+        supplierName: '',
         colorVariants: [],
         description: '', 
         imageUrl: '',
@@ -273,7 +273,7 @@ export default function Products() {
         const defaultCat = 'caballero';
         const defaultSizes = getDefaultSizes(defaultCat);
         const initialVariants = ensureColorVariants(['Negro'], defaultSizes, null, ensureSizeStock(defaultSizes, 0));
-        const initialSupplier = suppliers[0] || { id: 'PRV-101', name: 'Distribuidora Deportiva Ávila C.A.' };
+        const initialSupplier = suppliers[0] || null;
 
         setForm({
             name: '',
@@ -285,8 +285,8 @@ export default function Products() {
             minStock: '3',
             color: 'Negro',
             colors: ['Negro'],
-            supplierId: initialSupplier.id,
-            supplierName: initialSupplier.name || initialSupplier.companyName || 'Distribuidora Deportiva Ávila C.A.',
+            supplierId: initialSupplier?.id || '',
+            supplierName: initialSupplier?.name || initialSupplier?.companyName || '',
             colorVariants: initialVariants,
             description: '',
             imageUrl: '',

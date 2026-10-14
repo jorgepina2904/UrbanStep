@@ -3,7 +3,7 @@
  * Cada cajero tiene credenciales individuales asociadas a una caja específica
  */
 export const mockUsers = [
-    { id: 'u1', name: 'Administrador General', email: 'admin@urbanstep.com', password: 'admin123', role: 'Admin', branch: 'Sede Principal', active: true },
+    { id: 'u1', name: 'Administrador General', email: 'admin@urbanstep.com', password: 'admin2914', role: 'Admin', branch: 'Sede Principal', active: true },
     { id: 'u2', name: 'Carlos Pérez', email: 'cajero1@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 1', active: true },
     { id: 'u3', name: 'María González', email: 'cajero2@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 2', active: true },
     { id: 'u4', name: 'José Rodríguez', email: 'cajero3@urbanstep.com', password: 'cajero123', role: 'Cajero', branch: 'Sede Principal', assignedCaja: 'Caja 3', active: true },

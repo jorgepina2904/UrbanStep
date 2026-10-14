@@ -115,8 +115,8 @@ const mapSupabaseProduct = (row) => {
     const isDeshabilitado = row.estado === 'deshabilitado' || Boolean(row.disabled) || isOutOfStock;
 
     // Proveedor vinculado
-    const supplierId = row.proveedor_id || row.supplierId || 'PRV-101';
-    const supplierName = row.proveedor_nombre || row.supplierName || 'Distribuidora Deportiva Ávila C.A.';
+    const supplierId = row.proveedor_id || row.supplierId || null;
+    const supplierName = row.proveedor_nombre || row.supplierName || (supplierId ? 'Proveedor' : '');
 
     return {
         id: row.id,
@@ -275,8 +275,8 @@ export const productService = {
         const generatedId = productData.id || generateId('PRD');
         const generatedSku = productData.sku || `US-${(productData.brand || 'GEN').substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-        const supplierId = productData.supplierId || 'PRV-101';
-        const supplierName = productData.supplierName || 'Distribuidora Deportiva Ávila C.A.';
+        const supplierId = productData.supplierId || null;
+        const supplierName = productData.supplierName || (supplierId ? 'Proveedor' : '');
 
         const newProduct = {
             id: generatedId,
@@ -427,8 +427,8 @@ export const productService = {
 
         const nextMinStock = productData.minStock !== undefined ? Math.max(1, parseInt(productData.minStock) || 5) : current.minStock;
         const isOutOfStock = nextStock <= 0;
-        const supplierId = productData.supplierId || current.supplierId || 'PRV-101';
-        const supplierName = productData.supplierName || current.supplierName || 'Distribuidora Deportiva Ávila C.A.';
+        const supplierId = productData.supplierId !== undefined ? productData.supplierId : current.supplierId;
+        const supplierName = productData.supplierName !== undefined ? productData.supplierName : current.supplierName;
 
         const updated = {
             ...current,

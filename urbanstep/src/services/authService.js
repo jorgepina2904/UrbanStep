@@ -49,20 +49,21 @@ export const authService = {
       }
     }
 
-    // 2. Autenticación con los usuarios locales del sistema (userService)
+    // 2. Autenticación con los usuarios de la base de datos (userService)
     const storedUsers = userService.getAll();
     const user = storedUsers.find(u => {
       const emailLower = (u.email || '').toLowerCase();
       const alias = (u.email || '').split('@')[0].toLowerCase();
+      const uRole = (u.role || '').toLowerCase();
 
       const matchesIdentifier =
         emailLower === cleanInput ||
         alias === cleanInput ||
-        (cleanInput === 'admin' && u.role === 'Admin') ||
-        (cleanInput === 'cajero' && u.role === 'Cajero' && u.id === 'u2') ||
-        (cleanInput === 'cajero1' && (u.assignedCaja === 'Caja 1' || u.id === 'u2')) ||
-        (cleanInput === 'cajero2' && (u.assignedCaja === 'Caja 2' || u.id === 'u3')) ||
-        (cleanInput === 'cajero3' && (u.assignedCaja === 'Caja 3' || u.id === 'u4'));
+        (cleanInput === 'admin' && uRole === 'admin') ||
+        (cleanInput === 'cajero' && uRole === 'cajero') ||
+        (cleanInput === 'cajero1' && (u.email.includes('cajero1') || u.assignedCaja === 'Caja 1' || u.assignedCaja === 'caja-1')) ||
+        (cleanInput === 'cajero2' && (u.email.includes('cajero2') || u.assignedCaja === 'Caja 2' || u.assignedCaja === 'caja-2')) ||
+        (cleanInput === 'cajero3' && (u.email.includes('cajero3') || u.assignedCaja === 'Caja 3' || u.assignedCaja === 'caja-3'));
 
       if (!matchesIdentifier) return false;
 
@@ -70,17 +71,17 @@ export const authService = {
       const validPasswords = [
         u.password,
         `${alias}123`,
-        u.role.toLowerCase() === 'admin' ? 'admin123' : null,
-        u.role.toLowerCase() === 'cajero' ? 'cajero123' : null,
+        uRole === 'admin' ? 'admin2914' : null,
+        uRole === 'cajero' ? 'cajero123' : null,
       ].filter(Boolean);
 
       return validPasswords.includes(cleanPassword) && u.active;
     });
 
     if (!user) {
-      return { 
-        success: false, 
-        error: 'Credenciales inválidas. Verifica tu correo/usuario y contraseña.' 
+      return {
+        success: false,
+        error: 'Credenciales inválidas. Verifica tu correo/usuario y contraseña.'
       };
     }
 
