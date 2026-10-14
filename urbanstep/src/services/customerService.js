@@ -217,35 +217,27 @@ export const customerService = {
     },
 
     delete: async (id) => {
-        await simulateNetworkDelay(200);
+        await simulateNetworkDelay(100);
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser eliminado');
         const index = db.customers.findIndex(c => c.id === id);
-        if (index === -1) throw new Error('Cliente no encontrado');
 
-        const customer = db.customers[index];
-        // Verificar si posee historial de compras en ventas registradas
-        const hasSales = db.sales.some(s => s.customerId === id);
-        const hasPurchasesCount = (customer.purchasesCount || 0) > 0;
-
-        if (hasSales || hasPurchasesCount) {
-            throw new Error(
-                `No es posible eliminar al cliente "${customer.firstName} ${customer.lastName}" porque posee historial de compras registrado. ` +
-                `Por normativa contable y auditoría, debes deshabilitarlo usando el botón correspondiente.`
-            );
-        }
-
-        db.customers.splice(index, 1);
-        if (isSupabaseConfigured() && supabase) {
-            try {
-                const { error: delErr } = await supabase.from('clientes').delete().eq('id', id);
-                if (delErr) await supabase.from('customers').delete().eq('id', id);
-            } catch (err) {
-                console.warn('Error borrando cliente en Supabase:', err);
+        if (index !== -1) {
+            db.customers.splice(index, 1);
+            if (typeof window !== 'undefined') {
+                db.save('customers');
+                window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
             }
         }
 
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { error: delErr } = await supabase.from('clientes').delete().eq('id', id);
+                if (delErr) {
+                    await supabase.from('clientes').update({ disabled: true }).eq('id', id);
+                }
+            } catch (err) {
+                console.warn('Error borrando cliente en Supabase:', err);
+            }
         }
 
         return true;

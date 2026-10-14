@@ -721,10 +721,14 @@ export default function Products() {
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('¿Eliminar este producto?')) {
+        if (!window.confirm('¿Estás seguro de que deseas eliminar este producto?')) return;
+        try {
             await productService.delete(id);
-            toast.success('Producto eliminado');
+            toast.success('Producto eliminado exitosamente');
             await loadProducts();
+        } catch (err) {
+            console.error('Error al eliminar producto:', err);
+            toast.error(err.message || 'Error al eliminar producto');
         }
     };
 

@@ -290,7 +290,7 @@ export default function Customers() {
                         </Button>
                     )}
                     {canDelete && c.id !== PUBLIC_ID && (
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} title="Eliminar (Protegido si posee historial de compras)">
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(c)} title="Eliminar cliente">
                             <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
                     )}

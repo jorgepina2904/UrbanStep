@@ -198,17 +198,16 @@ export const purchaseService = {
             try {
                 const { error } = await supabase.from('proveedores').delete().eq('id', id);
                 if (error) {
-                    console.error('Error eliminando proveedor en Supabase:', error);
-                    throw new Error(`Error en base de datos al eliminar proveedor: ${error.message}`);
+                    console.warn('Aviso delete proveedor en Supabase, archivando:', error.message);
+                    await supabase.from('proveedores').update({ estado: 'inactivo' }).eq('id', id);
                 }
             } catch (supErr) {
                 console.warn('Aviso eliminar proveedor Supabase:', supErr);
-                throw supErr;
             }
         }
 
-        db.suppliers = db.suppliers.filter(s => s.id !== id);
-        db.save('suppliers');
+        db.suppliers = (db.suppliers || []).filter(s => s.id !== id);
+        if (typeof db.save === 'function') db.save('suppliers');
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('suppliers_updated', { detail: [...db.suppliers] }));

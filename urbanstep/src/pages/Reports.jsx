@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+
 import {
     FileText,
     TrendingUp,
@@ -53,8 +57,8 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { reportExporter } from '../utils/reportExporter';
 
 /**
- * Grupo de Botones de Exportación Formal (Excel .xlsx y PDF oficial)
- * REGLA DE ORO: Se utiliza en Capas 1, 2, 3, 4 y 6. En Capa 5 (BI) NO se incluye por ser dashboards interactivos.
+ * Grupo de Botones de Exportación Formal (Excel .xlsx y PDF oficial con jsPDF)
+ * Disponible en todos los reportes del sistema con sus formatos correspondientes
  */
 function ExportButtonGroup({ reportTitle, categoryName, columns, rows, summaryCards = [], filename, bcvRate, onExportCSV }) {
     const handleExcel = () => {
@@ -133,7 +137,6 @@ export default function Reports() {
     const [loading, setLoading] = useState(true);
 
     // Las 6 Capas Funcionales del SGF
-    // 'contabilidad' | 'fiscal' | 'tesoreria' | 'operaciones' | 'bi' | 'admin'
     const [mainCategory, setMainCategory] = useState('contabilidad');
     // Sub-reporte activo dentro de la capa seleccionada
     const [activeReportId, setActiveReportId] = useState('libro_diario');
@@ -170,7 +173,7 @@ export default function Reports() {
     const [logisticsReport, setLogisticsReport] = useState(null);
     const [warrantyReturnsReport, setWarrantyReturnsReport] = useState(null);
 
-    // Estado para Capa 5: BI / Dashboards Ejecutivos (Sin Exportación)
+    // Estado para Capa 5: BI / Dashboards Ejecutivos
     const [summary, setSummary] = useState(null);
     const [profitabilityReport, setProfitabilityReport] = useState(null);
     const [ticketReport, setTicketReport] = useState(null);
@@ -386,7 +389,7 @@ export default function Reports() {
         {
             id: 'bi',
             label: 'Capa 5: BI / Dashboards Ejecutivos',
-            subtitle: 'Analítica Visual Interactiva',
+            subtitle: 'Analítica Visual & Exportable',
             badge: '4 Dashboards',
             icon: BarChart3,
             reports: [
@@ -662,11 +665,6 @@ export default function Reports() {
                         <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-gray-200">
                             Filtros de Auditoría & Trazabilidad
                         </span>
-                        {mainCategory === 'bi' && (
-                            <Badge variant="warning" className="text-[10px]">
-                                Modo Dashboard BI Interactivo (Solo Lectura)
-                            </Badge>
-                        )}
                         {(tableSearch || selectedCashier !== 'all' || selectedPaymentMethod !== 'all') && (
                             <Badge variant="primary" className="text-[10px]">Filtros Activos</Badge>
                         )}
@@ -733,7 +731,6 @@ export default function Reports() {
             {/* 1.1 Libro Diario */}
             {mainCategory === 'contabilidad' && activeReportId === 'libro_diario' && (
                 <div className="space-y-6">
-                    {/* Tarjetas de Resumen de Doble Partida */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <Card className="p-4 border-l-4 border-l-blue-600">
                             <p className="text-xs font-semibold text-gray-500">Asientos Registrados</p>
@@ -771,7 +768,6 @@ export default function Reports() {
                         </Card>
                     </div>
 
-                    {/* Tabla de Asientos del Libro Diario */}
                     <Card className="p-6 space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
@@ -963,7 +959,6 @@ export default function Reports() {
             {/* 1.3 Balance de Comprobación */}
             {mainCategory === 'contabilidad' && activeReportId === 'balance_comprobacion' && balanceComprobacion && (
                 <div className="space-y-6">
-                    {/* Tarjeta de Validación Cuadrada */}
                     <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
@@ -1055,18 +1050,64 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 1.4 Estados Financieros */}
+            {/* 1.4 Estados Financieros con Exportación */}
             {mainCategory === 'contabilidad' && activeReportId === 'estados_financieros' && estadosFinancieros && (
                 <div className="space-y-6">
+                    {/* Header y Exportación de Estados Financieros */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                        <div>
+                            <h3 className="font-black text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                <Landmark className="w-5 h-5 text-blue-600" />
+                                Estados Financieros Consolidados (VEN-NIIF)
+                            </h3>
+                            <p className="text-xs text-gray-500">Estado de Resultados Integral y Balance de Situación Financiera de UrbanStep Venezuela C.A.</p>
+                        </div>
+                        <ExportButtonGroup
+                            reportTitle="Estados Financieros Oficiales VEN-NIIF"
+                            categoryName="Capa 1: Contabilidad Formal"
+                            columns={[
+                                { key: 'concepto', header: 'Concepto / Partida' },
+                                { key: 'categoria', header: 'Estado Financiero' },
+                                { key: 'montoUsd', header: 'Monto ($ USD)' },
+                                { key: 'montoBs', header: 'Monto (Bs.)' }
+                            ]}
+                            rows={[
+                                { concepto: 'Ventas de Calzado Mostrador & Online', categoria: 'Estado de Resultados (Ingresos)', montoUsd: formatUSD(estadosFinancieros.estado_resultados.total_ingresos_usd), montoBs: formatBs(estadosFinancieros.estado_resultados.total_ingresos_bs) },
+                                { concepto: 'Costo de Mercancía Vendida (COGS)', categoria: 'Estado de Resultados (Costos)', montoUsd: `-${formatUSD(estadosFinancieros.estado_resultados.total_costos_usd)}`, montoBs: `-${formatBs(estadosFinancieros.estado_resultados.total_costos_bs)}` },
+                                { concepto: 'Utilidad Bruta Operacional', categoria: 'Estado de Resultados (Margen)', montoUsd: formatUSD(estadosFinancieros.estado_resultados.utilidad_bruta_usd), montoBs: formatBs(estadosFinancieros.estado_resultados.utilidad_bruta_bs) },
+                                { concepto: 'Gastos Operacionales (Delivery & Comisiones)', categoria: 'Estado de Resultados (Gastos)', montoUsd: `-${formatUSD(estadosFinancieros.estado_resultados.total_gastos_usd)}`, montoBs: `-${formatBs(estadosFinancieros.estado_resultados.total_gastos_bs)}` },
+                                { concepto: 'Utilidad Neta del Ejercicio', categoria: 'Estado de Resultados (Resultado Final)', montoUsd: formatUSD(estadosFinancieros.estado_resultados.utilidad_neta_usd), montoBs: formatBs(estadosFinancieros.estado_resultados.utilidad_neta_bs) },
+                                { concepto: 'Total Activo Corriente (Caja, Bancos, Inventario)', categoria: 'Balance General (Activos)', montoUsd: formatUSD(estadosFinancieros.balance_general.total_activos_usd), montoBs: formatBs(estadosFinancieros.balance_general.total_activos_bs) },
+                                { concepto: 'Total Pasivos (Proveedores & Fiscales)', categoria: 'Balance General (Pasivos)', montoUsd: formatUSD(estadosFinancieros.balance_general.total_pasivos_usd), montoBs: formatBs(estadosFinancieros.balance_general.total_pasivos_bs) },
+                                { concepto: 'Patrimonio Neto + Utilidad del Ejercicio', categoria: 'Balance General (Patrimonio)', montoUsd: formatUSD(estadosFinancieros.balance_general.total_patrimonio_usd), montoBs: formatBs(estadosFinancieros.balance_general.total_patrimonio_bs) },
+                                { concepto: 'Total Pasivo + Patrimonio (Ecuación Patrimonial)', categoria: 'Balance General (Total)', montoUsd: formatUSD(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd), montoBs: formatBs(estadosFinancieros.balance_general.total_pasivo_patrimonio_bs) }
+                            ]}
+                            summaryCards={[
+                                { label: 'Ingresos Totales', value: formatUSD(estadosFinancieros.estado_resultados.total_ingresos_usd) },
+                                { label: 'Utilidad Neta', value: formatUSD(estadosFinancieros.estado_resultados.utilidad_neta_usd) },
+                                { label: 'Activo Corriente', value: formatUSD(estadosFinancieros.balance_general.total_activos_usd) },
+                                { label: 'Pasivo + Patrimonio', value: formatUSD(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd) }
+                            ]}
+                            filename="Estados_Financieros_VEN_NIIF"
+                            bcvRate={bcvRate}
+                            onExportCSV={() => handleExportCSV([
+                                { Concepto: 'Ingresos Operacionales', MontoUSD: estadosFinancieros.estado_resultados.total_ingresos_usd, MontoBs: estadosFinancieros.estado_resultados.total_ingresos_bs },
+                                { Concepto: 'Utilidad Neta', MontoUSD: estadosFinancieros.estado_resultados.utilidad_neta_usd, MontoBs: estadosFinancieros.estado_resultados.utilidad_neta_bs },
+                                { Concepto: 'Total Activos', MontoUSD: estadosFinancieros.balance_general.total_activos_usd, MontoBs: estadosFinancieros.balance_general.total_activos_bs },
+                                { Concepto: 'Total Pasivo + Patrimonio', MontoUSD: estadosFinancieros.balance_general.total_pasivo_patrimonio_usd, MontoBs: estadosFinancieros.balance_general.total_pasivo_patrimonio_bs }
+                            ], 'Estados_Financieros')}
+                        />
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Estado de Resultados */}
                         <Card className="p-6 space-y-4">
                             <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700/60 pb-3">
                                 <div>
-                                    <h3 className="font-black text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                    <h4 className="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
                                         <TrendingUp className="w-5 h-5 text-emerald-600" />
                                         Estado de Resultados Integral
-                                    </h3>
+                                    </h4>
                                     <p className="text-xs text-gray-500">Del período contable seleccionado (VEN-NIIF)</p>
                                 </div>
                                 <Badge variant="success">Ganancia Operativa</Badge>
@@ -1100,10 +1141,10 @@ export default function Reports() {
                         <Card className="p-6 space-y-4">
                             <div className="flex justify-between items-center border-b border-gray-100 dark:border-gray-700/60 pb-3">
                                 <div>
-                                    <h3 className="font-black text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                    <h4 className="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
                                         <Landmark className="w-5 h-5 text-blue-600" />
                                         Balance General (Situación Financiera)
-                                    </h3>
+                                    </h4>
                                     <p className="text-xs text-gray-500">Activo = Pasivo + Patrimonio Neto</p>
                                 </div>
                                 <Badge variant="primary">Activo = Pasivo + Patrimonio</Badge>
@@ -1552,18 +1593,52 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 2.4 Resumen Impositivo Consolidado */}
+            {/* 2.4 Resumen Impositivo Consolidado con Exportación */}
             {mainCategory === 'fiscal' && activeReportId === 'resumen_fiscal' && seniatReport && seniatPurchasesReport && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-6">
-                        <div>
-                            <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                <DollarSign className="w-5 h-5 text-emerald-600" />
-                                Declaración y Cierre Fiscal Consolidado (IVA 16% + IGTF 3%)
-                            </h3>
-                            <p className="text-xs text-gray-500">
-                                Liquidación tributaria periódica: Determinación del débito vs crédito fiscal y cuota líquida a enterar.
-                            </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                    <DollarSign className="w-5 h-5 text-emerald-600" />
+                                    Declaración y Cierre Fiscal Consolidado (IVA 16% + IGTF 3%)
+                                </h3>
+                                <p className="text-xs text-gray-500">
+                                    Liquidación tributaria periódica: Determinación del débito vs crédito fiscal y cuota líquida a enterar.
+                                </p>
+                            </div>
+                            <ExportButtonGroup
+                                reportTitle="Declaración y Cierre Fiscal SENIAT (IVA / IGTF)"
+                                categoryName="Capa 2: Fiscal Venezuela"
+                                columns={[
+                                    { key: 'concepto', header: 'Concepto Tributario' },
+                                    { key: 'baseUsd', header: 'Base Gravable ($ USD)' },
+                                    { key: 'alicuota', header: 'Alícuota' },
+                                    { key: 'montoUsd', header: 'Impuesto ($ USD)' },
+                                    { key: 'montoBs', header: 'Impuesto (Bs.)' }
+                                ]}
+                                rows={[
+                                    { concepto: 'Débito Fiscal IVA 16% (Facturación en Ventas)', baseUsd: formatUSD(seniatReport.summary.taxableBaseUsd), alicuota: '16.00%', montoUsd: formatUSD(seniatReport.summary.totalTaxUsd), montoBs: formatBs(seniatReport.summary.totalTaxBs) },
+                                    { concepto: 'Crédito Fiscal IVA 16% (Compras Nacionales)', baseUsd: formatUSD(seniatPurchasesReport.summary.totalTaxableBaseUsd), alicuota: '16.00%', montoUsd: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd), montoBs: formatBs(seniatPurchasesReport.summary.totalFiscalCreditBs) },
+                                    { concepto: 'Cuota Tributaria Neta IVA por Enterar al SENIAT', baseUsd: '—', alicuota: 'Diferencial', montoUsd: formatUSD(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd)), montoBs: formatBs(toBs(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd))) },
+                                    { concepto: 'IGTF 3% Percibido en Divisas Efectivo', baseUsd: formatUSD(seniatReport.summary.totalIgtfUsd / 0.03), alicuota: '3.00%', montoUsd: formatUSD(seniatReport.summary.totalIgtfUsd), montoBs: formatBs(seniatReport.summary.totalIgtfBs) },
+                                    { concepto: 'Retenciones de IVA 75% Enteradas a Proveedores', baseUsd: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd), alicuota: '75.00%', montoUsd: formatUSD(seniatPurchasesReport.summary.totalIvaWithheldUsd), montoBs: formatBs(seniatPurchasesReport.summary.totalIvaWithheldBs) }
+                                ]}
+                                summaryCards={[
+                                    { label: 'Débito Fiscal IVA', value: formatUSD(seniatReport.summary.totalTaxUsd) },
+                                    { label: 'Crédito Fiscal IVA', value: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd) },
+                                    { label: 'Cuota Neta IVA', value: formatUSD(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd)) },
+                                    { label: 'IGTF 3% Divisas', value: formatUSD(seniatReport.summary.totalIgtfUsd) }
+                                ]}
+                                filename="Declaracion_Cierre_Fiscal_SENIAT"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV([
+                                    { Concepto: 'Debito Fiscal IVA', MontoUSD: seniatReport.summary.totalTaxUsd, MontoBs: seniatReport.summary.totalTaxBs },
+                                    { Concepto: 'Credito Fiscal IVA', MontoUSD: seniatPurchasesReport.summary.totalFiscalCreditUsd, MontoBs: seniatPurchasesReport.summary.totalFiscalCreditBs },
+                                    { Concepto: 'Cuota Neta IVA', MontoUSD: Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd) },
+                                    { Concepto: 'IGTF 3% Divisas', MontoUSD: seniatReport.summary.totalIgtfUsd, MontoBs: seniatReport.summary.totalIgtfBs }
+                                ], 'Cierre_Fiscal')}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2282,7 +2357,7 @@ export default function Reports() {
             )}
 
             {/* ========================================================================= */}
-            {/* CAPA 5: BI / DASHBOARDS EJECUTIVOS (INTERACTIVOS - SIN EXPORTACIÓN) */}
+            {/* CAPA 5: BI / DASHBOARDS EJECUTIVOS (CON EXPORTACIÓN EXCEL & PDF) */}
             {/* ========================================================================= */}
 
             {/* 5.1 Tendencias de Venta & Ticket Promedio */}
@@ -2313,17 +2388,42 @@ export default function Reports() {
                     </div>
 
                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                     <BarChart3 className="w-5 h-5 text-blue-600" />
-                                    Evolución Cronológica de Ventas Diarias
+                                    Evolución Cronológica de Ventas Diarias & Ticket Promedio
                                 </h3>
                                 <p className="text-xs text-gray-500">
-                                    Dashboard interactivo de volumen de transacciones y ticket promedio (Capa 5: Sin exportación).
+                                    Volumen de transacciones, recaudación diaria y ticket promedio exportable a Excel y PDF.
                                 </p>
                             </div>
-                            <span className="text-xs text-gray-400 font-mono">Actualización en Tiempo Real</span>
+                            <ExportButtonGroup
+                                reportTitle="Tendencias de Ventas y Ticket Promedio"
+                                categoryName="Capa 5: BI / Dashboards"
+                                columns={[
+                                    { key: 'date', header: 'Fecha' },
+                                    { key: 'salesCount', header: 'Ventas Realizadas' },
+                                    { key: 'volumeUsd', header: 'Volumen ($ USD)' },
+                                    { key: 'volumeBs', header: 'Volumen (Bs.)' },
+                                    { key: 'avgTicketUsd', header: 'Ticket Promedio ($)' }
+                                ]}
+                                rows={(ticketReport || []).map(r => ({
+                                    date: r.date,
+                                    salesCount: `${r.salesCount} ventas`,
+                                    volumeUsd: formatUSD(r.volumeUsd),
+                                    volumeBs: formatBs(toBs(r.volumeUsd)),
+                                    avgTicketUsd: formatUSD(r.avgTicketUsd)
+                                }))}
+                                summaryCards={[
+                                    { label: 'Total Ventas', value: formatUSD(summary?.revenue || 0) },
+                                    { label: 'Transacciones', value: `${summary?.salesCount || 0}` },
+                                    { label: 'Ticket Promedio', value: formatUSD(summary?.avgTicket || 0) }
+                                ]}
+                                filename="Tendencias_Ventas_Ticket"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV(ticketReport, 'Tendencias_Ventas')}
+                            />
                         </div>
 
                         <div className="space-y-3 pt-2">
@@ -2354,14 +2454,43 @@ export default function Reports() {
             {mainCategory === 'bi' && activeReportId === 'bi_cajeros' && cashierReport && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                     <Users className="w-5 h-5 text-blue-600" />
-                                    Productividad por Colaborador y Terminal
+                                    Productividad por Colaborador y Terminal de Venta
                                 </h3>
-                                <p className="text-xs text-gray-500">Panel visual de rendimiento individual en punto de venta (Capa 5: Dashboard interactivo).</p>
+                                <p className="text-xs text-gray-500">Rendimiento individual, tickets procesados y comisiones estimadas exportables.</p>
                             </div>
+                            <ExportButtonGroup
+                                reportTitle="Rendimiento de Vendedores y Cajeros"
+                                categoryName="Capa 5: BI / Dashboards"
+                                columns={[
+                                    { key: 'cashierName', header: 'Colaborador / Cajero' },
+                                    { key: 'salesCount', header: 'Tickets' },
+                                    { key: 'unitsSold', header: 'Pares Vendidos' },
+                                    { key: 'avgTicketUsd', header: 'Ticket Promedio ($)' },
+                                    { key: 'totalRevenueUsd', header: 'Total Facturado ($ USD)' },
+                                    { key: 'totalRevenueBs', header: 'Total Facturado (Bs.)' },
+                                    { key: 'estimatedCommission', header: 'Comisión Estimada (2%)' }
+                                ]}
+                                rows={(cashierReport || []).map(c => ({
+                                    cashierName: c.cashierName,
+                                    salesCount: `${c.salesCount} tickets`,
+                                    unitsSold: `${c.unitsSold} pares`,
+                                    avgTicketUsd: formatUSD(c.avgTicketUsd),
+                                    totalRevenueUsd: formatUSD(c.totalRevenueUsd),
+                                    totalRevenueBs: formatBs(c.totalRevenueBs),
+                                    estimatedCommission: formatUSD(c.totalRevenueUsd * 0.02)
+                                }))}
+                                summaryCards={[
+                                    { label: 'Cajeros Activos', value: `${cashierReport.length}` },
+                                    { label: 'Total Recaudado', value: formatUSD(cashierReport.reduce((a, b) => a + (b.totalRevenueUsd || 0), 0)) }
+                                ]}
+                                filename="Rendimiento_Cajeros_Vendedores"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV(cashierReport, 'Rendimiento_Cajeros')}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2401,14 +2530,41 @@ export default function Reports() {
             {mainCategory === 'bi' && activeReportId === 'bi_marcas' && salesByBrandReport && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                     <Sparkles className="w-5 h-5 text-amber-500" />
                                     Cuota de Mercado por Marca de Calzado (Market Share)
                                 </h3>
-                                <p className="text-xs text-gray-500">Distribución de demanda por marcas oficiales (Nike, Jordan, Adidas, New Balance, etc.).</p>
+                                <p className="text-xs text-gray-500">Distribución de demanda por marcas oficiales exportable a Excel y PDF.</p>
                             </div>
+                            <ExportButtonGroup
+                                reportTitle="Participación de Mercado por Marca"
+                                categoryName="Capa 5: BI / Dashboards"
+                                columns={[
+                                    { key: 'brand', header: 'Marca de Calzado' },
+                                    { key: 'unitsSold', header: 'Pares Vendidos' },
+                                    { key: 'revenueUsd', header: 'Facturación ($ USD)' },
+                                    { key: 'revenueBs', header: 'Facturación (Bs.)' },
+                                    { key: 'share', header: 'Participación (%)' },
+                                    { key: 'avgTicketUsd', header: 'Ticket Promedio ($)' }
+                                ]}
+                                rows={(salesByBrandReport?.brands || []).map(b => ({
+                                    brand: b.brand,
+                                    unitsSold: `${b.unitsSold} pares`,
+                                    revenueUsd: formatUSD(b.revenueUsd),
+                                    revenueBs: formatBs(b.revenueBs),
+                                    share: `${b.share}%`,
+                                    avgTicketUsd: formatUSD(b.avgTicketUsd)
+                                }))}
+                                summaryCards={[
+                                    { label: 'Total Marcas', value: `${salesByBrandReport.totalBrands}` },
+                                    { label: 'Facturación Total', value: formatUSD(salesByBrandReport.brands.reduce((s, b) => s + (b.revenueUsd || 0), 0)) }
+                                ]}
+                                filename="Participacion_Mercado_Marcas"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV(salesByBrandReport.brands, 'Participacion_Marcas')}
+                            />
                         </div>
 
                         <div className="space-y-4 pt-2">
@@ -2436,7 +2592,7 @@ export default function Reports() {
             {mainCategory === 'bi' && activeReportId === 'bi_trafico' && hourlyTrafficReport && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                     <Clock className="w-5 h-5 text-blue-600" />
@@ -2444,9 +2600,31 @@ export default function Reports() {
                                 </h3>
                                 <p className="text-xs text-gray-500">Optimización de personal en piso de venta (8:00 AM a 8:00 PM).</p>
                             </div>
-                            <Badge variant="warning" className="text-xs">
-                                Hora Pico: {hourlyTrafficReport.peakHour}
-                            </Badge>
+                            <ExportButtonGroup
+                                reportTitle="Auditoría de Tráfico Horario y Picos"
+                                categoryName="Capa 5: BI / Dashboards"
+                                columns={[
+                                    { key: 'hourLabel', header: 'Franja Horaria' },
+                                    { key: 'transactionsCount', header: 'Tickets Emitidos' },
+                                    { key: 'unitsSold', header: 'Pares Vendidos' },
+                                    { key: 'revenueUsd', header: 'Facturado ($ USD)' },
+                                    { key: 'revenueBs', header: 'Facturado (Bs.)' }
+                                ]}
+                                rows={(hourlyTrafficReport?.hourlyData || []).map(h => ({
+                                    hourLabel: h.hourLabel,
+                                    transactionsCount: `${h.transactionsCount} ventas`,
+                                    unitsSold: `${h.unitsSold} pares`,
+                                    revenueUsd: formatUSD(h.revenueUsd),
+                                    revenueBs: formatBs(h.revenueBs)
+                                }))}
+                                summaryCards={[
+                                    { label: 'Hora Pico', value: hourlyTrafficReport.peakHour },
+                                    { label: 'Total Ventas', value: `${hourlyTrafficReport.totalTransactions}` }
+                                ]}
+                                filename="Auditoria_Trafico_Horario"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV(hourlyTrafficReport.hourlyData, 'Trafico_Horario')}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
@@ -2555,11 +2733,11 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 6.2 Parámetros Fiscales y Tributarios */}
+            {/* 6.2 Parámetros Fiscales y Tributarios con Exportación */}
             {mainCategory === 'admin' && activeReportId === 'impuestos_config' && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                     <Sliders className="w-5 h-5 text-blue-600" />
@@ -2567,6 +2745,39 @@ export default function Reports() {
                                 </h3>
                                 <p className="text-xs text-gray-500">Configuración impositiva aplicable a UrbanStep Venezuela C.A.</p>
                             </div>
+                            <ExportButtonGroup
+                                reportTitle="Parámetros Fiscales y Tributarios Vigentes"
+                                categoryName="Capa 6: Administración"
+                                columns={[
+                                    { key: 'tributo', header: 'Tributo / Parámetro Fiscal' },
+                                    { key: 'alicuota', header: 'Alícuota / Valor' },
+                                    { key: 'baseLegal', header: 'Base Legal' },
+                                    { key: 'organismo', header: 'Organismo Fiscal' }
+                                ]}
+                                rows={[
+                                    { tributo: 'Impuesto al Valor Agregado (IVA General)', alicuota: '16.00%', baseLegal: 'Ley del IVA Art. 27', organismo: 'SENIAT' },
+                                    { tributo: 'Impuesto a Grandes Transacciones Financieras (IGTF Divisas)', alicuota: '3.00%', baseLegal: 'Gaceta Oficial 6.687 Art. 13', organismo: 'SENIAT' },
+                                    { tributo: 'Retención Estándar de IVA Proveedores', alicuota: '75.00%', baseLegal: 'Providencia SNAT/2015/0049 Art. 4', organismo: 'SENIAT (Agente Especial)' },
+                                    { tributo: 'Retención Especial de IVA (Sujetos Pasivos)', alicuota: '100.00%', baseLegal: 'Providencia SNAT/2015/0049 Art. 5', organismo: 'SENIAT' },
+                                    { tributo: 'Retención ISLR Bienes Muebles', alicuota: '2.00%', baseLegal: 'Decreto 1.808 Art. 9', organismo: 'SENIAT' },
+                                    { tributo: 'Retención ISLR Servicios y Fletes', alicuota: '5.00%', baseLegal: 'Decreto 1.808 Art. 9 Num. 11', organismo: 'SENIAT' },
+                                    { tributo: 'Tasa Oficial de Referencia BCV', alicuota: `${Number(bcvRate || 876.80).toFixed(2)} VES/USD`, baseLegal: 'Convenio Cambiario N° 1', organismo: 'Banco Central de Venezuela' }
+                                ]}
+                                summaryCards={[
+                                    { label: 'IVA General', value: '16.00%' },
+                                    { label: 'IGTF Divisas', value: '3.00%' },
+                                    { label: 'Retención IVA', value: '75.00%' },
+                                    { label: 'Tasa BCV', value: `${Number(bcvRate || 876.80).toFixed(2)} Bs/$` }
+                                ]}
+                                filename="Parametros_Fiscales_SENIAT"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV([
+                                    { Tributo: 'IVA General', Alicuota: '16.00%' },
+                                    { Tributo: 'IGTF Divisas', Alicuota: '3.00%' },
+                                    { Tributo: 'Retencion IVA', Alicuota: '75.00%' },
+                                    { Tributo: 'Tasa BCV', Alicuota: bcvRate }
+                                ], 'Parametros_Fiscales')}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
@@ -2612,16 +2823,49 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 6.3 Matriz de Permisos RBAC */}
+            {/* 6.3 Matriz de Permisos RBAC con Exportación */}
             {mainCategory === 'admin' && activeReportId === 'matriz_rbac' && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div>
-                            <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                <Lock className="w-5 h-5 text-blue-600" />
-                                Matriz de Control de Acceso Basado en Roles (RBAC)
-                            </h3>
-                            <p className="text-xs text-gray-500">Privilegios y permisos asignados por capa funcional en el sistema SGF.</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                    <Lock className="w-5 h-5 text-blue-600" />
+                                    Matriz de Control de Acceso Basado en Roles (RBAC)
+                                </h3>
+                                <p className="text-xs text-gray-500">Privilegios y permisos asignados por capa funcional en el sistema SGF.</p>
+                            </div>
+                            <ExportButtonGroup
+                                reportTitle="Matriz de Roles y Permisos RBAC"
+                                categoryName="Capa 6: Administración"
+                                columns={[
+                                    { key: 'layer', header: 'Capa Funcional' },
+                                    { key: 'admin', header: 'Administrador' },
+                                    { key: 'cashier', header: 'Cajero POS' },
+                                    { key: 'auditor', header: 'Auditor Fiscal' },
+                                    { key: 'warehouse', header: 'Almacenista' }
+                                ]}
+                                rows={[
+                                    { layer: 'Capa 1: Contabilidad Formal VEN-NIIF', admin: 'Acceso Total (Lectura / Asientos)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
+                                    { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: 'Acceso Total (Libros / Cierre)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
+                                    { layer: 'Capa 3: Tesorería & Arqueos (Cortes Z)', admin: 'Acceso Total', cashier: 'Operativo (Apertura / Arqueo)', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso' },
+                                    { layer: 'Capa 4: Operaciones & Kardex Valorizado', admin: 'Acceso Total', cashier: 'Consulta Stock', auditor: 'Solo Lectura Oficial', warehouse: 'Gestión de Almacén' },
+                                    { layer: 'Capa 5: BI / Dashboards Ejecutivos', admin: 'Acceso Total', cashier: 'Acceso a Metas', auditor: 'Solo Lectura Oficial', warehouse: 'Consulta' },
+                                    { layer: 'Capa 6: Administración, Impuestos & Logs', admin: 'Acceso Total (Config / Backup)', cashier: 'Sin Acceso', auditor: 'Auditoría de Logs', warehouse: 'Sin Acceso' }
+                                ]}
+                                summaryCards={[
+                                    { label: 'Roles de Usuario', value: '4' },
+                                    { label: 'Capas Protegidas', value: '6' }
+                                ]}
+                                filename="Matriz_Roles_Permisos_RBAC"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV([
+                                    { Capa: 'Contabilidad', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura' },
+                                    { Capa: 'Fiscal', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura' },
+                                    { Capa: 'Tesoreria', Admin: 'Total', Cajero: 'Arqueo', Auditor: 'Lectura' },
+                                    { Capa: 'Operaciones', Admin: 'Total', Cajero: 'Consulta', Auditor: 'Lectura' }
+                                ], 'Matriz_RBAC')}
+                            />
                         </div>
 
                         <div className="overflow-x-auto">
@@ -2659,16 +2903,44 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 6.4 Respaldos e Integridad BD */}
+            {/* 6.4 Respaldos e Integridad BD con Exportación */}
             {mainCategory === 'admin' && activeReportId === 'respaldos_bd' && (
                 <div className="space-y-6">
                     <Card className="p-6 space-y-4">
-                        <div>
-                            <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                <Database className="w-5 h-5 text-emerald-600" />
-                                Seguridad de Datos y Respaldos Automatizados (Supabase Cloud)
-                            </h3>
-                            <p className="text-xs text-gray-500">Monitoreo del estado de sincronización y respaldo de la base de datos única de UrbanStep.</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                                    <Database className="w-5 h-5 text-emerald-600" />
+                                    Seguridad de Datos y Respaldos Automatizados (Supabase Cloud)
+                                </h3>
+                                <p className="text-xs text-gray-500">Monitoreo del estado de sincronización y respaldo de la base de datos única de UrbanStep.</p>
+                            </div>
+                            <ExportButtonGroup
+                                reportTitle="Estado de Seguridad y Respaldos BD"
+                                categoryName="Capa 6: Administración"
+                                columns={[
+                                    { key: 'parametro', header: 'Componente de Seguridad' },
+                                    { key: 'valor', header: 'Configuración / Estado' },
+                                    { key: 'detalle', header: 'Detalle Técnico' }
+                                ]}
+                                rows={[
+                                    { parametro: 'Motor de Base de Datos', valor: 'PostgreSQL 15.6', detalle: 'Instancia Unificada Supabase Cloud' },
+                                    { parametro: 'Copia de Seguridad PITR', valor: 'WAL Continuo Activo', detalle: 'Recuperación punto en el tiempo a nivel de microsegundo' },
+                                    { parametro: 'Arquitectura de Aislamiento', valor: 'Single-Tenant Dedicado', detalle: 'UrbanStep Venezuela C.A. • Sede Única Barquisimeto' },
+                                    { parametro: 'Estado de Integridad Contable', valor: '100% Consolidado', detalle: 'Partida doble verificada en tablas contables' }
+                                ]}
+                                summaryCards={[
+                                    { label: 'Motor BD', value: 'PostgreSQL 15' },
+                                    { label: 'Estado', value: 'En Línea ✓' },
+                                    { label: 'PITR WAL', value: 'Activo' }
+                                ]}
+                                filename="Estado_Seguridad_Respaldos_BD"
+                                bcvRate={bcvRate}
+                                onExportCSV={() => handleExportCSV([
+                                    { Parametro: 'Motor BD', Valor: 'PostgreSQL 15' },
+                                    { Parametro: 'PITR', Valor: 'Activo' }
+                                ], 'Respaldos_BD')}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

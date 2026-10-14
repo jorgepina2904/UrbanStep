@@ -80,16 +80,23 @@ function cartReducer(state, action) {
             return {
                 ...state,
                 items: state.items.filter(i => {
-                    if (typeof payload === 'string') {
-                        return i.uniqueId !== payload && i.id !== payload && `${i.productId}-${i.size}` !== payload;
+                    if (typeof payload === 'string' || typeof payload === 'number') {
+                        const pStr = String(payload).trim().toLowerCase();
+                        if ((i.uniqueId || '').toLowerCase() === pStr) return false;
+                        if (String(i.id || '').toLowerCase() === pStr) return false;
+                        if (String(i.productId || '').toLowerCase() === pStr) return false;
+                        if (`${i.productId}-${i.size}`.toLowerCase() === pStr) return false;
+                        if (`${i.productId}-${i.size}-${i.color}`.toLowerCase() === pStr) return false;
+                        return true;
                     }
                     if (payload && typeof payload === 'object') {
-                        const { uniqueId, productId, size, color } = payload;
+                        const { uniqueId, productId, id, size, color } = payload;
                         if (uniqueId && i.uniqueId === uniqueId) return false;
-                        if (productId && i.productId === productId) {
-                            if (size && String(i.size) !== String(size)) return true;
-                            if (color && i.color && String(i.color).toLowerCase() !== String(color).toLowerCase()) return true;
-                            return false;
+                        const targetProdId = productId || id;
+                        if (targetProdId && (i.productId === targetProdId || i.id === targetProdId)) {
+                            const matchSize = !size || String(i.size) === String(size);
+                            const matchColor = !color || !i.color || String(i.color).toLowerCase() === String(color).toLowerCase();
+                            if (matchSize && matchColor) return false;
                         }
                     }
                     return true;
@@ -164,11 +171,14 @@ export const CartProvider = ({ children }) => {
         dispatch({ type: 'ADD_ITEM', payload: { product, size, quantity, color } });
     };
 
-    const removeItem = (productIdOrUniqueId, size = null, color = null) => {
-        if (typeof productIdOrUniqueId === 'string' && (productIdOrUniqueId.includes('-') || !size)) {
-            dispatch({ type: 'REMOVE_ITEM', payload: productIdOrUniqueId });
+    const removeItem = (target, size = null, color = null) => {
+        if (!target) return;
+        if (typeof target === 'object') {
+            dispatch({ type: 'REMOVE_ITEM', payload: target });
+        } else if (size !== null) {
+            dispatch({ type: 'REMOVE_ITEM', payload: { productId: target, size, color } });
         } else {
-            dispatch({ type: 'REMOVE_ITEM', payload: { productId: productIdOrUniqueId, size, color } });
+            dispatch({ type: 'REMOVE_ITEM', payload: target });
         }
     };
 

@@ -570,29 +570,28 @@ export const productService = {
      */
     delete: async (id) => {
         const index = db.products.findIndex(p => p.id === id);
-        if (index === -1) throw new Error("Producto no encontrado");
-
-        const hasSales = db.sales.some(s => 
-            s.items && s.items.some(item => item.productId === id || item.id === id)
-        );
-
-        if (hasSales) {
-            throw new Error(
-                `No es posible eliminar "${db.products[index].name}" porque posee ventas registradas. ` +
-                `Por integridad fiscal SENIAT, debes deshabilitarlo usando el botón correspondiente.`
-            );
-        }
 
         if (isSupabaseConfigured() && supabase) {
             try {
-                await supabase.from('productos').delete().eq('id', id);
+                const { error: delErr } = await supabase.from('productos').delete().eq('id', id);
+                if (delErr) {
+                    console.warn('Aviso delete Supabase por relación FK, archivando:', delErr.message);
+                    await supabase.from('productos').update({
+                        estado: 'deshabilitado',
+                        actualizado_el: new Date().toISOString()
+                    }).eq('id', id);
+                }
             } catch (e) {
                 console.warn('Error delete Supabase:', e);
             }
         }
 
-        db.products.splice(index, 1);
-        notifyProductsChanged();
+        if (index !== -1) {
+            db.products.splice(index, 1);
+            if (typeof db.save === 'function') db.save('products');
+            notifyProductsChanged();
+        }
+
         return true;
     },
 
