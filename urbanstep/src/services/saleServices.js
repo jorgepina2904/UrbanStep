@@ -7,69 +7,99 @@ import { stockMovementService } from './stockMovementService';
 import { productService } from './productService';
 import { customerService } from './customerService';
 
+let pendingSalesPromise = null;
+let cachedSales = null;
+let lastSalesFetchTime = 0;
+const SALES_CACHE_TTL = 4000;
+
+export const invalidateSalesCache = () => {
+    cachedSales = null;
+    pendingSalesPromise = null;
+    lastSalesFetchTime = 0;
+};
+
 export const saleService = {
-    getAll: async () => {
-        if (isSupabaseConfigured() && supabase) {
-            try {
-                const { data, error } = await supabase
-                    .from('ventas')
-                    .select('*, detalles_venta(*)')
-                    .order('creado_el', { ascending: false });
-
-                if (!error && Array.isArray(data)) {
-                    const localSalesMap = new Map(db.sales.map(s => [s.id, s]));
-                    const mapped = data.map(v => {
-                        const local = localSalesMap.get(v.id) || db.sales.find(s => s.receiptNumber === v.numero_recibo);
-                        const itemsFromDb = (Array.isArray(v.detalles_venta) && v.detalles_venta.length > 0)
-                            ? v.detalles_venta.map(d => ({
-                                id: d.id,
-                                productId: d.producto_id,
-                                name: d.nombre_producto,
-                                brand: d.marca,
-                                size: d.talla,
-                                color: d.color,
-                                quantity: Number(d.cantidad) || 1,
-                                price: Number(d.precio_unitario_usd) || 0,
-                                total: Number(d.subtotal_usd) || 0
-                            }))
-                            : (local?.items || []);
-
-                        return {
-                            id: v.id,
-                            receiptNumber: v.numero_recibo,
-                            fiscalControlNumber: v.numero_control_fiscal,
-                            customerId: v.cliente_id || 'publico',
-                            customer: v.nombre_cliente,
-                            cashier: v.nombre_cajero,
-                            bcvRate: Number(v.tasa_bcv),
-                            subtotal: Number(v.subtotal_usd),
-                            discount: Number(v.descuento_usd || 0),
-                            tax: Number(v.iva_usd),
-                            igtf: Number(v.igtf_usd),
-                            shippingCost: Number(v.costo_delivery_usd || 0),
-                            total: Number(v.total_usd),
-                            subtotalBs: Number(v.subtotal_bs),
-                            taxBs: Number(v.iva_bs),
-                            igtfBs: Number(v.igtf_bs),
-                            totalBs: Number(v.total_bs),
-                            paymentMethod: v.metodo_pago_principal,
-                            paymentMethodLabel: v.metodo_pago_principal,
-                            shippingCarrier: v.empresa_envio,
-                            date: v.creado_el,
-                            items: itemsFromDb
-                        };
-                    });
-                    // Mantener sincronizado db.sales
-                    db.sales = mapped;
-                    db.save('sales');
-                    return mapped;
-                }
-            } catch (err) {
-                console.warn('Fallback a sales locales:', err);
-            }
+    getAll: async (forceRefresh = false) => {
+        const now = Date.now();
+        if (!forceRefresh && cachedSales && (now - lastSalesFetchTime < SALES_CACHE_TTL)) {
+            return cachedSales;
         }
-        await simulateNetworkDelay(150);
-        return [...db.sales];
+        if (!forceRefresh && pendingSalesPromise) {
+            return pendingSalesPromise;
+        }
+
+        pendingSalesPromise = (async () => {
+            try {
+                if (isSupabaseConfigured() && supabase) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('ventas')
+                            .select('*, detalles_venta(*)')
+                            .order('creado_el', { ascending: false });
+
+                        if (!error && Array.isArray(data)) {
+                            const localSalesMap = new Map(db.sales.map(s => [s.id, s]));
+                            const mapped = data.map(v => {
+                                const local = localSalesMap.get(v.id) || db.sales.find(s => s.receiptNumber === v.numero_recibo);
+                                const itemsFromDb = (Array.isArray(v.detalles_venta) && v.detalles_venta.length > 0)
+                                    ? v.detalles_venta.map(d => ({
+                                        id: d.id,
+                                        productId: d.producto_id,
+                                        name: d.nombre_producto,
+                                        brand: d.marca,
+                                        size: d.talla,
+                                        color: d.color,
+                                        quantity: Number(d.cantidad) || 1,
+                                        price: Number(d.precio_unitario_usd) || 0,
+                                        total: Number(d.subtotal_usd) || 0
+                                    }))
+                                    : (local?.items || []);
+
+                                return {
+                                    id: v.id,
+                                    receiptNumber: v.numero_recibo,
+                                    fiscalControlNumber: v.numero_control_fiscal,
+                                    customerId: v.cliente_id || 'publico',
+                                    customer: v.nombre_cliente,
+                                    cashier: v.nombre_cajero,
+                                    bcvRate: Number(v.tasa_bcv),
+                                    subtotal: Number(v.subtotal_usd),
+                                    discount: Number(v.descuento_usd || 0),
+                                    tax: Number(v.iva_usd),
+                                    igtf: Number(v.igtf_usd),
+                                    shippingCost: Number(v.costo_delivery_usd || 0),
+                                    total: Number(v.total_usd),
+                                    subtotalBs: Number(v.subtotal_bs),
+                                    taxBs: Number(v.iva_bs),
+                                    igtfBs: Number(v.igtf_bs),
+                                    totalBs: Number(v.total_bs),
+                                    paymentMethod: v.metodo_pago_principal,
+                                    paymentMethodLabel: v.metodo_pago_principal,
+                                    shippingCarrier: v.empresa_envio,
+                                    date: v.creado_el,
+                                    items: itemsFromDb
+                                };
+                            });
+                            // Mantener sincronizado db.sales
+                            db.sales = mapped;
+                            db.save('sales');
+                            cachedSales = mapped;
+                            lastSalesFetchTime = Date.now();
+                            return mapped;
+                        }
+                    } catch (err) {
+                        console.warn('Fallback a sales locales:', err);
+                    }
+                }
+                cachedSales = [...db.sales];
+                lastSalesFetchTime = Date.now();
+                return cachedSales;
+            } finally {
+                pendingSalesPromise = null;
+            }
+        })();
+
+        return pendingSalesPromise;
     },
 
     getSales: async () => {

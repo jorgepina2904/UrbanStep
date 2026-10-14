@@ -1,4 +1,4 @@
-import { simulateNetworkDelay } from './api';
+const simulateNetworkDelay = () => Promise.resolve();
 import { cashRegisterService } from './cashRegisterService';
 import { saleService } from './saleServices';
 import { productService } from './productService';
@@ -1167,10 +1167,8 @@ export const reportService = {
     /**
      * Reporte de Retenciones IVA e ISLR Emitidas y Recibidas
      */
-    getWithholdingsReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
-        const purchasesReport = await reportService.getSeniatPurchasesReport({ from, to });
-        const seniatSalesReport = await reportService.getSeniatFiscalReport({ from, to });
+    getWithholdingsReport: async ({ from = null, to = null } = {}, existingPurchasesReport = null) => {
+        const purchasesReport = existingPurchasesReport || await reportService.getSeniatPurchasesReport({ from, to });
 
         const ivaWithholdings = purchasesReport.ledger.map((p, idx) => ({
             id: `RET-IVA-${idx + 1}`,

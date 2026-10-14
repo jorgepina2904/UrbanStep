@@ -208,16 +208,11 @@ export default function Reports() {
             const rangeParams = { from, to };
 
             const [
-                // 1. Contabilidad
-                planData,
-                diarioData,
-                mayorData,
-                balanceCompData,
-                estadosFinData,
+                // 1. Contabilidad formal en pase único optimizado
+                accountingData,
                 // 2. Fiscal
                 seniatSalesData,
                 seniatPurchasesData,
-                withholdingsData,
                 // 3. Tesorería
                 shiftsData,
                 cashFlowData,
@@ -238,14 +233,11 @@ export default function Reports() {
                 // 6. Auditoría
                 auditLogsData
             ] = await Promise.all([
-                accountingService.getPlanCuentas().catch(() => []),
-                accountingService.getLibroDiario(rangeParams).catch(() => []),
-                accountingService.getLibroMayor(rangeParams).catch(() => []),
-                accountingService.getBalanceComprobacion(rangeParams).catch(() => null),
-                accountingService.getEstadosFinancieros(rangeParams).catch(() => null),
+                accountingService.getAccountingSuite(rangeParams).catch(() => ({
+                    plan: [], diario: [], mayor: [], balance: null, estados: null
+                })),
                 reportService.getSeniatFiscalReport(rangeParams).catch(() => null),
                 reportService.getSeniatPurchasesReport(rangeParams).catch(() => null),
-                reportService.getWithholdingsReport(rangeParams).catch(() => null),
                 reportService.getCashRegisterAuditReport(rangeParams).catch(() => null),
                 reportService.getProjectedCashFlow().catch(() => null),
                 reportService.getPaymentMethodReconciliationReport(rangeParams).catch(() => null),
@@ -263,11 +255,13 @@ export default function Reports() {
                 auditService.getLogs({ limit: 100 }).catch(() => [])
             ]);
 
-            setPlanCuentas(planData);
-            setLibroDiario(diarioData);
-            setLibroMayor(mayorData);
-            setBalanceComprobacion(balanceCompData);
-            setEstadosFinancieros(estadosFinData);
+            const withholdingsData = await reportService.getWithholdingsReport(rangeParams, seniatPurchasesData).catch(() => null);
+
+            setPlanCuentas(accountingData?.plan || []);
+            setLibroDiario(accountingData?.diario || []);
+            setLibroMayor(accountingData?.mayor || []);
+            setBalanceComprobacion(accountingData?.balance || null);
+            setEstadosFinancieros(accountingData?.estados || null);
 
             setSeniatReport(seniatSalesData);
             setSeniatPurchasesReport(seniatPurchasesData);
@@ -528,17 +522,6 @@ export default function Reports() {
         });
     }, [auditLogs, q]);
 
-    if (loading && !summary && !balanceComprobacion) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-140px)] gap-3">
-                <Spinner size="lg" />
-                <p className="text-sm font-semibold text-gray-500 animate-pulse">
-                    Consolidando Sistema SGF y libros de doble partida...
-                </p>
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-6 pb-16 animate-fadeIn">
             {/* Header Corporativo SGF */}
@@ -565,6 +548,14 @@ export default function Reports() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                    {/* Indicador activo no bloqueante */}
+                    {loading && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                            <Spinner size="xs" />
+                            <span className="hidden sm:inline">Consolidando libros SGF...</span>
+                        </div>
+                    )}
+
                     {/* Tasa BCV Oficial */}
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-700 dark:text-blue-300">
                         <span>Tasa BCV:</span>

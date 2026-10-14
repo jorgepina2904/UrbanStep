@@ -422,8 +422,10 @@ export const accountingService = {
     /**
      * Libro Mayor: Sumas y Saldos por Cuenta
      */
-    getLibroMayor: async (params) => {
-        const diario = await accountingService.getLibroDiario(params);
+    /**
+     * Cálculo síncrono en memoria del Libro Mayor a partir de los asientos del Diario
+     */
+    computeLibroMayor: (diario = []) => {
         const mayorMap = {};
 
         // Inicializar con las cuentas del plan
@@ -447,8 +449,8 @@ export const accountingService = {
         });
 
         // Acumular movimientos del diario
-        diario.forEach(asiento => {
-            asiento.renglones.forEach(r => {
+        (diario || []).forEach(asiento => {
+            (asiento.renglones || []).forEach(r => {
                 if (!mayorMap[r.cuenta_id]) {
                     mayorMap[r.cuenta_id] = {
                         cuenta_id: r.cuenta_id,
@@ -502,11 +504,17 @@ export const accountingService = {
     },
 
     /**
-     * Balance de Comprobación de Sumas y Saldos
+     * Libro Mayor: Sumas y Saldos por Cuenta
      */
-    getBalanceComprobacion: async (params) => {
-        const cuentasMayor = await accountingService.getLibroMayor(params);
-        
+    getLibroMayor: async (params, existingDiario = null) => {
+        const diario = existingDiario || await accountingService.getLibroDiario(params);
+        return accountingService.computeLibroMayor(diario);
+    },
+
+    /**
+     * Cálculo síncrono en memoria del Balance de Comprobación
+     */
+    computeBalanceComprobacion: (cuentasMayor = []) => {
         let sumDebeBs = 0;
         let sumHaberBs = 0;
         let sumDeudorBs = 0;
@@ -517,7 +525,7 @@ export const accountingService = {
         let sumDeudorUsd = 0;
         let sumAcreedorUsd = 0;
 
-        const filas = cuentasMayor.map(c => {
+        const filas = (cuentasMayor || []).map(c => {
             sumDebeBs += c.total_debe_bs;
             sumHaberBs += c.total_haber_bs;
             sumDebeUsd += c.total_debe_usd;
@@ -559,11 +567,18 @@ export const accountingService = {
     },
 
     /**
-     * Estados Financieros Formales: Balance General y Estado de Resultados
+     * Balance de Comprobación de Sumas y Saldos
      */
-    getEstadosFinancieros: async (params) => {
-        const balanceComp = await accountingService.getBalanceComprobacion(params);
-        const cuentas = balanceComp.cuentas;
+    getBalanceComprobacion: async (params, existingMayor = null) => {
+        const cuentasMayor = existingMayor || await accountingService.getLibroMayor(params);
+        return accountingService.computeBalanceComprobacion(cuentasMayor);
+    },
+
+    /**
+     * Cálculo síncrono en memoria de los Estados Financieros Formales
+     */
+    computeEstadosFinancieros: (balanceComp) => {
+        const cuentas = balanceComp?.cuentas || [];
 
         // Estado de Resultados
         const ingresos = cuentas.filter(c => c.tipo === 'ingreso');
@@ -627,6 +642,33 @@ export const accountingService = {
                 total_pasivo_patrimonio_bs: Math.round((totalPasivosBs + totalPatrimonioBs) * 100) / 100,
                 cuadre_perfecto: Math.abs(totalActivosUsd - (totalPasivosUsd + totalPatrimonioUsd)) < 1.00
             }
+        };
+    },
+
+    /**
+     * Estados Financieros Formales: Balance General y Estado de Resultados
+     */
+    getEstadosFinancieros: async (params, existingBalance = null) => {
+        const balanceComp = existingBalance || await accountingService.getBalanceComprobacion(params);
+        return accountingService.computeEstadosFinancieros(balanceComp);
+    },
+
+    /**
+     * Suite Completa Contable en un solo pase de alto rendimiento (0ms redundancia)
+     */
+    getAccountingSuite: async (params) => {
+        const plan = DEFAULT_PLAN_CUENTAS;
+        const diario = await accountingService.getLibroDiario(params);
+        const mayor = accountingService.computeLibroMayor(diario);
+        const balance = accountingService.computeBalanceComprobacion(mayor);
+        const estados = accountingService.computeEstadosFinancieros(balance);
+
+        return {
+            plan,
+            diario,
+            mayor,
+            balance,
+            estados
         };
     }
 };

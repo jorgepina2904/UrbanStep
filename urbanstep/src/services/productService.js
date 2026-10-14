@@ -149,53 +149,83 @@ const mapSupabaseProduct = (row) => {
     };
 };
 
+let pendingProductsPromise = null;
+let cachedProducts = null;
+let lastProductsFetchTime = 0;
+const PRODUCTS_CACHE_TTL = 4000;
+
+export const invalidateProductsCache = () => {
+    cachedProducts = null;
+    pendingProductsPromise = null;
+    lastProductsFetchTime = 0;
+};
+
 export const productService = {
     /**
      * Obtiene todos los productos (desde Supabase si está disponible, con fallback local)
      */
-    getAll: async () => {
-        if (isSupabaseConfigured() && supabase) {
-            try {
-                const { data, error } = await supabase
-                    .from('productos')
-                    .select('*')
-                    .order('creado_el', { ascending: false });
-
-                if (!error && Array.isArray(data)) {
-                    const mapped = data.map(mapSupabaseProduct);
-                    // Actualizar memoria y caché local
-                    db.products = mapped;
-                    db.save('products');
-                    return mapped;
-                }
-            } catch (err) {
-                console.warn('Supabase offline o sin tablas, usando caché local:', err);
-            }
+    getAll: async (forceRefresh = false) => {
+        const now = Date.now();
+        if (!forceRefresh && cachedProducts && (now - lastProductsFetchTime < PRODUCTS_CACHE_TTL)) {
+            return cachedProducts;
         }
-        await simulateNetworkDelay(50);
-        // Asegurar que cada producto local tenga proveedor y variantes de color
-        db.products = db.products.map(p => {
-            const supplierId = p.supplierId || 'PRV-101';
-            const supplierName = p.supplierName || 'Distribuidora Deportiva Ávila C.A.';
-            const colors = Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : [p.color || 'Negro'];
-            const sizes = Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : ['38', '39', '40', '41', '42'];
-            const isZero = (p.stock || 0) <= 0 || p.disabled || p.status === 'out_of_stock';
-            const colorVariants = isZero
-                ? (p.colorVariants || []).map(v => ({ ...v, sizeStock: ensureSizeStock(sizes, 0), total: 0 }))
-                : ensureColorVariants(colors, sizes, p.colorVariants, p.sizeStock);
-            const totalStock = isZero ? 0 : (calculateVariantsTotalStock(colorVariants) || p.stock || 0);
-            return {
-                ...p,
-                supplierId,
-                supplierName,
-                colors,
-                colorVariants,
-                stock: isZero ? 0 : totalStock,
-                disabled: isZero || p.disabled,
-                active: !isZero && !p.disabled && totalStock > 0
-            };
-        });
-        return [...db.products];
+        if (!forceRefresh && pendingProductsPromise) {
+            return pendingProductsPromise;
+        }
+
+        pendingProductsPromise = (async () => {
+            try {
+                if (isSupabaseConfigured() && supabase) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('productos')
+                            .select('*')
+                            .order('creado_el', { ascending: false });
+
+                        if (!error && Array.isArray(data)) {
+                            const mapped = data.map(mapSupabaseProduct);
+                            db.products = mapped;
+                            db.save('products');
+                            cachedProducts = mapped;
+                            lastProductsFetchTime = Date.now();
+                            return mapped;
+                        }
+                    } catch (err) {
+                        console.warn('Supabase offline o sin tablas, usando caché local:', err);
+                    }
+                }
+                // Asegurar que cada producto local tenga proveedor y variantes de color
+                const mappedLocal = db.products.map(p => {
+                    const supplierId = p.supplierId || 'PRV-101';
+                    const supplierName = p.supplierName || 'Distribuidora Deportiva Ávila C.A.';
+                    const colors = Array.isArray(p.colors) && p.colors.length > 0 ? p.colors : [p.color || 'Negro'];
+                    const sizes = Array.isArray(p.sizes) && p.sizes.length > 0 ? p.sizes : ['38', '39', '40', '41', '42'];
+                    const isZero = (p.stock || 0) <= 0 || p.disabled || p.status === 'out_of_stock';
+                    const colorVariants = isZero
+                        ? (p.colorVariants || []).map(v => ({ ...v, sizeStock: ensureSizeStock(sizes, 0), total: 0 }))
+                        : ensureColorVariants(colors, sizes, p.colorVariants, p.sizeStock);
+                    const totalStock = isZero ? 0 : (calculateVariantsTotalStock(colorVariants) || p.stock || 0);
+                    return {
+                        ...p,
+                        supplierId,
+                        supplierName,
+                        colors,
+                        colorVariants,
+                        stock: isZero ? 0 : totalStock,
+                        disabled: isZero || p.disabled,
+                        active: !isZero && !p.disabled && totalStock > 0
+                    };
+                });
+                db.products = mappedLocal;
+                cachedProducts = [...mappedLocal];
+                lastProductsFetchTime = Date.now();
+                return cachedProducts;
+            } finally {
+                pendingProductsPromise = null;
+            }
+        })();
+
+        return pendingProductsPromise;
     },
 
     getProducts: async () => {

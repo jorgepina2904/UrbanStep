@@ -5,51 +5,81 @@ import { bcvService } from './bcvService';
 import { stockMovementService } from './stockMovementService';
 import { ensureSizeStock, calculateTotalStock, ensureColorVariants, calculateVariantsTotalStock } from '../utils/shoeSizes';
 
+let pendingPurchasesPromise = null;
+let cachedPurchases = null;
+let lastPurchasesFetchTime = 0;
+const PURCHASES_CACHE_TTL = 4000;
+
+export const invalidatePurchasesCache = () => {
+    cachedPurchases = null;
+    pendingPurchasesPromise = null;
+    lastPurchasesFetchTime = 0;
+};
+
 export const purchaseService = {
     /**
      * Obtener todas las compras registradas
      */
-    getAll: async () => {
-        if (isSupabaseConfigured() && supabase) {
-            try {
-                const { data, error } = await supabase
-                    .from('compras')
-                    .select('*')
-                    .order('creado_el', { ascending: false });
-
-                if (!error && Array.isArray(data)) {
-                    const mapped = data.map(c => ({
-                        id: c.id,
-                        invoiceNumber: c.numero_factura,
-                        controlNumber: c.numero_control,
-                        supplierId: c.proveedor_id,
-                        supplierName: c.proveedor_nombre || 'Proveedor',
-                        date: c.fecha_emision || c.creado_el,
-                        status: c.estado || 'recibido',
-                        paymentMethod: c.metodo_pago,
-                        paymentBank: c.banco_pago,
-                        bcvRate: Number(c.tasa_bcv),
-                        subtotalUsd: Number(c.subtotal_usd),
-                        taxUsd: Number(c.iva_usd),
-                        totalUsd: Number(c.total_usd),
-                        subtotalBs: Number(c.subtotal_bs),
-                        taxBs: Number(c.iva_bs),
-                        totalBs: Number(c.total_bs),
-                        receivedBy: c.recibido_por,
-                        notes: c.observaciones,
-                        itemsCount: 0,
-                        items: []
-                    }));
-                    db.purchases = mapped;
-                    db.save('purchases');
-                    return mapped;
-                }
-            } catch (err) {
-                console.warn('Aviso leyendo compras Supabase:', err);
-            }
+    getAll: async (forceRefresh = false) => {
+        const now = Date.now();
+        if (!forceRefresh && cachedPurchases && (now - lastPurchasesFetchTime < PURCHASES_CACHE_TTL)) {
+            return cachedPurchases;
         }
-        await simulateNetworkDelay(100);
-        return [...db.purchases];
+        if (!forceRefresh && pendingPurchasesPromise) {
+            return pendingPurchasesPromise;
+        }
+
+        pendingPurchasesPromise = (async () => {
+            try {
+                if (isSupabaseConfigured() && supabase) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('compras')
+                            .select('*')
+                            .order('creado_el', { ascending: false });
+
+                        if (!error && Array.isArray(data)) {
+                            const mapped = data.map(c => ({
+                                id: c.id,
+                                invoiceNumber: c.numero_factura,
+                                controlNumber: c.numero_control,
+                                supplierId: c.proveedor_id,
+                                supplierName: c.proveedor_nombre || 'Proveedor',
+                                date: c.fecha_emision || c.creado_el,
+                                status: c.estado || 'recibido',
+                                paymentMethod: c.metodo_pago,
+                                paymentBank: c.banco_pago,
+                                bcvRate: Number(c.tasa_bcv),
+                                subtotalUsd: Number(c.subtotal_usd),
+                                taxUsd: Number(c.iva_usd),
+                                totalUsd: Number(c.total_usd),
+                                subtotalBs: Number(c.subtotal_bs),
+                                taxBs: Number(c.iva_bs),
+                                totalBs: Number(c.total_bs),
+                                receivedBy: c.recibido_por,
+                                notes: c.observaciones,
+                                itemsCount: 0,
+                                items: []
+                            }));
+                            db.purchases = mapped;
+                            db.save('purchases');
+                            cachedPurchases = mapped;
+                            lastPurchasesFetchTime = Date.now();
+                            return mapped;
+                        }
+                    } catch (err) {
+                        console.warn('Aviso leyendo compras Supabase:', err);
+                    }
+                }
+                cachedPurchases = [...db.purchases];
+                lastPurchasesFetchTime = Date.now();
+                return cachedPurchases;
+            } finally {
+                pendingPurchasesPromise = null;
+            }
+        })();
+
+        return pendingPurchasesPromise;
     },
 
     /**
