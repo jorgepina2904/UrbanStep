@@ -11,6 +11,7 @@ import DeliveryMapModal from '../ui/DeliveryMapModal';
 import ShiftOpenModal from '../ui/ShiftOpenModal';
 import ShiftCloseModal from '../ui/ShiftCloseModal';
 import QuickConverterModal from '../ui/QuickConverterModal';
+import BrandLogo from '../ui/BrandLogo';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -384,12 +385,13 @@ export default function CashierTerminal() {
             <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 flex items-center justify-between shadow-sm shrink-0">
                 {/* Brand & Cashier identity */}
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                        <Store className="w-6 h-6 text-blue-600" />
-                        <span className="font-extrabold text-base bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">
-                            UrbanStep POS
-                        </span>
-                    </div>
+                    <BrandLogo
+                        variant="compact"
+                        size="sm"
+                        showSubtitle={false}
+                        onClick={() => navigate('/pos')}
+                        className="cursor-pointer"
+                    />
 
                     <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 hidden sm:block" />
 

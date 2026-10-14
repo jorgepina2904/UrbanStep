@@ -1,6 +1,7 @@
 import React from 'react';
 import Modal from './Modal';
 import Button from './Button';
+import BrandLogo from './BrandLogo';
 import { formatCurrency } from '../utils/formatCurrency';
 import { Printer, CheckCircle, Store, Truck } from 'lucide-react';
 
@@ -21,16 +22,11 @@ export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSal
                 <div id="printable-receipt" className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 text-gray-800 dark:text-gray-200 font-mono text-xs shadow-inner">
                     {/* Header */}
                     <div className="text-center border-b border-dashed border-gray-300 dark:border-gray-700 pb-4 mb-4">
-                        <div className="flex items-center justify-center gap-2 mb-1">
-                            <Store className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                            <h2 className="text-base font-bold text-gray-900 dark:text-white uppercase tracking-wider">
-                                {settings?.storeName || 'UrbanStep Venezuela'}
-                            </h2>
-                        </div>
-                        <p className="font-semibold text-gray-600 dark:text-gray-400">{settings?.legalName || 'UrbanStep C.A.'}</p>
+                        <BrandLogo variant="badge" className="mx-auto mb-2" />
+                        <p className="font-semibold text-gray-600 dark:text-gray-400">{settings?.legalName || 'UrbanStep Sneakers & Streetwear C.A.'}</p>
                         <p className="font-bold text-blue-600 dark:text-blue-400">RIF: {settings?.rif || 'J-50123456-7'}</p>
-                        <p className="text-[11px] text-gray-500 max-w-xs mx-auto mt-1">{settings?.fiscalAddress || 'Chacao, Caracas, Venezuela'}</p>
-                        <p className="text-[11px] text-gray-500">Telf: {settings?.phone || '+58 212-951-4000'}</p>
+                        <p className="text-[11px] text-gray-500 max-w-xs mx-auto mt-1">{settings?.fiscalAddress || 'C.C. Las Trinitarias, Barquisimeto, Edo. Lara'}</p>
+                        <p className="text-[11px] text-gray-500">Telf: {settings?.phone || '+58 412-555-1234'}</p>
                     </div>
 
                     {/* Metadata */}

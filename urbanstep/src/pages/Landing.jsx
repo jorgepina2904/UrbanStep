@@ -47,6 +47,7 @@ import {
 import toast from 'react-hot-toast';
 import { mockProducts } from '../data/mockProducts';
 import { getColorHex, SHOE_COLORS } from '../utils/shoeSizes';
+import BrandLogo from '../ui/BrandLogo';
 
 const mapProductToCatalog = (p) => ({
     id: p.id,
@@ -650,20 +651,9 @@ export default function Landing() {
                 isDark ? 'border-white/[0.06] bg-black/60' : 'border-gray-200 bg-white/90 shadow-sm'
             }`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between gap-4">
-                    {/* Brand */}
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/30 border border-white/20 shrink-0">
-                            <Store className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                            <span className={`text-2xl font-black tracking-tighter uppercase italic ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                URBAN<span className="text-blue-500">STEP</span>
-                            </span>
-                            <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 align-middle">
-                                STORE
-                            </span>
-                            <p className="text-[10px] text-gray-400 font-mono tracking-wider">BARQUISIMETO • SNEAKERS & STREETWEAR</p>
-                        </div>
+                    {/* Official Brand Logo */}
+                    <div className="cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                        <BrandLogo variant="compact" size="lg" />
                     </div>
 
                     {/* Search Bar */}
@@ -1057,6 +1047,68 @@ export default function Landing() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Official Brand Strip — "Las Mejores Marcas, En Un Solo Lugar" */}
+            <section className={`border-b py-6 transition-colors ${
+                isDark ? 'border-white/[0.06] bg-black/50' : 'border-slate-200 bg-white shadow-xs'
+            }`}>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shadow-sm shadow-blue-500" />
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-wider text-blue-500">
+                                    LAS MEJORES MARCAS, EN UN SOLO LUGAR
+                                </p>
+                                <p className="text-[10px] font-mono text-gray-400">
+                                    Distribuidores oficiales & siluetas exclusivas en Barquisimeto
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
+                            {[
+                                { name: 'NIKE', tag: 'Dunk & Air Max', icon: '⚡' },
+                                { name: 'VANS', tag: 'Knu Skool & Old Skool', icon: '🛹' },
+                                { name: 'ADIDAS', tag: 'Samba & Originals', icon: '👟' },
+                                { name: 'RS21', tag: 'Urban Streetwear', icon: '🔥' },
+                                { name: 'PUMA', tag: 'Palermo & Suede', icon: '🐆' },
+                            ].map(brandItem => {
+                                const isCurrent = selectedBrand.toUpperCase() === brandItem.name.toUpperCase();
+                                return (
+                                    <button
+                                        key={brandItem.name}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedBrand(brandItem.name);
+                                            const el = document.getElementById('catalogo');
+                                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        className={`group px-3 py-1.5 rounded-xl border transition-all flex items-center gap-2 active:scale-95 ${
+                                            isCurrent
+                                                ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/30'
+                                                : isDark
+                                                    ? 'bg-white/[0.04] hover:bg-white/[0.09] border-white/10 text-gray-300 hover:text-white'
+                                                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 shadow-xs'
+                                        }`}
+                                    >
+                                        <span className="text-xs font-black italic tracking-wider font-sans group-hover:scale-105 transition-transform">
+                                            {brandItem.name}
+                                        </span>
+                                        <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                                            isCurrent 
+                                                ? 'bg-blue-800 text-blue-100' 
+                                                : isDark ? 'bg-white/5 text-gray-400' : 'bg-white text-slate-500 border border-slate-200'
+                                        }`}>
+                                            {brandItem.tag}
+                                        </span>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -1473,14 +1525,11 @@ export default function Landing() {
             }`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
                     <div className="flex items-center gap-3">
-                        <Store className="w-5 h-5 text-blue-500" />
-                        <span className={`font-bold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                            URBANSTEP VENEZUELA C.A.
-                        </span>
-                        <span>•</span>
-                        <span>RIF: J-50123456-7</span>
-                        <span>•</span>
-                        <span>Barquisimeto, Estado Lara</span>
+                        <BrandLogo variant="compact" size="sm" showSubtitle={false} />
+                        <span className="text-gray-400">•</span>
+                        <span className="font-mono text-[11px] text-gray-400">RIF: J-50123456-7</span>
+                        <span className="text-gray-400">•</span>
+                        <span className="font-mono text-[11px] text-gray-400">Barquisimeto, Estado Lara</span>
                     </div>
 
                     <div className="flex items-center gap-6 text-[11px]">

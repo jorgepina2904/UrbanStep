@@ -23,6 +23,7 @@ import {
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission, RoleMeta } from '../utils/permissions';
 import { clsx } from 'clsx';
+import BrandLogo from '../ui/BrandLogo';
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobile }) => {
     const { user, logout } = useContext(AuthContext);
@@ -149,9 +150,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                             className="group relative flex items-center justify-center focus:outline-none"
                             title="Expandir menú lateral"
                         >
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20 transition-transform group-hover:scale-105">
-                                <Store className="h-5 w-5" />
-                            </div>
+                            <BrandLogo variant="icon" size="md" />
                             {onToggleCollapse && (
                                 <span className="absolute -bottom-1 -right-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full p-0.5 text-blue-600 dark:text-blue-400 shadow-sm transition-transform group-hover:translate-x-0.5">
                                     <ChevronRight className="w-3 h-3" />
@@ -161,14 +160,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                     </div>
                 ) : (
                     <div className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
-                        <div className="flex items-center space-x-2.5 overflow-hidden">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-md shadow-blue-500/20">
-                                <Store className="h-5 w-5" />
-                            </div>
-                            <span className="text-lg font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 truncate">
-                                UrbanStep
-                            </span>
-                        </div>
+                        <BrandLogo variant="compact" size="md" />
 
                         {/* Botón de cerrar en móvil */}
                         <button
