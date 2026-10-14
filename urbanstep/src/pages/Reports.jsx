@@ -2344,14 +2344,83 @@ export default function Reports() {
                             />
                         </div>
 
-                        <div className="text-center py-12 text-gray-400">
-                            {warrantyReturnsReport.records.length === 0 ? (
+                        {warrantyReturnsReport.records.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400">
                                 <div className="space-y-2">
                                     <p className="text-sm font-semibold">No hay registros de garantías o devoluciones en este período.</p>
                                     <p className="text-xs text-gray-400">0.00% tasa de devolución — Calidad 100% asegurada.</p>
                                 </div>
-                            ) : null}
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead>
+                                        <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
+                                            <th className="px-4 py-3 text-left">N° Nota Crédito</th>
+                                            <th className="px-4 py-3 text-left">Factura Afectada</th>
+                                            <th className="px-4 py-3 text-left">Cliente / RIF</th>
+                                            <th className="px-4 py-3 text-left">Calzado Devuelto</th>
+                                            <th className="px-4 py-3 text-left">Motivo SGF</th>
+                                            <th className="px-4 py-3 text-center">Destino Físico Stock</th>
+                                            <th className="px-4 py-3 text-right font-bold">Monto Devuelto ($)</th>
+                                            <th className="px-4 py-3 text-right font-bold">Monto (Bs)</th>
+                                            <th className="px-4 py-3 text-center">Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
+                                        {warrantyReturnsReport.records.map((r) => (
+                                            <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                                                <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">
+                                                    {r.creditNoteNumber || 'NC-FISCAL'}
+                                                </td>
+                                                <td className="px-4 py-3 font-medium text-gray-700 dark:text-gray-300">
+                                                    <div>{r.ticketNumber}</div>
+                                                    <div className="text-[10px] text-gray-400">{r.date}</div>
+                                                </td>
+                                                <td className="px-4 py-3 font-sans">
+                                                    <div className="font-semibold text-gray-900 dark:text-white">{r.customer}</div>
+                                                    <div className="text-[10px] text-gray-400 font-mono">{r.customerDoc}</div>
+                                                </td>
+                                                <td className="px-4 py-3 font-sans text-gray-800 dark:text-gray-200 max-w-xs truncate">
+                                                    {r.productName}
+                                                </td>
+                                                <td className="px-4 py-3 font-sans">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                        r.reasonKey === 'mal_facturado'
+                                                            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                                                            : r.reasonKey === 'producto_danado'
+                                                            ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                                            : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                                                    }`}>
+                                                        {r.reason}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-sans">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                                                        r.restoredToStock === 'Reingreso a Stock'
+                                                            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                                            : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300'
+                                                    }`}>
+                                                        {r.restoredToStock}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-black text-rose-600 dark:text-rose-400 font-mono">
+                                                    -{formatUSD(r.totalUsd)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-gray-500 font-mono text-[10px]">
+                                                    -{formatVES(r.totalBs)}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-sans">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                                                        {r.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </Card>
                 </div>
             )}

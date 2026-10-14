@@ -1,6 +1,7 @@
 import { saleService } from './saleServices';
 import { purchaseService } from './purchaseService';
 import { shiftService } from './shiftService';
+import { returnService } from './returnService';
 
 /**
  * Plan de Cuentas Maestro VEN-NIIF para UrbanStep Venezuela C.A.
@@ -97,10 +98,11 @@ export const accountingService = {
      * Genera el Libro Diario formal consolidando Ventas, Compras y Cierres Z reales con Partida Doble
      */
     getLibroDiario: async ({ from = null, to = null, modulo = 'all' } = {}) => {
-        const [sales, purchases, shifts] = await Promise.all([
+        const [sales, purchases, shifts, creditNotes] = await Promise.all([
             saleService.getAll(),
             purchaseService.getAll(),
-            shiftService.getAll()
+            shiftService.getAll(),
+            returnService.getAll().catch(() => [])
         ]);
 
         const asientos = [];
@@ -250,6 +252,83 @@ export const accountingService = {
                         haber_bs: costoEstimadoBs,
                         debe_usd: 0.00,
                         haber_usd: costoEstimadoUsd
+                    }
+                ]
+            });
+        });
+
+        // 1.1 Asientos de Devoluciones y Notas de Crédito Formales (SGF / VEN-NIIF)
+        (creditNotes || []).forEach(nc => {
+            const ncDate = nc.date || new Date().toISOString();
+            if (from && new Date(ncDate) < new Date(from)) return;
+            if (to && new Date(ncDate) > new Date(to)) return;
+            if (modulo !== 'all' && modulo !== 'ventas') return;
+
+            const bcvRate = Number(nc.bcvRate) || 876.80;
+            const subtotalUsd = Number(nc.subtotalUsd) || 0;
+            const taxUsd = Number(nc.taxUsd) || 0;
+            const totalUsd = Number(nc.totalUsd) || 0;
+
+            const totalBs = Math.round(totalUsd * bcvRate * 100) / 100;
+            const subtotalBs = Math.round(subtotalUsd * bcvRate * 100) / 100;
+            const taxBs = Math.round(taxUsd * bcvRate * 100) / 100;
+
+            let cuentaReembolsoId = '1.1.01.01.002';
+            let cuentaReembolsoNombre = 'Caja Moneda Extranjera (USD)';
+            if (nc.refundMethod === 'pagomovil') {
+                cuentaReembolsoId = '1.1.01.02.001';
+                cuentaReembolsoNombre = 'Banesco Banco Universal (Pago Móvil)';
+            } else if (nc.refundMethod === 'efectivo_bs') {
+                cuentaReembolsoId = '1.1.01.01.001';
+                cuentaReembolsoNombre = 'Caja Principal Mostrador (VES)';
+            }
+
+            asientos.push({
+                id: `asiento-nc-${nc.id}`,
+                numero_asiento: asientoSeq++,
+                fecha: ncDate.split('T')[0],
+                fecha_hora: ncDate,
+                origen_modulo: 'ventas',
+                documento_tipo: 'nota_credito',
+                documento_numero: nc.creditNoteNumber,
+                descripcion: `Devolución y Nota de Crédito ${nc.creditNoteNumber} (Fact. Afectada ${nc.affectedInvoiceNumber}) - ${nc.reasonLabel || nc.reason}`,
+                usuario: nc.authorizedBy || nc.cashier || 'Supervisor de Caja',
+                tasa_bcv: bcvRate,
+                total_debe_bs: totalBs,
+                total_haber_bs: totalBs,
+                total_debe_usd: totalUsd,
+                total_haber_usd: totalUsd,
+                cuadrado: true,
+                renglones: [
+                    {
+                        renglon: 1,
+                        cuenta_id: '4.1.01.01.001',
+                        cuenta_nombre: 'Ventas de Calzado Mostrador POS (Reversión Devolución)',
+                        concepto: `Reverso de ingreso por devolución ${nc.creditNoteNumber}`,
+                        debe_bs: subtotalBs,
+                        haber_bs: 0.00,
+                        debe_usd: subtotalUsd,
+                        haber_usd: 0.00
+                    },
+                    {
+                        renglon: 2,
+                        cuenta_id: '2.1.02.01.001',
+                        cuenta_nombre: 'Débito Fiscal IVA 16% (Reversión Nota de Crédito SENIAT)',
+                        concepto: `Ajuste débito fiscal IVA Providencia 0071`,
+                        debe_bs: taxBs,
+                        haber_bs: 0.00,
+                        debe_usd: taxUsd,
+                        haber_usd: 0.00
+                    },
+                    {
+                        renglon: 3,
+                        cuenta_id: cuentaReembolsoId,
+                        cuenta_nombre: cuentaReembolsoNombre,
+                        concepto: `Reembolso al cliente por devolución ${nc.creditNoteNumber}`,
+                        debe_bs: 0.00,
+                        haber_bs: totalBs,
+                        debe_usd: 0.00,
+                        haber_usd: totalUsd
                     }
                 ]
             });

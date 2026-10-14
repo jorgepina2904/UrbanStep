@@ -536,19 +536,18 @@ export const productService = {
 
     /**
      * Alternar estado habilitado / deshabilitado
+     * Preserva el stock físico intacto para registros contables y kardex
      */
     toggleStatus: async (id) => {
         const product = db.products.find(p => p.id === id);
         if (!product) throw new Error("Producto no encontrado");
 
-        if (product.disabled && product.stock <= 0) {
-            throw new Error("No se puede habilitar un producto con stock en 0. Primero añade unidades en inventario.");
-        }
-
         product.disabled = !product.disabled;
         product.active = !product.disabled && product.stock > 0;
-        product.status = product.stock <= 0 ? 'out_of_stock' : (product.stock > product.minStock ? 'in_stock' : 'low_stock');
+        product.status = product.disabled ? 'deshabilitado' : (product.stock <= 0 ? 'out_of_stock' : (product.stock > product.minStock ? 'in_stock' : 'low_stock'));
         product.updatedAt = new Date().toISOString();
+
+        if (typeof db.save === 'function') db.save('products');
 
         if (isSupabaseConfigured() && supabase) {
             try {
@@ -566,9 +565,147 @@ export const productService = {
     },
 
     /**
-     * Eliminar producto protegiendo contra pérdida de historial contable
+     * Verifica si un producto tiene transacciones o ventas históricas registradas en el sistema
+     */
+    hasSalesHistory: async (id) => {
+        try {
+            const product = db.products.find(p => p.id === id);
+            const sales = db.sales || [];
+            
+            const foundInLocal = sales.some(s => 
+                Array.isArray(s.items) && s.items.some(i => 
+                    i.productId === id || 
+                    i.id === id || 
+                    (product && product.name && i.name === product.name) ||
+                    (product && product.sku && i.sku === product.sku)
+                )
+            );
+            if (foundInLocal) return true;
+
+            if (isSupabaseConfigured() && supabase) {
+                const { data } = await supabase
+                    .from('ventas_items')
+                    .select('id')
+                    .eq('producto_id', id)
+                    .limit(1);
+                if (data && data.length > 0) return true;
+            }
+        } catch (e) {
+            console.warn('Aviso verificando historial de ventas:', e);
+        }
+        return false;
+    },
+
+    /**
+     * Actualiza la disponibilidad granular de variantes (tallas y colores) sin alterar el stock físico
+     */
+    updateVariantAvailability: async (id, { disabled = null, disabledVariants = null, disabledSizes = null, disabledColors = null }) => {
+        const product = db.products.find(p => p.id === id);
+        if (!product) throw new Error("Producto no encontrado");
+
+        if (disabled !== null) {
+            product.disabled = Boolean(disabled);
+            product.active = !product.disabled && product.stock > 0;
+            product.status = product.disabled ? 'deshabilitado' : (product.stock <= 0 ? 'out_of_stock' : (product.stock > product.minStock ? 'in_stock' : 'low_stock'));
+        }
+
+        if (disabledVariants !== null) {
+            product.disabledVariants = { ...disabledVariants };
+        }
+        if (disabledSizes !== null) {
+            product.disabledSizes = [...disabledSizes];
+        }
+        if (disabledColors !== null) {
+            product.disabledColors = [...disabledColors];
+        }
+
+        product.updatedAt = new Date().toISOString();
+
+        if (typeof db.save === 'function') db.save('products');
+
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                await supabase.from('productos').update({
+                    estado: product.disabled ? 'deshabilitado' : (product.stock > 0 ? 'in_stock' : 'out_of_stock'),
+                    actualizado_el: new Date().toISOString()
+                }).eq('id', id);
+            } catch (e) {
+                console.warn('Error sincronizando disponibilidad en Supabase:', e);
+            }
+        }
+
+        notifyProductsChanged();
+        return product;
+    },
+
+    /**
+     * Restaura existencias de calzado por devolución formal (error de facturación o factura fallida)
+     */
+    restoreStock: async (id, { size = null, color = null, quantity = 1, reason = 'Reingreso por Devolución' }) => {
+        const product = db.products.find(p => p.id === id);
+        if (!product) return null;
+
+        const qty = Math.max(1, parseInt(quantity) || 1);
+
+        if (!product.colorVariants || product.colorVariants.length === 0) {
+            product.colorVariants = ensureColorVariants(product.colors || [product.color || 'Negro'], product.sizes, null, product.sizeStock);
+        }
+
+        const s = size && size !== 'N/A' ? String(size) : null;
+        const targetColor = color || product.color || 'Negro';
+
+        if (Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
+            const variant = product.colorVariants.find(v => (v.color || '').toLowerCase() === targetColor.toLowerCase()) || product.colorVariants[0];
+            if (variant && variant.sizeStock) {
+                if (s && variant.sizeStock[s] !== undefined) {
+                    variant.sizeStock[s] = (variant.sizeStock[s] || 0) + qty;
+                } else {
+                    const firstKey = Object.keys(variant.sizeStock)[0];
+                    if (firstKey) variant.sizeStock[firstKey] = (variant.sizeStock[firstKey] || 0) + qty;
+                }
+                variant.total = calculateTotalStock(variant.sizeStock);
+            }
+        }
+
+        if (product.sizeStock) {
+            if (s && product.sizeStock[s] !== undefined) {
+                product.sizeStock[s] = (product.sizeStock[s] || 0) + qty;
+            } else {
+                const firstKey = Object.keys(product.sizeStock)[0];
+                if (firstKey) product.sizeStock[firstKey] = (product.sizeStock[firstKey] || 0) + qty;
+            }
+        }
+
+        const totalVariants = calculateVariantsTotalStock(product.colorVariants);
+        product.stock = totalVariants || calculateTotalStock(product.sizeStock) || ((product.stock || 0) + qty);
+
+        if (product.stock > 0 && product.status === 'out_of_stock') {
+            product.status = product.stock > product.minStock ? 'in_stock' : 'low_stock';
+        }
+
+        product.updatedAt = new Date().toISOString();
+        if (typeof db.save === 'function') db.save('products');
+        notifyProductsChanged();
+        return product;
+    },
+
+    /**
+     * Eliminar producto con protección estricta contra pérdida de trazabilidad legal y fiscal SENIAT
      */
     delete: async (id) => {
+        const product = db.products.find(p => p.id === id);
+        const prodName = product ? product.name : 'este producto';
+
+        // 1. Verificación legal obligatoria: si tiene ventas, PROHIBIR la eliminación física
+        const hasSales = await productService.hasSalesHistory(id);
+        if (hasSales) {
+            throw new Error(
+                `⛔ Prohibido por Normativa Fiscal SENIAT y VEN-NIIF: El producto "${prodName}" posee ventas registradas en los libros contables. ` +
+                `Por disposiciones legales y trazabilidad de auditoría fiscal, no puede ser eliminado. ` +
+                `Utilice la opción de 'Deshabilitar' para pausar su comercialización sin alterar los libros contables ni el inventario físico.`
+            );
+        }
+
         const index = db.products.findIndex(p => p.id === id);
 
         if (isSupabaseConfigured() && supabase) {

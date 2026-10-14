@@ -7,6 +7,7 @@ import Input from '../ui/Input';
 import CustomerSelector from '../ui/CustomerSelector';
 import ReceiptModal from '../ui/ReceiptModal';
 import DeliveryMapModal from '../ui/DeliveryMapModal';
+import ReturnModal from '../ui/ReturnModal';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -15,7 +16,7 @@ import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
 import { auditService } from '../services/auditService';
-import { getColorHex } from '../utils/shoeSizes';
+import { getColorHex, isVariantDisabled } from '../utils/shoeSizes';
 import { VENEZUELA_BANKS, SHIPPING_CARRIERS } from '../data/venezuelaData';
 import { 
     Search, 
@@ -32,7 +33,8 @@ import {
     Minus,
     Coins,
     Building,
-    MapPin
+    MapPin,
+    RotateCcw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -59,6 +61,7 @@ export default function POS() {
     const [settings, setSettings] = useState(null);
     const [saleComplete, setSaleComplete] = useState(null);
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+    const [showReturnModal, setShowReturnModal] = useState(false);
 
     const { 
         items, 
@@ -345,13 +348,26 @@ export default function POS() {
                                     className={`px-3.5 py-2 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-all ${
                                         categoryFilter === cat
                                             ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                            : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                             : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
                                     }`}
                                 >
                                     {cat === 'all' ? 'Todos' : cat}
                                 </button>
                             ))}
                         </div>
+
+                        {/* Action: Devolución / Nota de Crédito SGF */}
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setShowReturnModal(true)}
+                            className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 shrink-0 shadow-xs"
+                            title="Gestionar Devolución por Producto Mal Facturado, Dañado o Factura Fallida"
+                        >
+                            <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Devolución / NC</span>
+                        </Button>
                     </div>
                 </div>
 
@@ -373,8 +389,10 @@ export default function POS() {
 
                             const currentSize = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
                             const activeImg = productService.getColorVariantImage(product, currentColor) || product.imageUrl || product.image;
-                            const sizeCount = currentVariantStock ? (currentVariantStock[currentSize] ?? 0) : (product.sizeStock ? (product.sizeStock[currentSize] ?? 0) : 0);
-                            const isSelectedSizeOut = sizeCount <= 0;
+                            const isVariantPaused = isVariantDisabled(product, currentSize, currentColor);
+                            const rawSizeStock = currentVariantStock ? (currentVariantStock[currentSize] ?? 0) : (product.sizeStock ? (product.sizeStock[currentSize] ?? 0) : 0);
+                            const sizeCount = isVariantPaused ? 0 : rawSizeStock;
+                            const isSelectedSizeOut = sizeCount <= 0 || isVariantPaused;
 
                             return (
                                 <Card
@@ -544,28 +562,32 @@ export default function POS() {
                                                 </div>
                                                 <div className="flex gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none no-scrollbar">
                                                     {product.sizes.map((s) => {
-                                                        const sStock = currentVariantStock ? (currentVariantStock[s] ?? 0) : (product.sizeStock ? (product.sizeStock[s] ?? 0) : 0);
-                                                        const isOutOfStock = sStock <= 0;
+                                                        const isPaused = isVariantDisabled(product, s, currentColor);
+                                                        const sStock = isPaused ? 0 : (currentVariantStock ? (currentVariantStock[s] ?? 0) : (product.sizeStock ? (product.sizeStock[s] ?? 0) : 0));
+                                                        const rawCount = currentVariantStock ? (currentVariantStock[s] ?? 0) : (product.sizeStock ? (product.sizeStock[s] ?? 0) : 0);
+                                                        const isOutOfStock = sStock <= 0 || isPaused;
                                                         const isSelected = currentSize === s;
                                                         return (
                                                             <button
                                                                 key={s}
                                                                 type="button"
                                                                 onClick={() => setSelectedSize({ ...selectedSize, [product.id]: s })}
-                                                                title={sStock > 0 ? `${sStock} pares disponibles de talla ${s} en ${currentColor}` : `Talla ${s} agotada`}
+                                                                title={isPaused ? `Talla ${s} pausada manualmente (Stock físico: ${rawCount} pares)` : sStock > 0 ? `${sStock} pares disponibles de talla ${s} en ${currentColor}` : `Talla ${s} agotada`}
                                                                 className={`px-2.5 py-1 text-xs rounded-xl font-bold shrink-0 transition-all flex items-center gap-1 border ${
                                                                     isSelected
                                                                         ? isOutOfStock
                                                                             ? 'bg-rose-600 text-white border-rose-600 shadow-sm ring-1 ring-rose-500'
                                                                             : 'bg-blue-600 text-white border-blue-600 shadow-sm ring-1 ring-blue-500'
                                                                         : isOutOfStock
-                                                                            ? 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-400 line-through opacity-50'
+                                                                            ? isPaused
+                                                                                ? 'bg-amber-50 dark:bg-amber-950/30 border-dashed border-amber-300 dark:border-amber-800 text-amber-600 line-through opacity-60'
+                                                                                : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-400 line-through opacity-50'
                                                                             : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                                                                 }`}
                                                             >
                                                                 <span>{s}</span>
                                                                 <span className="text-[10px] font-mono opacity-80">
-                                                                    ({sStock})
+                                                                    ({isPaused ? 'Pausada' : sStock})
                                                                 </span>
                                                             </button>
                                                         );
@@ -1234,6 +1256,13 @@ export default function POS() {
                 onConfirm={(data) => {
                     setDeliveryData(data);
                 }}
+            />
+
+            {/* SGF Returns & Fiscal Credit Notes Modal */}
+            <ReturnModal
+                isOpen={showReturnModal}
+                onClose={() => setShowReturnModal(false)}
+                onReturnCompleted={() => loadData()}
             />
         </div>
     );

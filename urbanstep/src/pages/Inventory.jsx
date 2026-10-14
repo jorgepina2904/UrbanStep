@@ -22,8 +22,10 @@ import {
     Check, 
     X,
     Package,
-    Truck
+    Truck,
+    SlidersHorizontal
 } from 'lucide-react';
+import VariantAvailabilityModal from '../ui/VariantAvailabilityModal';
 import toast from 'react-hot-toast';
 
 /**
@@ -43,9 +45,11 @@ export default function Inventory() {
   const [movementSearch, setMovementSearch] = useState('');
   const [movementTypeFilter, setMovementTypeFilter] = useState('all');
 
-  // Adjust stock modal
+  // Adjust stock modal & Variant availability subscreen
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [targetProduct, setTargetProduct] = useState(null);
+  const [availabilityProduct, setAvailabilityProduct] = useState(null);
+  const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
   const [adjustForm, setAdjustForm] = useState({
     newStock: '',
     reason: 'Ajuste manual de conteo físico',
@@ -133,14 +137,28 @@ export default function Inventory() {
   };
 
   const handleDeleteProduct = async (product) => {
-    if (!window.confirm(`¿Estás seguro de intentar eliminar "${product.name}"?`)) return;
-
     try {
+      const hasSales = await productService.hasSalesHistory(product.id);
+      if (hasSales) {
+        toast.error(
+          `⛔ Prohibido por Ley SENIAT y VEN-NIIF: "${product.name}" posee ventas registradas en los libros contables. ` +
+          `La ley prohíbe eliminar registros con trazabilidad fiscal. Abriendo subpantalla de disponibilidad para deshabilitarlo.`,
+          { duration: 6500 }
+        );
+        setAvailabilityProduct(product);
+        setShowAvailabilityModal(true);
+        return;
+      }
+
+      if (!window.confirm(`¿Estás seguro de intentar eliminar permanentemente "${product.name}"? Esta acción solo se permite si no tiene ventas registradas.`)) return;
+
       await productService.delete(product.id);
       toast.success(`Producto "${product.name}" eliminado correctamente`);
       await loadData();
     } catch (err) {
-      toast.error(err.message, { duration: 5000 });
+      toast.error(err.message, { duration: 6000 });
+      setAvailabilityProduct(product);
+      setShowAvailabilityModal(true);
     }
   };
 
@@ -459,16 +477,32 @@ export default function Inventory() {
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
 
+                            {/* Subpantalla de Disponibilidad y Deshabilitación por Tallas/Colores */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAvailabilityProduct(product);
+                                setShowAvailabilityModal(true);
+                              }}
+                              className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition-colors"
+                              title="Gestionar disponibilidad por tallas y colores (Subpantalla SGF)"
+                            >
+                              <SlidersHorizontal className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Deshabilitar / Habilitar */}
                             <button
                               type="button"
-                              onClick={() => handleToggleStatus(product)}
+                              onClick={() => {
+                                setAvailabilityProduct(product);
+                                setShowAvailabilityModal(true);
+                              }}
                               className={`p-1.5 rounded-lg transition-colors ${
                                 isDisabled
                                   ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/40'
                                   : 'bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-950/40'
                               }`}
-                              title={isDisabled ? 'Habilitar para venta en POS' : 'Deshabilitar producto'}
+                              title={isDisabled ? 'Ver disponibilidad (Deshabilitado)' : 'Deshabilitar producto o variantes'}
                             >
                               {isDisabled ? <CheckCircle className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
                             </button>
@@ -700,6 +734,14 @@ export default function Inventory() {
           </form>
         </Modal>
       )}
+
+      {/* Subpantalla SGF: Disponibilidad y Agotamiento de Variantes */}
+      <VariantAvailabilityModal
+        isOpen={showAvailabilityModal}
+        onClose={() => setShowAvailabilityModal(false)}
+        product={availabilityProduct}
+        onSaved={() => loadData()}
+      />
     </div>
   );
 }

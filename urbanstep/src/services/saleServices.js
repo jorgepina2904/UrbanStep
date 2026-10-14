@@ -13,34 +13,52 @@ export const saleService = {
             try {
                 const { data, error } = await supabase
                     .from('ventas')
-                    .select('*')
+                    .select('*, detalles_venta(*)')
                     .order('creado_el', { ascending: false });
 
                 if (!error && Array.isArray(data)) {
-                    const mapped = data.map(v => ({
-                        id: v.id,
-                        receiptNumber: v.numero_recibo,
-                        fiscalControlNumber: v.numero_control_fiscal,
-                        customerId: v.cliente_id || 'publico',
-                        customer: v.nombre_cliente,
-                        cashier: v.nombre_cajero,
-                        bcvRate: Number(v.tasa_bcv),
-                        subtotal: Number(v.subtotal_usd),
-                        discount: Number(v.descuento_usd || 0),
-                        tax: Number(v.iva_usd),
-                        igtf: Number(v.igtf_usd),
-                        shippingCost: Number(v.costo_delivery_usd || 0),
-                        total: Number(v.total_usd),
-                        subtotalBs: Number(v.subtotal_bs),
-                        taxBs: Number(v.iva_bs),
-                        igtfBs: Number(v.igtf_bs),
-                        totalBs: Number(v.total_bs),
-                        paymentMethod: v.metodo_pago_principal,
-                        paymentMethodLabel: v.metodo_pago_principal,
-                        shippingCarrier: v.empresa_envio,
-                        date: v.creado_el,
-                        items: []
-                    }));
+                    const localSalesMap = new Map(db.sales.map(s => [s.id, s]));
+                    const mapped = data.map(v => {
+                        const local = localSalesMap.get(v.id) || db.sales.find(s => s.receiptNumber === v.numero_recibo);
+                        const itemsFromDb = (Array.isArray(v.detalles_venta) && v.detalles_venta.length > 0)
+                            ? v.detalles_venta.map(d => ({
+                                id: d.id,
+                                productId: d.producto_id,
+                                name: d.nombre_producto,
+                                brand: d.marca,
+                                size: d.talla,
+                                color: d.color,
+                                quantity: Number(d.cantidad) || 1,
+                                price: Number(d.precio_unitario_usd) || 0,
+                                total: Number(d.subtotal_usd) || 0
+                            }))
+                            : (local?.items || []);
+
+                        return {
+                            id: v.id,
+                            receiptNumber: v.numero_recibo,
+                            fiscalControlNumber: v.numero_control_fiscal,
+                            customerId: v.cliente_id || 'publico',
+                            customer: v.nombre_cliente,
+                            cashier: v.nombre_cajero,
+                            bcvRate: Number(v.tasa_bcv),
+                            subtotal: Number(v.subtotal_usd),
+                            discount: Number(v.descuento_usd || 0),
+                            tax: Number(v.iva_usd),
+                            igtf: Number(v.igtf_usd),
+                            shippingCost: Number(v.costo_delivery_usd || 0),
+                            total: Number(v.total_usd),
+                            subtotalBs: Number(v.subtotal_bs),
+                            taxBs: Number(v.iva_bs),
+                            igtfBs: Number(v.igtf_bs),
+                            totalBs: Number(v.total_bs),
+                            paymentMethod: v.metodo_pago_principal,
+                            paymentMethodLabel: v.metodo_pago_principal,
+                            shippingCarrier: v.empresa_envio,
+                            date: v.creado_el,
+                            items: itemsFromDb
+                        };
+                    });
                     // Mantener sincronizado db.sales
                     db.sales = mapped;
                     db.save('sales');
@@ -253,17 +271,6 @@ export const saleService = {
                     product.status = 'out_of_stock';
                     product.disabled = true;
                     product.active = false;
-                    if (Array.isArray(product.colorVariants)) {
-                        product.colorVariants.forEach(v => {
-                            if (v.sizeStock) {
-                                Object.keys(v.sizeStock).forEach(k => { v.sizeStock[k] = 0; });
-                            }
-                            v.total = 0;
-                        });
-                    }
-                    if (product.sizeStock) {
-                        Object.keys(product.sizeStock).forEach(k => { product.sizeStock[k] = 0; });
-                    }
                 } else {
                     product.status = product.stock > product.minStock ? 'in_stock' : 'low_stock';
                 }
@@ -289,8 +296,6 @@ export const saleService = {
                 }
             }
         }
-
-        db.sales.unshift(newSale);
 
         // Sincronizar en Supabase si está disponible
         if (isSupabaseConfigured() && supabase) {

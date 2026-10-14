@@ -4,6 +4,7 @@ import { saleService } from './saleServices';
 import { productService } from './productService';
 import { purchaseService } from './purchaseService';
 import { shiftService } from './shiftService';
+import { returnService } from './returnService';
 
 const isWithinRange = (isoDate, from, to) => {
     if (!isoDate) return false;
@@ -167,8 +168,12 @@ export const reportService = {
      */
     getSeniatFiscalReport: async ({ from = null, to = null } = {}) => {
         await simulateNetworkDelay(100);
-        const allSales = await getSales();
+        const [allSales, allCreditNotes] = await Promise.all([
+            getSales(),
+            returnService.getAll().catch(() => [])
+        ]);
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
+        const creditNotes = (allCreditNotes || []).filter(c => isWithinRange(c.date, from, to));
 
         let totalExemptUsd = 0;
         let taxableBaseUsd = 0;
@@ -210,7 +215,9 @@ export const reportService = {
 
             return {
                 seq: index + 1,
+                docType: 'FAC',
                 receiptNumber: s.receiptNumber || s.id,
+                affectedInvoiceNumber: '—',
                 date: s.date ? new Date(s.date).toLocaleDateString('es-VE') : 'N/A',
                 customer: s.customer || 'Cliente General',
                 customerDoc: s.customerDoc || 'V-00000000',
@@ -228,10 +235,51 @@ export const reportService = {
             };
         });
 
+        // Incorporación formal de Notas de Crédito (Providencia SENIAT SNAT/2011/0071)
+        creditNotes.forEach((nc, ncIdx) => {
+            const subtotal = Number(nc.subtotalUsd) || 0;
+            const tax = Number(nc.taxUsd) || 0;
+            const total = Number(nc.totalUsd) || 0;
+            const subtotalBs = Number(nc.subtotalBs) || 0;
+            const taxBs = Number(nc.taxBs) || 0;
+            const totalBs = Number(nc.totalBs) || 0;
+
+            taxableBaseUsd -= subtotal;
+            totalTaxUsd -= tax;
+            grandTotalUsd -= total;
+
+            taxableBaseBs -= subtotalBs;
+            totalTaxBs -= taxBs;
+            grandTotalBs -= totalBs;
+
+            ledger.push({
+                seq: sales.length + ncIdx + 1,
+                docType: 'NCR',
+                receiptNumber: nc.creditNoteNumber,
+                affectedInvoiceNumber: nc.affectedInvoiceNumber || 'TKT-PENDIENTE',
+                date: nc.date ? new Date(nc.date).toLocaleDateString('es-VE') : 'N/A',
+                customer: nc.customer || 'Cliente General',
+                customerDoc: nc.customerDoc || 'V-00000000',
+                bcvRate: nc.bcvRate || 876.80,
+                exemptUsd: 0,
+                taxableBaseUsd: -round2(subtotal),
+                taxUsd: -round2(tax),
+                igtfUsd: 0,
+                totalUsd: -round2(total),
+                exemptBs: 0,
+                taxableBaseBs: -round2(subtotalBs),
+                taxBs: -round2(taxBs),
+                igtfBs: 0,
+                totalBs: -round2(totalBs),
+                reason: nc.reasonLabel || nc.reason
+            });
+        });
+
         return {
             title: 'Libro de Ventas y Cierre Fiscal SENIAT',
             summary: {
                 totalInvoices: sales.length,
+                totalCreditNotes: creditNotes.length,
                 totalExemptUsd: round2(totalExemptUsd),
                 taxableBaseUsd: round2(taxableBaseUsd),
                 totalTaxUsd: round2(totalTaxUsd),
@@ -753,10 +801,34 @@ export const reportService = {
      */
     getWarrantyAndReturnsReport: async ({ from = null, to = null } = {}) => {
         await simulateNetworkDelay(100);
+        const allNotes = await returnService.getAll().catch(() => []);
+        const filtered = (allNotes || []).filter(n => isWithinRange(n.date, from, to));
+
+        const records = filtered.map(n => ({
+            id: n.id,
+            ticketNumber: n.affectedInvoiceNumber || 'TKT-PENDIENTE',
+            creditNoteNumber: n.creditNoteNumber,
+            customer: n.customer || 'Cliente General',
+            customerDoc: n.customerDoc || 'N/A',
+            productName: Array.isArray(n.items) 
+                ? n.items.map(i => `${i.name} (${i.size ? `Talla ${i.size}` : ''}${i.color ? ` - ${i.color}` : ''})`).join(', ')
+                : 'Calzado Deportivo',
+            reason: n.reasonLabel || n.reason,
+            reasonKey: n.reason,
+            totalUsd: n.totalUsd || 0,
+            totalBs: n.totalBs || 0,
+            date: n.date ? new Date(n.date).toLocaleDateString('es-VE') : 'N/A',
+            cashier: n.cashier || 'Cajero',
+            authorizedBy: n.authorizedBy || 'Supervisor',
+            refundMethod: n.refundMethodLabel || n.refundMethod,
+            status: n.status === 'procesada' ? 'Nota de Crédito Emitida' : (n.status || 'Completado'),
+            restoredToStock: n.restoredToStock ? 'Reingreso a Stock' : 'Asentado en Merma'
+        }));
+
         return {
-            totalReturns: 0,
-            approvedCount: 0,
-            records: []
+            totalReturns: records.length,
+            approvedCount: records.length,
+            records
         };
     },
 

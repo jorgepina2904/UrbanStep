@@ -21,8 +21,11 @@ import {
     RotateCcw, 
     Zap,
     Truck,
-    Copy
+    Copy,
+    SlidersHorizontal,
+    AlertTriangle
 } from 'lucide-react';
+import VariantAvailabilityModal from '../ui/VariantAvailabilityModal';
 import toast from 'react-hot-toast';
 import { 
     SHOE_SIZE_CATEGORIES, 
@@ -209,6 +212,8 @@ export default function Products() {
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [availabilityProduct, setAvailabilityProduct] = useState(null);
+    const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
     const [imageTab, setImageTab] = useState('local'); // 'local' | 'url' | 'presets'
     const [urlInput, setUrlInput] = useState('');
     const [customSizeInput, setCustomSizeInput] = useState('');
@@ -721,26 +726,76 @@ export default function Products() {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('¿Estás seguro de que deseas eliminar este producto?')) return;
+        const prod = products.find(p => p.id === id);
         try {
+            const hasSales = await productService.hasSalesHistory(id);
+            if (hasSales) {
+                toast.error(
+                    `⛔ Prohibido por Ley SENIAT y VEN-NIIF: El producto "${prod?.name || 'seleccionado'}" posee transacciones registradas en libros contables. ` +
+                    `Por disposiciones fiscales no se puede eliminar. Puede deshabilitarlo o pausar sus variantes de talla/color.`,
+                    { duration: 6500 }
+                );
+                if (prod) {
+                    setAvailabilityProduct(prod);
+                    setShowAvailabilityModal(true);
+                }
+                return;
+            }
+
+            if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente "${prod?.name || 'este producto'}"? Esta acción solo se permite para artículos sin ventas registradas.`)) return;
+
             await productService.delete(id);
             toast.success('Producto eliminado exitosamente');
             await loadProducts();
         } catch (err) {
             console.error('Error al eliminar producto:', err);
             toast.error(err.message || 'Error al eliminar producto');
+            if (prod) {
+                setAvailabilityProduct(prod);
+                setShowAvailabilityModal(true);
+            }
         }
     };
 
-    const getStatusBadge = (status) => {
-        const map = {
-            in_stock: { variant: 'success', label: 'En Stock' },
-            active: { variant: 'success', label: 'En Stock' },
-            low_stock: { variant: 'warning', label: 'Stock Bajo' },
-            out_of_stock: { variant: 'danger', label: 'Agotado' },
-        };
-        const { variant, label } = map[status] || map.in_stock;
-        return <Badge variant={variant}>{label}</Badge>;
+    const getStatusBadge = (productOrStatus) => {
+        if (!productOrStatus) return null;
+        if (typeof productOrStatus === 'string') {
+            const map = {
+                in_stock: { variant: 'success', label: 'En Stock' },
+                active: { variant: 'success', label: 'En Stock' },
+                low_stock: { variant: 'warning', label: 'Stock Bajo' },
+                out_of_stock: { variant: 'danger', label: 'Agotado' },
+                deshabilitado: { variant: 'danger', label: 'Deshabilitado' }
+            };
+            const { variant, label } = map[productOrStatus] || map.in_stock;
+            return <Badge variant={variant}>{label}</Badge>;
+        }
+
+        const p = productOrStatus;
+        if (p.disabled) {
+            return (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    🚫 Deshabilitado ({p.stock} p.)
+                </span>
+            );
+        }
+
+        const disabledVarsCount = p.disabledVariants ? Object.keys(p.disabledVariants).length : 0;
+        if (disabledVarsCount > 0) {
+            return (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    ⚠️ {disabledVarsCount} pausadas
+                </span>
+            );
+        }
+
+        if (p.stock <= 0) {
+            return <Badge variant="danger">Agotado</Badge>;
+        }
+        if (p.stock <= p.minStock) {
+            return <Badge variant="warning">Stock Bajo ({p.stock})</Badge>;
+        }
+        return <Badge variant="success">En Stock ({p.stock})</Badge>;
     };
 
     const getColorSwatch = (colorName) => {
@@ -897,7 +952,7 @@ export default function Products() {
                                             )}
                                         </div>
                                     </div>
-                                    {getStatusBadge(product.status)}
+                                    {getStatusBadge(product)}
                                 </div>
 
                                 <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 font-mono mt-1">
@@ -948,6 +1003,16 @@ export default function Products() {
                                         <p className="text-xs text-gray-400 dark:text-gray-500">Stock: {product.stock} pares</p>
                                     </div>
                                     <div className="flex gap-1">
+                                        <button
+                                            onClick={() => {
+                                                setAvailabilityProduct(product);
+                                                setShowAvailabilityModal(true);
+                                            }}
+                                            className="p-2 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors text-gray-500 hover:text-amber-600"
+                                            title="Disponibilidad & Agotamiento por Tallas/Colores (Subpantalla SGF)"
+                                        >
+                                            <SlidersHorizontal className="w-4 h-4" />
+                                        </button>
                                         <button
                                             onClick={() => openEditModal(product)}
                                             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-blue-600"
@@ -1689,6 +1754,14 @@ export default function Products() {
                     </Button>
                 </div>
             </Modal>
+
+            {/* Subpantalla SGF: Disponibilidad y Agotamiento de Variantes */}
+            <VariantAvailabilityModal
+                isOpen={showAvailabilityModal}
+                onClose={() => setShowAvailabilityModal(false)}
+                product={availabilityProduct}
+                onSaved={() => loadProducts()}
+            />
         </div>
     );
 }

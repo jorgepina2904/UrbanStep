@@ -244,11 +244,47 @@ export function getColorVariantSizeStock(product, colorName) {
 }
 
 /**
+ * Verifica si una combinación de variante (talla y color) está deshabilitada o pausada
+ */
+export function isVariantDisabled(product, size = 'N/A', color = null) {
+    if (!product) return true;
+    if (product.disabled) return true;
+
+    const s = size && size !== 'N/A' ? String(size).trim() : null;
+    const c = color ? String(color).trim() : null;
+
+    // 1. Verificación por disabledVariants (ej: { "Negro_41": true, "Blanco_39": true })
+    if (product.disabledVariants && typeof product.disabledVariants === 'object') {
+        if (c && s && product.disabledVariants[`${c}_${s}`]) return true;
+        if (s && product.disabledVariants[`all_${s}`]) return true;
+        if (c && product.disabledVariants[`${c}_all`]) return true;
+    }
+
+    // 2. Verificación por disabledSizes generales
+    if (s && Array.isArray(product.disabledSizes) && product.disabledSizes.includes(s)) {
+        return true;
+    }
+
+    // 3. Verificación por disabledColors generales
+    if (c && Array.isArray(product.disabledColors) && product.disabledColors.includes(c)) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Calcula con precisión milimétrica la cantidad máxima disponible de un producto
  * para una talla y color específico, garantizando que nunca se exceda el inventario real.
+ * Si la variante está deshabilitada o pausada, retorna 0 para la venta sin alterar el stock físico.
  */
 export function getAvailableStockForItem(product, size = 'N/A', color = null) {
     if (!product || product.disabled || product.status === 'out_of_stock' || (product.stock !== undefined && product.stock <= 0)) return 0;
+
+    // Verificar si la combinación específica está deshabilitada
+    if (isVariantDisabled(product, size, color)) {
+        return 0;
+    }
 
     // 1. Si se especificó una talla válida (distinta de 'N/A' o vacío)
     if (size && size !== 'N/A') {
