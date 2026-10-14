@@ -23,13 +23,13 @@ export default function BrandLogo({
         return (
             <div
                 onClick={onClick}
-                className={`relative overflow-hidden rounded-xl bg-gradient-to-br from-slate-950 via-blue-950 to-black border border-blue-500/30 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0 group ${sizeClasses} ${className} ${onClick ? 'cursor-pointer' : ''}`}
+                className={`relative overflow-hidden rounded-xl bg-black border border-blue-500/30 shadow-md shadow-blue-500/20 flex items-center justify-center shrink-0 group ${sizeClasses} ${className} ${onClick ? 'cursor-pointer' : ''}`}
                 title="UrbanStep Sneakers & Streetwear Store"
             >
                 <img
-                    src="/brand/urbanstep-logo.png"
+                    src="/brand/urbanstep-emblem.png"
                     alt="UrbanStep Emblem"
-                    className="w-full h-full object-cover object-center scale-[2.2] group-hover:scale-[2.4] transition-transform duration-300"
+                    className="w-full h-full object-contain p-0.5 group-hover:scale-105 transition-transform duration-300"
                 />
             </div>
         );
@@ -60,9 +60,9 @@ export default function BrandLogo({
             >
                 <div className="w-14 h-14 rounded-2xl overflow-hidden bg-black border border-blue-500/30 p-1 mb-2 shadow-sm">
                     <img
-                        src="/brand/urbanstep-logo.png"
+                        src="/brand/urbanstep-emblem.png"
                         alt="UrbanStep"
-                        className="w-full h-full object-cover object-top scale-[1.9]"
+                        className="w-full h-full object-contain"
                     />
                 </div>
                 <h2 className="text-sm font-black tracking-tighter uppercase text-gray-900 dark:text-white">
@@ -90,9 +90,9 @@ export default function BrandLogo({
         >
             <div className={`${logoSizes.img} rounded-xl overflow-hidden bg-black border border-blue-500/40 shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center p-0.5`}>
                 <img
-                    src="/brand/urbanstep-logo.png"
+                    src="/brand/urbanstep-emblem.png"
                     alt="UrbanStep Logo"
-                    className="w-full h-full object-cover object-top scale-[2.1]"
+                    className="w-full h-full object-contain"
                 />
             </div>
             <div className="min-w-0 flex flex-col justify-center">
