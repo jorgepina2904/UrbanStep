@@ -138,7 +138,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
             <aside
                 className={clsx(
                     "fixed lg:static top-0 bottom-0 left-0 z-50 flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 select-none shrink-0 shadow-lg lg:shadow-none h-screen",
-                    isCollapsed ? "lg:w-20" : "lg:w-64",
+                    isCollapsed ? "lg:w-20" : "lg:w-72",
                     mobileOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0"
                 )}
             >
@@ -159,13 +159,15 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                         </button>
                     </div>
                 ) : (
-                    <div className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-gray-200 dark:border-gray-800 shrink-0">
-                        <BrandLogo variant="compact" size="md" />
+                    <div className="h-16 flex items-center justify-between px-3.5 sm:px-4 border-b border-gray-200 dark:border-gray-800 shrink-0 gap-2">
+                        <div className="flex items-center min-w-0 overflow-visible">
+                            <BrandLogo variant="compact" size="md" />
+                        </div>
 
                         {/* Botón de cerrar en móvil */}
                         <button
                             onClick={onCloseMobile}
-                            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden"
+                            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden shrink-0"
                             aria-label="Cerrar navegación"
                         >
                             <X className="w-5 h-5" />
@@ -175,7 +177,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                         {onToggleCollapse && (
                             <button
                                 onClick={onToggleCollapse}
-                                className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                className="hidden lg:flex p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
                                 title="Contraer menú lateral"
                             >
                                 <ChevronLeft className="w-4 h-4" />

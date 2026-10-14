@@ -1561,17 +1561,34 @@ export default function Landing() {
                     />
 
                     <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-                        <div className="w-screen max-w-md bg-[#0d1017] border-l border-white/10 shadow-2xl flex flex-col justify-between">
-                            {/* Drawer Header */}
-                            <div className="p-5 border-b border-white/10 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <ShoppingBag className="w-5 h-5 text-blue-400" />
-                                    <h2 className="text-base font-bold text-white uppercase">Tu Bolsa de Compras</h2>
-                                    <span className="text-xs font-mono text-gray-400">({totalItemsCount} items)</span>
+                        <div className={`w-screen max-w-md shadow-2xl flex flex-col justify-between transition-colors ${
+                            isDark 
+                                ? 'bg-[#0b0e14] text-white border-l border-white/10' 
+                                : 'bg-white text-gray-900 border-l border-gray-200'
+                        }`}>
+                            {/* Drawer Header with Brand Logo */}
+                            <div className={`p-4 sm:p-5 border-b flex items-center justify-between shrink-0 ${
+                                isDark ? 'border-white/10 bg-black/40' : 'border-gray-200 bg-gray-50/90'
+                            }`}>
+                                <div className="flex items-center gap-2.5">
+                                    <BrandLogo variant="compact" size="xs" showSubtitle={false} theme={isDark ? 'dark' : 'light'} />
+                                    <span className={isDark ? "text-gray-700" : "text-gray-300"}>|</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <ShoppingBag className="w-4 h-4 text-blue-500" />
+                                        <span className={`text-xs font-black uppercase tracking-wider ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                            Bolsa
+                                        </span>
+                                        <span className={`text-xs font-mono font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            ({totalItemsCount})
+                                        </span>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => setIsCartOpen(false)}
-                                    className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10"
+                                    className={`p-1.5 rounded-lg transition-colors ${
+                                        isDark ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200'
+                                    }`}
+                                    title="Cerrar bolsa"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -1580,100 +1597,120 @@ export default function Landing() {
                             {/* Drawer Items */}
                             <div className="flex-1 overflow-y-auto p-5 space-y-4">
                                 {cartItems.length === 0 ? (
-                                    <div className="text-center py-20 space-y-3">
-                                        <div className="w-16 h-16 mx-auto rounded-full bg-white/5 flex items-center justify-center text-3xl">
-                                            👟
+                                    <div className="text-center py-16 space-y-4 px-6">
+                                        <div className="w-20 h-20 mx-auto rounded-3xl bg-black border border-blue-500/30 p-2.5 shadow-xl shadow-blue-500/10 flex items-center justify-center">
+                                            <img
+                                                src="/brand/urbanstep-emblem.png"
+                                                alt="UrbanStep"
+                                                className="w-full h-full object-contain"
+                                            />
                                         </div>
-                                        <p className="font-bold text-white text-base">Tu bolsa está vacía</p>
-                                        <p className="text-xs text-gray-400">Agrega tus sneakers favoritos para solicitar delivery en Lara.</p>
+                                        <div className="space-y-1">
+                                            <p className={`font-black text-base uppercase tracking-tight ${isDark ? 'text-white' : 'text-gray-950'}`}>
+                                                Tu bolsa está vacía
+                                            </p>
+                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                Agrega tus siluetas favoritas de Nike, Vans, Adidas, RS21 o Puma.
+                                            </p>
+                                        </div>
                                         <button
                                             onClick={() => setIsCartOpen(false)}
-                                            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs"
+                                            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-blue-600/30 active:scale-95 transition-all"
                                         >
                                             Explorar Catálogo
                                         </button>
                                     </div>
                                 ) : (
                                     <>
-                                        {cartItems.map((item) => (
-                                            <div
-                                                key={`${item.id}-${item.size}-${item.color || ''}`}
-                                                className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center gap-3"
-                                            >
-                                                {/* Thumbnail */}
-                                                <div className="w-16 h-16 rounded-xl bg-neutral-900 flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                                                    {item.imageUrl ? (
-                                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-contain" />
-                                                    ) : (
-                                                        <span className="text-2xl">👟</span>
-                                                    )}
-                                                </div>
-
-                                                {/* Details */}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[10px] font-mono text-blue-400 uppercase font-bold">{item.brand}</p>
-                                                    <h4 className="text-xs font-bold text-white truncate">{item.name}</h4>
-                                                    <p className="text-[11px] text-gray-400">
-                                                        Talla: <strong className="text-white">{item.size}</strong>
-                                                        {item.color && (
-                                                            <> • Color: <strong className="text-purple-400">{item.color}</strong></>
+                                        {cartItems.map((item) => {
+                                            const isAtMax = item.maxStock !== undefined && item.quantity >= item.maxStock;
+                                            return (
+                                                <div
+                                                    key={`${item.id}-${item.size}-${item.color || ''}`}
+                                                    className={`p-3.5 rounded-2xl border flex items-center gap-3 transition-colors ${
+                                                        isDark 
+                                                            ? 'bg-white/[0.03] border-white/10' 
+                                                            : 'bg-gray-50 border-gray-200 shadow-xs'
+                                                    }`}
+                                                >
+                                                    {/* Thumbnail */}
+                                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center p-1 shrink-0 overflow-hidden border ${
+                                                        isDark ? 'bg-neutral-900 border-white/5' : 'bg-white border-gray-200'
+                                                    }`}>
+                                                        {item.imageUrl ? (
+                                                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-contain" />
+                                                        ) : (
+                                                            <span className="text-2xl">👟</span>
                                                         )}
-                                                    </p>
-                                                    <p className="text-xs font-black text-white mt-1">
-                                                        ${item.price}{' '}
-                                                        <span className="text-[10px] text-emerald-400 font-mono">
-                                                            ({formatBs(item.price * rate)})
-                                                        </span>
-                                                    </p>
-                                                </div>
+                                                    </div>
 
-                                                {/* Controls */}
-                                                <div className="flex flex-col items-end gap-2">
-                                                    <button
-                                                        onClick={() => removeItem(item.id, item.size, item.color)}
-                                                        className="text-gray-500 hover:text-red-400 p-1"
-                                                        title="Eliminar de la bolsa"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <div className="flex items-center gap-1.5 bg-black/60 rounded-lg border border-white/10 p-0.5">
+                                                    {/* Details */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[10px] font-mono text-blue-500 uppercase font-bold">{item.brand}</p>
+                                                        <h4 className={`text-xs font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.name}</h4>
+                                                        <p className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                            Talla: <strong className={isDark ? "text-white" : "text-gray-900"}>{item.size}</strong>
+                                                            {item.color && (
+                                                                <> • Color: <strong className="text-blue-500 dark:text-purple-400">{item.color}</strong></>
+                                                            )}
+                                                        </p>
+                                                        <p className={`text-xs font-black mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                                            ${item.price}{' '}
+                                                            <span className={`text-[10px] font-mono ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                                                                ({formatBs(item.price * rate)})
+                                                            </span>
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Controls */}
+                                                    <div className="flex flex-col items-end gap-2">
                                                         <button
-                                                            onClick={() => updateQuantity(item.id, item.size, item.quantity - 1, item.color)}
-                                                            className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-white"
-                                                            title="Disminuir"
+                                                            onClick={() => removeItem(item.id, item.size, item.color)}
+                                                            className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                                                            title="Eliminar de la bolsa"
                                                         >
-                                                            <Minus className="w-3 h-3" />
+                                                            <Trash2 className="w-3.5 h-3.5" />
                                                         </button>
-                                                        <span className="text-xs font-bold font-mono px-1">{item.quantity}</span>
-                                                        {(() => {
-                                                            const isAtMax = item.maxStock !== undefined && item.quantity >= item.maxStock;
-                                                            return (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        if (isAtMax) {
-                                                                            toast.error(`Stock máximo alcanzado (${item.maxStock} disponibles)`);
-                                                                            return;
-                                                                        }
-                                                                        updateQuantity(item.id, item.size, item.quantity + 1, item.color);
-                                                                    }}
-                                                                    disabled={isAtMax}
-                                                                    className={`w-5 h-5 flex items-center justify-center transition-colors ${
-                                                                        isAtMax ? 'opacity-25 cursor-not-allowed text-gray-600' : 'text-gray-400 hover:text-white'
-                                                                    }`}
-                                                                    title={isAtMax ? `Stock máximo alcanzado (${item.maxStock} disp.)` : "Aumentar"}
-                                                                >
-                                                                    <Plus className="w-3 h-3" />
-                                                                </button>
-                                                            );
-                                                        })()}
+                                                        <div className={`flex items-center gap-1.5 rounded-lg border p-0.5 ${
+                                                            isDark ? 'bg-black/60 border-white/10' : 'bg-white border-gray-300'
+                                                        }`}>
+                                                            <button
+                                                                onClick={() => updateQuantity(item.id, item.size, item.quantity - 1, item.color)}
+                                                                className={`w-5 h-5 flex items-center justify-center transition-colors ${
+                                                                    isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                                                                }`}
+                                                                title="Disminuir"
+                                                            >
+                                                                <Minus className="w-3 h-3" />
+                                                            </button>
+                                                            <span className={`text-xs font-bold font-mono px-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.quantity}</span>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (isAtMax) {
+                                                                        toast.error(`Stock máximo alcanzado (${item.maxStock} disponibles)`);
+                                                                        return;
+                                                                    }
+                                                                    updateQuantity(item.id, item.size, item.quantity + 1, item.color);
+                                                                }}
+                                                                disabled={isAtMax}
+                                                                className={`w-5 h-5 flex items-center justify-center transition-colors ${
+                                                                    isAtMax 
+                                                                        ? 'opacity-25 cursor-not-allowed text-gray-400' 
+                                                                        : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                                                                }`}
+                                                                title={isAtMax ? `Stock máximo alcanzado (${item.maxStock} disp.)` : "Aumentar"}
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
 
                                         {/* Shipping Option Selector */}
-                                        <div className="pt-4 border-t border-white/10 space-y-2">
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-300">
+                                        <div className={`pt-4 border-t space-y-2 ${isDark ? 'border-white/10' : 'border-gray-200'}`}>
+                                            <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                 Modalidad de Entrega:
                                             </label>
                                             <div className="space-y-1.5">
@@ -1686,8 +1723,10 @@ export default function Landing() {
                                                         key={opt.id}
                                                         className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer text-xs transition-all ${
                                                             shippingOption === opt.id
-                                                                ? 'bg-blue-600/20 border-blue-500 text-white'
-                                                                : 'bg-white/[0.02] border-white/10 text-gray-400 hover:bg-white/[0.05]'
+                                                                ? 'bg-blue-600/15 border-blue-500 font-bold ' + (isDark ? 'text-white' : 'text-blue-900')
+                                                                : isDark
+                                                                    ? 'bg-white/[0.02] border-white/10 text-gray-400 hover:bg-white/[0.05]'
+                                                                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-2">
@@ -1699,9 +1738,9 @@ export default function Landing() {
                                                                 onChange={() => setShippingOption(opt.id)}
                                                                 className="text-blue-600"
                                                             />
-                                                            <span className="font-semibold">{opt.label}</span>
+                                                            <span>{opt.label}</span>
                                                         </div>
-                                                        <span className="font-mono font-bold text-emerald-400">{opt.price}</span>
+                                                        <span className={`font-mono font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{opt.price}</span>
                                                     </label>
                                                 ))}
                                             </div>
@@ -1712,21 +1751,25 @@ export default function Landing() {
 
                             {/* Drawer Footer */}
                             {cartItems.length > 0 && (
-                                <div className="p-5 border-t border-white/10 bg-black/60 space-y-3">
+                                <div className={`p-5 border-t space-y-3 ${
+                                    isDark ? 'border-white/10 bg-black/60' : 'border-gray-200 bg-gray-50'
+                                }`}>
                                     <div className="space-y-1 text-xs">
-                                        <div className="flex justify-between text-gray-400">
+                                        <div className={`flex justify-between ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <span>Subtotal Calzados:</span>
                                             <span className="font-mono">${subtotal.toFixed(2)}</span>
                                         </div>
-                                        <div className="flex justify-between text-gray-400">
+                                        <div className={`flex justify-between ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <span>Flete / Envío:</span>
                                             <span className="font-mono">${shippingCostUsd.toFixed(2)}</span>
                                         </div>
-                                        <div className="flex justify-between text-base font-black text-white pt-1 border-t border-white/10">
+                                        <div className={`flex justify-between text-base font-black pt-1 border-t ${
+                                            isDark ? 'text-white border-white/10' : 'text-gray-950 border-gray-200'
+                                        }`}>
                                             <span>Total a Pagar:</span>
                                             <div className="text-right">
                                                 <span>${totalCartUsd.toFixed(2)}</span>
-                                                <div className="text-xs font-bold text-emerald-400 font-mono">
+                                                <div className={`text-xs font-bold font-mono ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
                                                     {formatBs(totalCartBs)}
                                                 </div>
                                             </div>
@@ -1738,7 +1781,7 @@ export default function Landing() {
                                         onClick={() => {
                                             setIsCheckoutModalOpen(true);
                                         }}
-                                        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30"
+                                        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30 active:scale-95"
                                     >
                                         <span>Confirmar Pedido & Delivery</span>
                                         <ArrowRight className="w-4 h-4" />
