@@ -160,5 +160,50 @@ La sección **"Reportes"** está estructurada en 6 capas funcionales de respuest
 
 ### 8.1 Exportación de Libros y Reportes
 Cada reporte cuenta con el panel de exportación **`ExportButtonGroup`**:
-* **Exportar a Excel (.XLSX / CSV):** Archivo formateado para importación en software contables externos.
+* **Exportar a Excel (.XLSX / CSV):** Archivo formateado para importación en software contables externos (incluyendo el Libro de Ventas formal SENIAT).
 * **Descargar PDF Imprimible:** Formato corporativo formal con membrete de UrbanStep Venezuela C.A., RIF, firma de contador y sellos fiscales.
+
+---
+
+## 9. HARDWARE DE PUNTO DE VENTA, ESCÁNER Y MODO OFFLINE (PWA)
+
+### 9.1 Impresión Térmica Directa ESC/POS (58mm y 80mm)
+El Punto de Venta incluye integración nativa de hardware para impresoras térmicas de tickets sin necesidad de abrir la ventana de diálogo del navegador:
+1. En el modal de recibo tras procesar una venta, presione el botón **"Térmica Directa"**.
+2. Conéctese a través de **WebUSB** o **Web Bluetooth** con su impresora (ej. Xprinter, Epson, Bixolon).
+3. El ticket se imprime en milisegundos con logotipo, desglose bimonetario ($ / Bs. BCV), código QR de validación y corte automático de papel.
+
+### 9.2 Generación y Lectura de Código de Barras (Code128)
+1. **Generación de Etiquetas:** Desde el módulo **"Inventario"**, haga clic en **"Imprimir Etiquetas"** para generar códigos de barra estándar en formato `SKU|TALLA|COLOR` listos para adherir a las cajas de calzado (formatos 50x30 mm, 40x25 mm y 58x40 mm).
+2. **Escaneo en Caja:** En la terminal de caja (**POS / Terminal**), conecte cualquier pistola lectora USB o Bluetooth. Al escanear la etiqueta, el sistema detecta el retorno y añade de inmediato la variante exacta de talla y color al carrito de compras.
+
+### 9.3 Arqueo Ciego y Bóveda por Denominación de Billetes
+Al realizar el cierre de turno:
+1. El cajero realiza un **Cierre Ciego** (el sistema oculta los saldos teóricos esperados para garantizar la transparencia del arqueo).
+2. En el desglose de bóveda, cuente billete por billete por denominación ($100, $50, $20, $10, $5, $1 y Bolívares), más los lotes de Punto de Venta, Pago Móvil y Zelle.
+3. El sistema calcula automáticamente los faltantes o sobrantes y genera una alerta de auditoría para la gerencia en caso de descuadre.
+
+### 9.4 Operación Continua Fuera de Línea (Offline-First)
+Si ocurre una falla eléctrica o caída del proveedor de internet en la tienda:
+1. La aplicación continuará funcionando en la caja gracias a su Service Worker y almacenamiento local en **IndexedDB**.
+2. Podrá seguir registrando ventas, emitiendo comprobantes provisionales `TKT-OFF-CAJA-YYYY-XXXX`.
+3. Una barra flotante superior indicará las ventas pendientes por sincronizar.
+4. Al restablecerse la conexión a internet, el sistema sincroniza automáticamente la cola contra Supabase sin duplicados.
+
+---
+
+## 10. ECOMMERCE, LOGÍSTICA DE ALMACÉN Y MARKETING VIP
+
+### 10.1 Ficha de Producto y Reseñas en Tienda Web
+* Los clientes acceden a `/producto/:id` para visualizar la galería en alta resolución, disponibilidad en tiempo real por talla y color, y opiniones verificadas de otros compradores.
+* Incluye botones de compra rápida y cálculo de cuotas o conversión a tasa oficial BCV.
+
+### 10.2 Traslados entre Sucursales y Lotes de Garantía (`/warehouse`)
+1. **Traslados de Mercancía:** Desde el módulo **Almacén y Sucursales**, genere traslados entre la Tienda Principal y Depósitos (`TRF-YYYY-XXXX`) con recepción ciega para cotejar los pares enviados vs. recibidos.
+2. **Garantías a Proveedor:** Agrupe el calzado recibido por devolución con motivo `producto_danado` en un lote de garantía (`GAR-YYYY-XXXX`) para solicitar reposición o nota de crédito al distribuidor mayorista.
+
+### 10.3 Carritos Abandonados y Alertas "Avísame mi Talla" (`/marketing`)
+1. **Recuperación de Carritos:** En el módulo **Marketing**, visualice los clientes que dejaron calzado en su bolsa. Con un solo clic, envíe un mensaje personalizado de WhatsApp con un enlace directo (`?recover=`) que restaura su carrito con el inventario actualizado.
+2. **Alertas de Stock:** Cuando un cliente solicita una talla agotada, el sistema registra su contacto. Al recibir una compra de mercancía que repone esa talla, el sistema lista a los clientes en espera para notificarles inmediatamente.
+3. **UrbanStep VIP Club:** Los clientes acumulan 1 punto por cada dólar neto comprado. El sistema clasifica automáticamente en niveles (*Rookie, Streetwear Fan y Sneakerhead VIP*) otorgando descuentos de 3% a 5% y beneficios de envío gratis de forma transparente en el checkout.
+

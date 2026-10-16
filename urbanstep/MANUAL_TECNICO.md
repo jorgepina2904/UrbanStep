@@ -187,3 +187,33 @@ Para solventar cuellos de botella en la renderización de reportes ejecutivos:
 * **Protección Legal Anti-Borrado:** La función `productService.hasSalesHistory(id)` inspecciona transacciones históricas en base de datos local y remota, denegando físicamente sentencias `DELETE` sobre productos con historial tributario.
 * **Trazabilidad en `auditService.js`:** Cada operación (inicio de sesión, cambio de tasa BCV, apertura de turno, cierre Z, emisión de NC, pausa de variantes) genera un registro inmutable con usuario, fecha exacta, módulo e identificador de entidad.
 * **Seguridad en Front-End:** Validación tipada y sanitización de entradas numéricas y monetarias evitando desbordamientos o valores negativos.
+
+---
+
+## 8. ARQUITECTURA OFFLINE-FIRST, HARDWARE POS Y RED DE SEGURIDAD
+
+### 8.1 Service Worker y Almacenamiento Local (`offlineStore.js`)
+* **PWA Standalone:** `sw.js` cachea el App Shell e imágenes estáticas con estrategia `stale-while-revalidate`.
+* **Cola Idempotente en IndexedDB:** Las ventas realizadas sin red se encolan en la base de datos local del navegador con su UUID respectivo. El proceso en segundo plano `offlineSync.js` sube los registros cuando regresa la conexión, garantizando que el stock en Supabase lo descuente atómicamente el trigger `trg_detalles_venta_stock` sin pisar ventas de otras cajas.
+
+### 8.2 Integración ESC/POS Directa (`escposPrinter.js`)
+* Controlador binario para impresoras térmicas de 58mm y 80mm vía **WebUSB** y **Web Bluetooth**.
+* Soporte nativo para caracteres en español (página de códigos CP858), códigos QR de validación fiscal del SENIAT y secuencias de escape de corte automático (`GS V 66 0`).
+
+### 8.3 Red de Seguridad Front-End (`ErrorBoundary` y `lazyWithRetry`)
+* **ErrorBoundary Global (`ErrorBoundary.jsx`):** Captura cualquier excepción de renderizado imprevista y ofrece al usuario la opción de recargar de forma segura o limpiar cachés residuales sin bloquear el sistema.
+* **Carga Resiliente de Rutas (`lazyWithRetry.js`):** Al desplegar nuevas versiones en producción, si el navegador del cliente solicita un chunk antiguo que ya expiró en el servidor, el cargador reintenta automáticamente antes de fallar.
+
+---
+
+## 9. SUITE DE PRUEBAS AUTOMATIZADAS (TESTING)
+
+El proyecto cuenta con una batería de pruebas unitarias y de integración formal ejecutada bajo **Vitest**:
+```bash
+npm test
+```
+* `money.test.js`: Redondeo simétrico `round2`, cálculo de IVA por renglón y desglose bimonetario USD / Bs.
+* `fiscal.test.js`: Descuentos de notas de crédito, tasas BCV dinámicas y validación de RIF / Cédula.
+* `business.test.js`: Promociones automáticas (2x1, envío gratis), cálculo de puntos y niveles del Club VIP, y márgenes de rentabilidad real (CPP).
+* `offline.test.js`: Idempotencia de la cola de ventas en IndexedDB y congelación de costo histórico en `detalles_venta.costo_unitario_usd`.
+
