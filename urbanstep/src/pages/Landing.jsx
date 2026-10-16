@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useContext } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useCart } from '../contexts/CartContext';
@@ -10,6 +10,10 @@ import { customerService } from '../services/customerService';
 import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
+import { promotionService, accountService, addressBookService } from '../services/storefrontService';
+import { computePromotions } from '../utils/promotions';
+import { authService } from '../services/authService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { getDefaultRoute } from '../utils/permissions';
 import {
     Store,
@@ -63,8 +67,8 @@ const mapProductToCatalog = (p) => ({
     sizes: p.sizes || ['39', '40', '41', '42', '43'],
     sizeStock: p.sizeStock || null,
     sizeCategory: p.sizeCategory || null,
-    rating: 4.9,
-    reviewsCount: 150,
+    rating: null,
+    reviewsCount: 0,
     stockBadge: `${p.stock} pares disponibles`,
     stock: p.stock,
     description: p.description || 'Calzado original garantizado UrbanStep Store.'
@@ -165,6 +169,9 @@ export default function Landing() {
     const [shippingOption, setShippingOption] = useState('delivery_lara'); // 'delivery_lara' | 'pickup' | 'nacional'
     const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
     const [orderSuccessData, setOrderSuccessData] = useState(null);
+    const [promotions, setPromotions] = useState([]);
+    const [couponInput, setCouponInput] = useState('');
+    const [couponCode, setCouponCode] = useState('');
 
     // Single Unified Auth Modal state
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -204,6 +211,7 @@ export default function Landing() {
             setIsAuthModalOpen(true);
             setAuthTab('login');
         }
+        if (params.get('cart') === '1') setIsCartOpen(true);
     }, [location.search, isAuthenticated]);
 
     // Pre-fill checkout form if user is logged in
@@ -215,6 +223,15 @@ export default function Landing() {
                 phone: user.phone || prev.phone,
                 address: user.address || prev.address
             }));
+            const main = addressBookService.list(user).find(a => a.isDefault);
+            if (main) {
+                setCheckoutForm(prev => ({
+                    ...prev,
+                    address: main.address,
+                    zone: main.zone || prev.zone,
+                    phone: main.phone || prev.phone
+                }));
+            }
         }
     }, [user]);
 
@@ -333,7 +350,32 @@ export default function Landing() {
         return 0; // pickup
     }, [shippingOption]);
 
-    const totalCartUsd = subtotal + (cartItems.length > 0 ? shippingCostUsd : 0);
+    useEffect(() => {
+        promotionService.getActive().then(setPromotions);
+    }, []);
+
+    const promo = useMemo(() => computePromotions({
+        items: cartItems,
+        subtotal,
+        shippingCost: cartItems.length > 0 ? shippingCostUsd : 0,
+        promotions,
+        couponCode
+    }), [cartItems, subtotal, shippingCostUsd, promotions, couponCode]);
+
+    const effectiveShippingUsd = cartItems.length > 0 ? Math.max(0, shippingCostUsd - promo.shippingDiscountUsd) : 0;
+    const totalCartUsd = Math.max(0, subtotal - promo.discountUsd) + effectiveShippingUsd;
+
+    const handleApplyCoupon = () => {
+        const code = couponInput.trim().toUpperCase();
+        if (!code) return;
+        const test = computePromotions({ items: cartItems, subtotal, shippingCost: shippingCostUsd, promotions, couponCode: code });
+        if (test.couponError) {
+            toast.error(test.couponError);
+            return;
+        }
+        setCouponCode(code);
+        toast.success(`Cupón ${code} aplicado`, { icon: '🏷️' });
+    };
     const totalCartBs = totalCartUsd * rate;
     const totalItemsCount = cartItems.reduce((acc, i) => acc + (i.quantity || 1), 0);
 
@@ -465,10 +507,14 @@ export default function Landing() {
             const customerPhone = checkoutForm.phone.trim() || '0414-1234567';
             const deliveryAddress = `${checkoutForm.address} (${checkoutForm.zone})`.trim();
 
+            // Vincula el pedido a la ficha del cliente para que aparezca en "Mis pedidos"
+            const customerRecord = user ? await accountService.getCustomerRecord(user) : null;
+
             const orderPayload = {
+                customerId: customerRecord?.id || null,
                 customer: customerName,
                 customerPhone,
-                customerDoc: 'V-00000000',
+                customerDoc: customerRecord?.docNumber || 'V-00000000',
                 items: cartItems.map(i => ({
                     productId: i.id || i.productId,
                     name: i.name,
@@ -480,12 +526,13 @@ export default function Landing() {
                     totalUsd: i.price * i.quantity
                 })),
                 subtotal: subtotal,
-                shippingCost: shippingCostUsd,
+                discount: promo.discountUsd,
+                shippingCost: effectiveShippingUsd,
                 total: totalCartUsd,
                 bcvRate: rate,
                 paymentMethod: checkoutForm.paymentMethod,
                 cashier: 'Ecommerce Web',
-                notes: `Delivery Lara: ${deliveryAddress}. Notas: ${checkoutForm.notes}`
+                notes: `Delivery Lara: ${deliveryAddress}. Notas: ${checkoutForm.notes}${promo.applied.length ? `. Promociones: ${promo.applied.map(a => a.code).join(', ')}` : ''}`
             };
 
             const createdSale = await saleService.create(orderPayload);
@@ -501,8 +548,8 @@ export default function Landing() {
                         destinationLat: 10.0678,
                         destinationLng: -69.3474,
                         distanceKm: shippingOption === 'nacional' ? 350 : 7.2,
-                        deliveryCostUsd: shippingCostUsd,
-                        deliveryCostBs: Number(((totalCartUsd - subtotal) * rate).toFixed(2)),
+                        deliveryCostUsd: effectiveShippingUsd,
+                        deliveryCostBs: Number((effectiveShippingUsd * rate).toFixed(2)),
                         estimatedMinutes: shippingOption === 'nacional' ? 1440 : 35,
                         specialInstructions: `${shippingOption === 'nacional' ? 'Envío Nacional Encomienda' : 'Delivery Local Lara'}. Notas: ${checkoutForm.notes || 'Sin instrucciones'}`,
                     });
@@ -511,6 +558,9 @@ export default function Landing() {
                 }
             }
 
+            promotionService.registerUse(promo.applied);
+            setCouponCode('');
+            setCouponInput('');
             clearCart();
             setIsCheckoutModalOpen(false);
             setIsCartOpen(false);
@@ -619,6 +669,9 @@ export default function Landing() {
                                         Ir al Panel →
                                     </button>
                                 ) : (
+                                    <Link to="/cuenta" className="px-2.5 py-0.5 rounded bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors">Mi cuenta</Link>
+                                )}
+                                {user?.role === 'Cliente' && (
                                     <button
                                         onClick={() => {
                                             logout();
@@ -944,10 +997,7 @@ export default function Landing() {
                                         <p className="text-xs font-mono text-blue-600 dark:text-blue-400 uppercase font-black tracking-wider">
                                             {currentFeatured?.brand}
                                         </p>
-                                        <div className="flex items-center gap-1 text-xs text-amber-400 font-bold font-mono">
-                                            <Star className="w-3.5 h-3.5 fill-current" />
-                                            <span>4.9 / 5.0</span>
-                                        </div>
+
                                     </div>
                                     <h3 className={`text-lg font-black tracking-tight line-clamp-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                         {currentFeatured?.name}
@@ -1173,10 +1223,12 @@ export default function Landing() {
                                                 {product.brand}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-xs text-amber-400 font-bold">
-                                            <Star className="w-3.5 h-3.5 fill-current" />
-                                            <span>{product.rating || '4.9'}</span>
-                                        </div>
+                                        {product.rating ? (
+                                            <div className="flex items-center gap-1 text-xs text-amber-400 font-bold">
+                                                <Star className="w-3.5 h-3.5 fill-current" />
+                                                <span>{product.rating}</span>
+                                            </div>
+                                        ) : <span />}
                                     </div>
 
                                     {/* Image Thumbnail wrapper — High-end Sneaker Studio Frame matching reference */}
@@ -1247,9 +1299,10 @@ export default function Landing() {
                                         <h3 className={`text-base font-bold group-hover:text-blue-500 transition-colors line-clamp-1 ${
                                             isDark ? 'text-white' : 'text-slate-900'
                                         }`}>
-                                            {product.name}
+                                            <Link to={`/producto/${product.id}`} className="focus:outline-none focus-visible:underline">{product.name}</Link>
                                         </h3>
                                         <p className={`text-xs line-clamp-1 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>{product.subtitle}</p>
+                                        <Link to={`/producto/${product.id}`} className="text-[11px] font-bold text-blue-500 hover:underline">Ver detalle, fotos y guía de tallas →</Link>
                                     </div>
 
                                     {/* Color Selector */}
@@ -1754,14 +1807,40 @@ export default function Landing() {
                                 <div className={`p-5 border-t space-y-3 ${
                                     isDark ? 'border-white/10 bg-black/60' : 'border-gray-200 bg-gray-50'
                                 }`}>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            aria-label="Código de cupón"
+                                            value={couponInput}
+                                            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
+                                            placeholder="Código de cupón"
+                                            className={`flex-1 px-3 py-2 rounded-xl text-xs outline-none border ${isDark ? 'bg-black/50 border-white/10 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                        />
+                                        <button type="button" onClick={handleApplyCoupon} className="px-3 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold hover:bg-gray-700">Aplicar</button>
+                                    </div>
+                                    {couponCode && (
+                                        <p className="text-[11px] text-emerald-500">
+                                            Cupón {couponCode} activo · <button type="button" className="underline" onClick={() => { setCouponCode(''); setCouponInput(''); }}>quitar</button>
+                                        </p>
+                                    )}
                                     <div className="space-y-1 text-xs">
                                         <div className={`flex justify-between ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <span>Subtotal Calzados:</span>
                                             <span className="font-mono">${subtotal.toFixed(2)}</span>
                                         </div>
+                                        {promo.applied.map((a) => (
+                                            <div key={`${a.code}-${a.label}`} className="flex justify-between text-emerald-500 font-semibold">
+                                                <span>🏷️ {a.label || a.code}</span>
+                                                <span className="font-mono">{a.discountUsd > 0 ? `-$${a.discountUsd.toFixed(2)}` : 'Envío gratis'}</span>
+                                            </div>
+                                        ))}
                                         <div className={`flex justify-between ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                             <span>Flete / Envío:</span>
-                                            <span className="font-mono">${shippingCostUsd.toFixed(2)}</span>
+                                            <span className="font-mono">
+                                                {promo.shippingDiscountUsd > 0 && <s className="mr-1 opacity-60">${shippingCostUsd.toFixed(2)}</s>}
+                                                ${effectiveShippingUsd.toFixed(2)}
+                                            </span>
                                         </div>
                                         <div className={`flex justify-between text-base font-black pt-1 border-t ${
                                             isDark ? 'text-white border-white/10' : 'text-gray-950 border-gray-200'
@@ -2033,6 +2112,22 @@ export default function Landing() {
                         )}
 
                         {/* TAB 1: SINGLE UNIFIED LOGIN */}
+                        {isSupabaseConfigured() && (
+                            <div className="mb-4">
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        const res = await authService.loginWithGoogle();
+                                        if (!res.success) toast.error(res.error);
+                                    }}
+                                    className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
+                                >
+                                    <span aria-hidden="true" className="font-black text-blue-600">G</span>
+                                    Continuar con Google
+                                </button>
+                                <p className="text-center text-[10px] text-gray-500 mt-2">o con tu correo y contraseña</p>
+                            </div>
+                        )}
                         {authTab === 'login' && (
                             <form onSubmit={handleUnifiedLogin} className="space-y-4">
                                 <div>

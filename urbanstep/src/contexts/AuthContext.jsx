@@ -16,8 +16,16 @@ export const AuthProvider = ({ children }) => {
             } catch {
                 localStorage.removeItem('us_user');
             }
+            setLoading(false);
+            return;
         }
-        setLoading(false);
+        // Sin sesión local: ¿regresa de iniciar sesión con Google?
+        authService.restoreOAuthSession().then((oauthUser) => {
+            if (oauthUser) {
+                setUser(oauthUser);
+                toast.success(`Bienvenido, ${oauthUser.name}`);
+            }
+        }).finally(() => setLoading(false));
     }, []);
 
     const login = async (username, password) => {

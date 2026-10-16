@@ -14,8 +14,10 @@ import { testSupabaseConnection, isSupabaseConfigured, supabase } from '../servi
 import { clearAllLocalData } from '../services/api';
 import { VENEZUELA_BANKS, SHIPPING_CARRIERS } from '../data/venezuelaData';
 import { auditService } from '../services/auditService';
+import PromotionsSettings from '../ui/PromotionsSettings';
 import { 
     Store, 
+    Tag,
     DollarSign, 
     CreditCard, 
     Truck, 
@@ -751,6 +753,7 @@ DELETE FROM clientes WHERE id <> 'publico';
         { id: 'currency', label: 'Moneda & Tasa BCV', icon: DollarSign },
         { id: 'payments', label: 'Cuentas de Pago', icon: CreditCard },
         { id: 'logistics', label: 'Envíos & Delivery', icon: Truck },
+        { id: 'promos', label: 'Promociones', icon: Tag },
         { id: 'audit', label: 'Auditoría', icon: Shield },
         { id: 'database', label: 'Supabase & Cloud', icon: Database },
     ];
@@ -1630,6 +1633,8 @@ DELETE FROM clientes WHERE id <> 'publico';
             )}
 
             {/* Tab 5: AUDITORÍA */}
+            {activeTab === 'promos' && <PromotionsSettings />}
+
             {activeTab === 'audit' && (
                 <div className="space-y-6">
                     {/* Audit KPIs */}

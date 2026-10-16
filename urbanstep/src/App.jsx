@@ -12,6 +12,8 @@ import { ProtectedRoute } from './routes/ProtectedRoute';
 
 // Pages
 const Landing = lazy(() => import('./pages/Landing'));
+const ProductDetail = lazy(() => import('./pages/ProductDetail'));
+const Account = lazy(() => import('./pages/Account'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const POS = lazy(() => import('./pages/POS'));
 const CashierTerminal = lazy(() => import('./pages/CashierTerminal'));
@@ -34,6 +36,8 @@ export const App = () => {
                 <Suspense fallback={<div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center text-sm text-gray-500">Cargando…</div>}>
                 <Routes>
                   <Route path="/landing" element={<Landing />} />
+                  <Route path="/producto/:id" element={<ProductDetail />} />
+                  <Route path="/cuenta" element={<Account />} />
                   <Route path="/login" element={<Navigate to="/landing?login=true" replace />} />
                   {/* Dedicated Fullscreen Cashier Terminal */}
                   <Route path="/cashier" element={<ProtectedRoute module="pos"><CashierTerminal /></ProtectedRoute>} />

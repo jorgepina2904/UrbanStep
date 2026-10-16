@@ -1,6 +1,7 @@
 import { userService } from './userService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { cashRegisterService } from './cashRegisterService';
+import { customerService } from './customerService';
 
 const USER_KEY = 'us_user';
 const TOKEN_KEY = 'us_token';
@@ -106,7 +107,66 @@ export const authService = {
     return cashRegisterService.getActive();
   },
 
+  /** Inicia el flujo OAuth de Google (requiere habilitar el proveedor en Supabase > Authentication). */
+  async loginWithGoogle() {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'El acceso con Google requiere Supabase configurado' };
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/landing` }
+    });
+    return error ? { success: false, error: error.message } : { success: true };
+  },
+
+  /**
+   * Al volver del OAuth, convierte la sesión de Supabase en un usuario de la tienda.
+   * SIEMPRE rol Cliente: el rol nunca se toma de user_metadata (editable por el propio usuario).
+   */
+  async restoreOAuthSession() {
+    if (!isSupabaseConfigured() || !supabase) return null;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const authUser = data?.session?.user;
+      if (!authUser || authUser.app_metadata?.provider === 'email') return null;
+
+      const email = String(authUser.email || '').toLowerCase();
+      const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
+      const clientUser = { id: authUser.id, name, email, role: 'Cliente', branch: 'Ecommerce Online', active: true, provider: 'google' };
+
+      // Ficha de cliente para que sus pedidos aparezcan en "Mi cuenta"
+      try {
+        const all = await customerService.getAll();
+        if (!all.some(c => String(c.email || '').toLowerCase() === email)) {
+          const parts = name.split(' ');
+          await customerService.create({
+            firstName: parts[0] || 'Cliente',
+            lastName: parts.slice(1).join(' ') || 'Online',
+            docType: 'V',
+            docNumber: `V-${Date.now().toString().slice(-8)}`,
+            email,
+            phone: '0414-0000000',
+            state: 'Lara',
+            city: 'Barquisimeto',
+            address: 'Por confirmar'
+          });
+        }
+      } catch (e) {
+        console.warn('No se pudo crear la ficha del cliente de Google:', e);
+      }
+
+      localStorage.setItem(USER_KEY, JSON.stringify(clientUser));
+      return clientUser;
+    } catch (e) {
+      console.warn('No se pudo restaurar la sesión OAuth:', e);
+      return null;
+    }
+  },
+
   logout() {
+    if (isSupabaseConfigured() && supabase) {
+      supabase.auth.signOut().catch(() => {});
+    }
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(TOKEN_KEY);
   },
