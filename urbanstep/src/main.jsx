@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
+import ErrorBoundary from './ui/ErrorBoundary.jsx'
 
 // PWA: el service worker permite abrir la app y cobrar sin internet (solo en producción)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -11,6 +12,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

@@ -1,4 +1,6 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
+import ErrorBoundary from './ui/ErrorBoundary';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
@@ -11,21 +13,21 @@ import OfflineBanner from './ui/OfflineBanner';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
 // Pages
-const Landing = lazy(() => import('./pages/Landing'));
-const ProductDetail = lazy(() => import('./pages/ProductDetail'));
-const Account = lazy(() => import('./pages/Account'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const POS = lazy(() => import('./pages/POS'));
-const CashierTerminal = lazy(() => import('./pages/CashierTerminal'));
-const Products = lazy(() => import('./pages/Products'));
-const Inventory = lazy(() => import('./pages/Inventory'));
-const Customers = lazy(() => import('./pages/Customers'));
-const Reports = lazy(() => import('./pages/Reports'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Delivery = lazy(() => import('./pages/Delivery'));
-const Purchases = lazy(() => import('./pages/Purchases'));
-const Warehouse = lazy(() => import('./pages/Warehouse'));
-const Marketing = lazy(() => import('./pages/Marketing'));
+const Landing = lazyWithRetry(() => import('./pages/Landing'));
+const ProductDetail = lazyWithRetry(() => import('./pages/ProductDetail'));
+const Account = lazyWithRetry(() => import('./pages/Account'));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const POS = lazyWithRetry(() => import('./pages/POS'));
+const CashierTerminal = lazyWithRetry(() => import('./pages/CashierTerminal'));
+const Products = lazyWithRetry(() => import('./pages/Products'));
+const Inventory = lazyWithRetry(() => import('./pages/Inventory'));
+const Customers = lazyWithRetry(() => import('./pages/Customers'));
+const Reports = lazyWithRetry(() => import('./pages/Reports'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const Delivery = lazyWithRetry(() => import('./pages/Delivery'));
+const Purchases = lazyWithRetry(() => import('./pages/Purchases'));
+const Warehouse = lazyWithRetry(() => import('./pages/Warehouse'));
+const Marketing = lazyWithRetry(() => import('./pages/Marketing'));
 
 export const App = () => {
   return (
