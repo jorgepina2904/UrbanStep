@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { bcvService } from '../services/bcvService';
 import Modal from './Modal';
 import Button from './Button';
 import Input from './Input';
@@ -111,7 +112,7 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
     const taxReturnUsd = Math.round(subtotalReturnUsd * 0.16 * 100) / 100;
     const totalReturnUsd = Math.round((subtotalReturnUsd + taxReturnUsd) * 100) / 100;
 
-    const currentRate = selectedSale?.bcvRate || rate || 876.80;
+    const currentRate = selectedSale?.bcvRate || rate || bcvService.getRate().rate;
     const totalReturnBs = Math.round(totalReturnUsd * currentRate * 100) / 100;
 
     const handleProcessReturn = async (e) => {

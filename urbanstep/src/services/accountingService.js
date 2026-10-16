@@ -1,4 +1,7 @@
 import { saleService } from './saleServices';
+import { bcvService } from './bcvService';
+import { productService } from './productService';
+import { buildCostIndex, saleCostUsd } from '../utils/costing';
 import { purchaseService } from './purchaseService';
 import { shiftService } from './shiftService';
 import { returnService } from './returnService';
@@ -98,12 +101,14 @@ export const accountingService = {
      * Genera el Libro Diario formal consolidando Ventas, Compras y Cierres Z reales con Partida Doble
      */
     getLibroDiario: async ({ from = null, to = null, modulo = 'all' } = {}) => {
-        const [sales, purchases, shifts, creditNotes] = await Promise.all([
+        const [sales, purchases, shifts, creditNotes, products] = await Promise.all([
             saleService.getAll(),
             purchaseService.getAll(),
             shiftService.getAll(),
-            returnService.getAll().catch(() => [])
+            returnService.getAll().catch(() => []),
+            productService.getAll().catch(() => [])
         ]);
+        const costIndex = buildCostIndex(products);
 
         const asientos = [];
         let asientoSeq = 10001;
@@ -115,7 +120,7 @@ export const accountingService = {
             if (to && new Date(saleDate) > new Date(to)) return;
             if (modulo !== 'all' && modulo !== 'ventas') return;
 
-            const bcvRate = Number(sale.bcvRate || sale.bcv_rate) || 876.80;
+            const bcvRate = Number(sale.bcvRate || sale.bcv_rate) || bcvService.getRate().rate;
             const subtotalUsd = Number(sale.subtotal) || (Number(sale.total) / 1.16);
             const ivaUsd = Number(sale.iva) || (Number(sale.total) - subtotalUsd);
             const igtfUsd = Number(sale.igtf) || (sale.paymentMethod === 'efectivo_usd' ? subtotalUsd * 0.03 : 0.00);
@@ -213,7 +218,11 @@ export const accountingService = {
             });
 
             // Asiento paralelo de Costo de Ventas
-            const costoEstimadoUsd = Math.round(subtotalUsd * 0.52 * 100) / 100;
+            // Costo real por Costo Promedio Ponderado cuando todas las líneas tienen costo; si no, estimación del 52%
+            const realCost = saleCostUsd(sale, costIndex);
+            const costoEstimadoUsd = realCost.complete && realCost.costUsd > 0
+                ? realCost.costUsd
+                : Math.round(subtotalUsd * 0.52 * 100) / 100;
             const costoEstimadoBs = Math.round(costoEstimadoUsd * bcvRate * 100) / 100;
 
             asientos.push({
@@ -264,7 +273,7 @@ export const accountingService = {
             if (to && new Date(ncDate) > new Date(to)) return;
             if (modulo !== 'all' && modulo !== 'ventas') return;
 
-            const bcvRate = Number(nc.bcvRate) || 876.80;
+            const bcvRate = Number(nc.bcvRate) || bcvService.getRate().rate;
             const subtotalUsd = Number(nc.subtotalUsd) || 0;
             const taxUsd = Number(nc.taxUsd) || 0;
             const totalUsd = Number(nc.totalUsd) || 0;
@@ -341,7 +350,7 @@ export const accountingService = {
             if (to && new Date(compraDate) > new Date(to)) return;
             if (modulo !== 'all' && modulo !== 'compras') return;
 
-            const bcvRate = Number(compra.tasa_bcv) || 876.80;
+            const bcvRate = Number(compra.tasa_bcv) || bcvService.getRate().rate;
             const subtotalUsd = Number(compra.subtotal_usd || compra.total_usd) || 1000;
             const ivaUsd = Math.round(subtotalUsd * 0.16 * 100) / 100;
             const totalConIvaUsd = subtotalUsd + ivaUsd;

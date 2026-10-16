@@ -154,7 +154,7 @@ export const returnService = {
         const ncNumber = `NC-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
         const fiscalControlNumber = `00-${String(Math.floor(100000 + Math.random() * 900000))}`;
 
-        const currentRate = bcvService.getRate()?.rate || 876.80;
+        const currentRate = bcvService.getRate()?.rate || bcvService.getRate().rate;
 
         // Cálculos monetarios del calzado devuelto
         let subtotalUsd = 0;

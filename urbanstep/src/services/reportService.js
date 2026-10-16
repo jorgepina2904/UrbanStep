@@ -5,6 +5,8 @@ import { productService } from './productService';
 import { purchaseService } from './purchaseService';
 import { shiftService } from './shiftService';
 import { returnService } from './returnService';
+import { buildCostIndex, itemUnitCost } from '../utils/costing';
+import { computeCommissions, getCommissionConfig } from './commissionService';
 
 const isWithinRange = (isoDate, from, to) => {
     if (!isoDate) return false;
@@ -253,7 +255,7 @@ export const reportService = {
                 date: nc.date ? new Date(nc.date).toLocaleDateString('es-VE') : 'N/A',
                 customer: nc.customer || 'Cliente General',
                 customerDoc: nc.customerDoc || 'V-00000000',
-                bcvRate: nc.bcvRate || 876.80,
+                bcvRate: nc.bcvRate || bcvService.getRate().rate,
                 exemptUsd: 0,
                 taxableBaseUsd: -round2(subtotal),
                 taxUsd: -round2(tax),
@@ -382,17 +384,23 @@ export const reportService = {
 
         let totalRevenueUsd = 0;
         let totalCostUsd = 0;
+        let linesTotal = 0;
+        let linesWithRealCost = 0;
+        const costIndex = buildCostIndex(products);
 
         const brandStats = new Map();
         const categoryStats = new Map();
+        const productStats = new Map();
 
         for (const sale of sales) {
             for (const item of sale.items || []) {
                 const qty = item.quantity || 1;
                 const salePrice = item.price || 0;
 
-                const product = products.find(p => p.id === item.productId || p.name === item.name);
-                const unitCost = product ? (product.cost || 0) : (salePrice * 0.55);
+                const { cost: realCost, known, product } = itemUnitCost(item, costIndex);
+                const unitCost = known ? realCost : (salePrice * 0.55); // sin costo cargado: estimación 55%
+                linesTotal += 1;
+                if (known) linesWithRealCost += 1;
 
                 const itemRevenue = salePrice * qty;
                 const itemCost = unitCost * qty;
@@ -406,6 +414,13 @@ export const reportService = {
                 bEntry.cost += itemCost;
                 bEntry.units += qty;
                 brandStats.set(brand, bEntry);
+
+                const pKey = product?.id || item.name;
+                const pEntry = productStats.get(pKey) || { name: item.name, brand, revenue: 0, cost: 0, units: 0, estimated: !known };
+                pEntry.revenue += itemRevenue;
+                pEntry.cost += itemCost;
+                pEntry.units += qty;
+                productStats.set(pKey, pEntry);
 
                 const category = product?.category || 'Calzado General';
                 const cEntry = categoryStats.get(category) || { category, revenue: 0, cost: 0, units: 0 };
@@ -441,14 +456,48 @@ export const reportService = {
             };
         }).sort((a, b) => b.profit - a.profit);
 
+        const byProduct = [...productStats.values()].map(pr => {
+            const profit = pr.revenue - pr.cost;
+            return { ...pr, revenue: round2(pr.revenue), cost: round2(pr.cost), profit: round2(profit), marginPct: pr.revenue > 0 ? round2((profit / pr.revenue) * 100) : 0 };
+        }).sort((a, b) => b.profit - a.profit);
+
+        // Utilidad neta = utilidad bruta - comisiones de vendedores del periodo
+        let commissionsUsd = 0;
+        try {
+            const creditNotes = (await returnService.getAll().catch(() => [])).filter(c => isWithinRange(c.date, from, to));
+            commissionsUsd = computeCommissions({ sales, creditNotes, products, config: getCommissionConfig() }).totalCommissionUsd;
+        } catch (e) {
+            console.warn('No se pudieron calcular comisiones para la utilidad neta:', e);
+        }
+        const netProfitUsd = grossProfitUsd - commissionsUsd;
+
         return {
             totalRevenueUsd: round2(totalRevenueUsd),
             totalCostUsd: round2(totalCostUsd),
             grossProfitUsd: round2(grossProfitUsd),
             profitMarginPct: round2(profitMarginPct),
+            commissionsUsd: round2(commissionsUsd),
+            netProfitUsd: round2(netProfitUsd),
+            netMarginPct: totalRevenueUsd > 0 ? round2((netProfitUsd / totalRevenueUsd) * 100) : 0,
+            costCoveragePct: linesTotal > 0 ? round2((linesWithRealCost / linesTotal) * 100) : 100,
             byBrand,
-            byCategory
+            byCategory,
+            byProduct
         };
+    },
+
+    /**
+     * Comisiones por vendedor en el periodo (base ventas o margen, neto de notas de crédito)
+     */
+    getCommissionsReport: async ({ from = null, to = null } = {}) => {
+        const [allSales, allNotes, products] = await Promise.all([
+            getSales(),
+            returnService.getAll().catch(() => []),
+            getProducts()
+        ]);
+        const sales = allSales.filter(s => isWithinRange(s.date, from, to));
+        const creditNotes = (allNotes || []).filter(c => isWithinRange(c.date, from, to));
+        return computeCommissions({ sales, creditNotes, products, config: getCommissionConfig() });
     },
 
     /**
@@ -1099,7 +1148,7 @@ export const reportService = {
         let totalIvaWithheldBs = 0;
 
         const ledger = purchases.map((p, idx) => {
-            const bcvRate = Number(p.bcvRate || p.tasa_bcv) || 876.80;
+            const bcvRate = Number(p.bcvRate || p.tasa_bcv) || bcvService.getRate().rate;
             const totalUsd = Number(p.totalUsd || p.total) || 0;
             const subtotalUsd = Number(p.subtotalUsd || p.subtotal) || round2(totalUsd / 1.16);
             const ivaUsd = round2(totalUsd - subtotalUsd);

@@ -49,6 +49,8 @@ export default function Purchases() {
         supplierId: '',
         invoiceNumber: '',
         controlNumber: '',
+        freightUsd: '',
+        importTaxUsd: '',
         notes: '',
         items: []
     });
@@ -194,13 +196,15 @@ export default function Purchases() {
                 bcvRate: rate,
                 items: purchaseForm.items,
                 receivedBy: user?.name || 'Administrador',
+                freightUsd: purchaseForm.freightUsd,
+                importTaxUsd: purchaseForm.importTaxUsd,
                 notes: purchaseForm.notes,
                 status: 'recibido'
             });
 
             toast.success('¡Mercancía recibida e inventario actualizado exitosamente!');
             setShowPurchaseModal(false);
-            setPurchaseForm({ supplierId: '', invoiceNumber: '', controlNumber: '', notes: '', items: [] });
+            setPurchaseForm({ supplierId: '', invoiceNumber: '', controlNumber: '', freightUsd: '', importTaxUsd: '', notes: '', items: [] });
             await loadData();
         } catch (err) {
             toast.error('Error al registrar compra: ' + err.message);
@@ -634,6 +638,24 @@ export default function Purchases() {
                                 onChange={(e) => setPurchaseForm({ ...purchaseForm, controlNumber: e.target.value })}
                                 placeholder="00-123456"
                                 required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Flete ($, opcional)</label>
+                            <Input
+                                type="number" min="0" step="0.01"
+                                value={purchaseForm.freightUsd}
+                                onChange={(e) => setPurchaseForm({ ...purchaseForm, freightUsd: e.target.value })}
+                                placeholder="0.00"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Impuestos de importación ($, opcional)</label>
+                            <Input
+                                type="number" min="0" step="0.01"
+                                value={purchaseForm.importTaxUsd}
+                                onChange={(e) => setPurchaseForm({ ...purchaseForm, importTaxUsd: e.target.value })}
+                                placeholder="0.00"
                             />
                         </div>
                     </div>

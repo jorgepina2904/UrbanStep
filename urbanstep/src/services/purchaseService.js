@@ -2,6 +2,7 @@ import { db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
+import { round2 } from '../utils/money';
 import { stockMovementService } from './stockMovementService';
 import { ensureSizeStock, calculateTotalStock, ensureColorVariants, calculateVariantsTotalStock } from '../utils/shoeSizes';
 
@@ -257,6 +258,19 @@ export const purchaseService = {
 
         const toBs = (v) => Number((v * bcvRate).toFixed(2));
 
+        // Costo puesto en almacén: flete e impuestos de importación se prorratean por valor de cada línea
+        const freightUsd = Math.max(0, Number(purchaseData.freightUsd) || 0);
+        const importTaxUsd = Math.max(0, Number(purchaseData.importTaxUsd) || 0);
+        const extraCostUsd = freightUsd + importTaxUsd;
+        const rawItems = purchaseData.items || [];
+        const itemsValue = rawItems.reduce((acc, i) => acc + (Number(i.unitCostUsd || i.cost || 0) * (Number(i.quantity) || 0)), 0);
+        const costedItems = rawItems.map((i) => {
+            const qty = Number(i.quantity) || 0;
+            const unit = Number(i.unitCostUsd || i.cost || 0);
+            const share = itemsValue > 0 && qty > 0 ? (extraCostUsd * ((unit * qty) / itemsValue)) / qty : 0;
+            return { ...i, landedUnitCostUsd: round2(unit + share) };
+        });
+
         const newPurchase = {
             id: generateId('CMP'),
             invoiceNumber: purchaseData.invoiceNumber || `FAC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -276,7 +290,9 @@ export const purchaseService = {
             taxBs: toBs(taxUsd),
             totalBs: toBs(totalUsd),
             itemsCount: (purchaseData.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0),
-            items: purchaseData.items || [],
+            freightUsd,
+            importTaxUsd,
+            items: costedItems,
             receivedBy: purchaseData.receivedBy || 'Almacén Central',
             notes: purchaseData.notes || '',
         };
@@ -344,9 +360,16 @@ export const purchaseService = {
                         product.stock += qty;
                     }
 
-                    if (item.unitCostUsd) {
-                        product.cost = Number(item.unitCostUsd);
-                        product.purchasePrice = Number(item.unitCostUsd);
+                    // Costo Promedio Ponderado: (existencia previa x costo actual + ingreso x costo puesto) / existencia total
+                    if (item.landedUnitCostUsd || item.unitCostUsd) {
+                        const incomingCost = Number(item.landedUnitCostUsd || item.unitCostUsd);
+                        const onHand = Math.max(0, Number(previousStock) || 0);
+                        const currentCost = Number(product.cost) || 0;
+                        const weighted = onHand > 0 && currentCost > 0
+                            ? ((onHand * currentCost) + (qty * incomingCost)) / (onHand + qty)
+                            : incomingCost;
+                        product.cost = round2(weighted);
+                        product.purchasePrice = round2(incomingCost);
                     }
 
                     product.status = product.stock > product.minStock ? 'in_stock' : product.stock > 0 ? 'low_stock' : 'out_of_stock';

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { bcvService } from '../services/bcvService';
+import { ProfitabilityView, CommissionsView } from './ReportsFinance';
 
 import {
     FileText,
@@ -163,6 +165,7 @@ export default function Reports() {
     const [profitabilityReport, setProfitabilityReport] = useState(null);
     const [ticketReport, setTicketReport] = useState(null);
     const [cashierReport, setCashierReport] = useState(null);
+    const [commissionsReport, setCommissionsReport] = useState(null);
     const [salesByBrandReport, setSalesByBrandReport] = useState(null);
     const [hourlyTrafficReport, setHourlyTrafficReport] = useState(null);
 
@@ -215,6 +218,7 @@ export default function Reports() {
                 cashierData,
                 salesByBrandData,
                 hourlyTrafficData,
+                commissionsData,
                 // 6. Auditoría
                 auditLogsData
             ] = await Promise.all([
@@ -237,6 +241,7 @@ export default function Reports() {
                 reportService.getCashierPerformanceReport(rangeParams).catch(() => []),
                 reportService.getSalesByBrandReport(rangeParams).catch(() => null),
                 reportService.getHourlyTrafficReport(rangeParams).catch(() => null),
+                reportService.getCommissionsReport(rangeParams).catch(() => null),
                 auditService.getLogs({ limit: 100 }).catch(() => [])
             ]);
 
@@ -268,6 +273,7 @@ export default function Reports() {
             setCashierReport(cashierData);
             setSalesByBrandReport(salesByBrandData);
             setHourlyTrafficReport(hourlyTrafficData);
+            setCommissionsReport(commissionsData);
 
             setAuditLogs(auditLogsData);
         } catch (error) {
@@ -374,6 +380,8 @@ export default function Reports() {
             reports: [
                 { id: 'bi_tendencias', label: 'Tendencias & Ticket Promedio', icon: BarChart3 },
                 { id: 'bi_cajeros', label: 'Rendimiento de Vendedores/Cajeros', icon: Users },
+                { id: 'bi_rentabilidad', label: 'Rentabilidad y Margen Real (CPP)', icon: TrendingUp },
+                { id: 'bi_comisiones', label: 'Comisiones por Vendedor', icon: DollarSign },
                 { id: 'bi_marcas', label: 'Ventas y Participación por Marca', icon: Sparkles },
                 { id: 'bi_trafico', label: 'Auditoría de Tráfico Horario & Picos', icon: Clock },
             ]
@@ -544,7 +552,7 @@ export default function Reports() {
                     {/* Tasa BCV Oficial */}
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-700 dark:text-blue-300">
                         <span>Tasa BCV:</span>
-                        <span className="font-black font-mono">{Number(bcvRate || 876.80).toFixed(2)} VES/USD</span>
+                        <span className="font-black font-mono">{Number(bcvRate || bcvService.getRate().rate).toFixed(2)} VES/USD</span>
                     </div>
 
                     {/* Selector de Rango Temporal */}
@@ -2558,7 +2566,7 @@ export default function Reports() {
                                     { key: 'avgTicketUsd', header: 'Ticket Promedio ($)' },
                                     { key: 'totalRevenueUsd', header: 'Total Facturado ($ USD)' },
                                     { key: 'totalRevenueBs', header: 'Total Facturado (Bs.)' },
-                                    { key: 'estimatedCommission', header: 'Comisión Estimada (2%)' }
+                                    { key: 'estimatedCommission', header: 'Comisión (reglas configuradas)' }
                                 ]}
                                 rows={(cashierReport || []).map(c => ({
                                     cashierName: c.cashierName,
@@ -2567,7 +2575,7 @@ export default function Reports() {
                                     avgTicketUsd: formatUSD(c.avgTicketUsd),
                                     totalRevenueUsd: formatUSD(c.totalRevenueUsd),
                                     totalRevenueBs: formatBs(c.totalRevenueBs),
-                                    estimatedCommission: formatUSD(c.totalRevenueUsd * 0.02)
+                                    estimatedCommission: formatUSD((commissionsReport?.rows || []).find(r => r.seller === c.cashierName)?.commissionUsd || 0)
                                 }))}
                                 summaryCards={[
                                     { label: 'Cajeros Activos', value: `${cashierReport.length}` },
@@ -2610,6 +2618,21 @@ export default function Reports() {
                         </div>
                     </Card>
                 </div>
+            )}
+
+            {/* 5.2b Rentabilidad real y comisiones */}
+            {mainCategory === 'bi' && activeReportId === 'bi_rentabilidad' && profitabilityReport && (
+                <ProfitabilityView report={profitabilityReport} formatUSD={formatUSD} Exporter={ExportButtonGroup} bcvRate={bcvRate} />
+            )}
+            {mainCategory === 'bi' && activeReportId === 'bi_comisiones' && commissionsReport && (
+                <CommissionsView
+                    report={commissionsReport}
+                    formatUSD={formatUSD}
+                    Exporter={ExportButtonGroup}
+                    bcvRate={bcvRate}
+                    onSetRange={(from, to) => { setCustomFrom(from); setCustomTo(to); setDateRange('custom'); }}
+                    onConfigSaved={loadData}
+                />
             )}
 
             {/* 5.3 Ventas y Participación por Marca */}
@@ -2847,13 +2870,13 @@ export default function Reports() {
                                     { tributo: 'Retención Especial de IVA (Sujetos Pasivos)', alicuota: '100.00%', baseLegal: 'Providencia SNAT/2015/0049 Art. 5', organismo: 'SENIAT' },
                                     { tributo: 'Retención ISLR Bienes Muebles', alicuota: '2.00%', baseLegal: 'Decreto 1.808 Art. 9', organismo: 'SENIAT' },
                                     { tributo: 'Retención ISLR Servicios y Fletes', alicuota: '5.00%', baseLegal: 'Decreto 1.808 Art. 9 Num. 11', organismo: 'SENIAT' },
-                                    { tributo: 'Tasa Oficial de Referencia BCV', alicuota: `${Number(bcvRate || 876.80).toFixed(2)} VES/USD`, baseLegal: 'Convenio Cambiario N° 1', organismo: 'Banco Central de Venezuela' }
+                                    { tributo: 'Tasa Oficial de Referencia BCV', alicuota: `${Number(bcvRate || bcvService.getRate().rate).toFixed(2)} VES/USD`, baseLegal: 'Convenio Cambiario N° 1', organismo: 'Banco Central de Venezuela' }
                                 ]}
                                 summaryCards={[
                                     { label: 'IVA General', value: '16.00%' },
                                     { label: 'IGTF Divisas', value: '3.00%' },
                                     { label: 'Retención IVA', value: '75.00%' },
-                                    { label: 'Tasa BCV', value: `${Number(bcvRate || 876.80).toFixed(2)} Bs/$` }
+                                    { label: 'Tasa BCV', value: `${Number(bcvRate || bcvService.getRate().rate).toFixed(2)} Bs/$` }
                                 ]}
                                 filename="Parametros_Fiscales_SENIAT"
                                 bcvRate={bcvRate}
@@ -2897,7 +2920,7 @@ export default function Reports() {
                                 </div>
                                 <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
                                     <span className="font-sans font-bold">Tasa Oficial de Referencia BCV:</span>
-                                    <span className="text-gray-900 dark:text-white font-black">{Number(bcvRate || 876.80).toFixed(2)} VES/USD</span>
+                                    <span className="text-gray-900 dark:text-white font-black">{Number(bcvRate || bcvService.getRate().rate).toFixed(2)} VES/USD</span>
                                 </div>
                                 <div className="flex justify-between py-1">
                                     <span className="font-sans font-bold">Moneda Funcional y de Registro:</span>
