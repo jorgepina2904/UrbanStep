@@ -10,6 +10,7 @@ import ReceiptModal from '../ui/ReceiptModal';
 import DeliveryMapModal from '../ui/DeliveryMapModal';
 import ShiftOpenModal from '../ui/ShiftOpenModal';
 import ShiftCloseModal from '../ui/ShiftCloseModal';
+import BranchAvailabilityModal from '../ui/BranchAvailabilityModal';
 import QuickConverterModal from '../ui/QuickConverterModal';
 import BrandLogo from '../ui/BrandLogo';
 import { useCart } from '../contexts/CartContext';
@@ -56,6 +57,7 @@ export default function CashierTerminal() {
     const { activeShift, isOpen, lastSale, setLastSale } = useShift();
 
     const [products, setProducts] = useState([]);
+    const [elsewhere, setElsewhere] = useState(null);
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [selectedSize, setSelectedSize] = useState({});
@@ -781,6 +783,16 @@ export default function CashierTerminal() {
                                                 const isButtonDisabled = isSelectedSizeOut || isMaxInCart;
 
                                                 return (
+                                                    <>
+                                                    {isSelectedSizeOut && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setElsewhere({ product, color: currentColor, size: currentSize })}
+                                                            className="text-[10px] font-bold text-blue-600 dark:text-blue-400 underline whitespace-nowrap"
+                                                        >
+                                                            ¿Otra sucursal?
+                                                        </button>
+                                                    )}
                                                     <Button
                                                         size="sm"
                                                         variant={isButtonDisabled ? "secondary" : "primary"}
@@ -797,6 +809,7 @@ export default function CashierTerminal() {
                                                         <Plus className="w-3.5 h-3.5" />
                                                         {isSelectedSizeOut ? 'Agotado' : isMaxInCart ? 'En Caja (Máx)' : inCartCount > 0 ? `Agregar (${inCartCount})` : 'Agregar'}
                                                     </Button>
+                                                    </>
                                                 );
                                             })()}
                                         </div>
@@ -1351,6 +1364,14 @@ export default function CashierTerminal() {
                 onClose={() => setShowOpenModal(false)}
             />
 
+            <BranchAvailabilityModal
+                isOpen={Boolean(elsewhere)}
+                onClose={() => setElsewhere(null)}
+                product={elsewhere?.product}
+                color={elsewhere?.color}
+                size={elsewhere?.size}
+                requestedBy={user?.name}
+            />
             <ShiftCloseModal
                 isOpen={showCloseModal}
                 onClose={() => setShowCloseModal(false)}

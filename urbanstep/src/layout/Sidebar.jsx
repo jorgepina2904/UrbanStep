@@ -18,7 +18,8 @@ import {
     ChevronLeft,
     X,
     FolderKanban,
-    Building2
+    Building2,
+    Warehouse
 } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission, RoleMeta } from '../utils/permissions';
@@ -61,6 +62,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
                 { name: 'Productos', icon: Tags, path: '/products', module: 'products' },
                 { name: 'Inventario', icon: Package, path: '/inventory', module: 'inventory' },
                 { name: 'Compras & Proveedores', icon: Building2, path: '/purchases', module: 'purchases' },
+                { name: 'Almacén & Sucursales', icon: Warehouse, path: '/warehouse', module: 'warehouse' },
             ]
         },
         {
