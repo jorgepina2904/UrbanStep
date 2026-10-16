@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import SupervisorPinSettings from '../ui/SupervisorPinSettings';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -855,6 +856,7 @@ DELETE FROM clientes WHERE id <> 'publico';
             {/* Tab: Usuarios & Asignación de Cajeros */}
             {activeTab === 'users' && (
                 <div className="space-y-6">
+                    <SupervisorPinSettings />
                     {/* Header bar */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
                         <div>

@@ -11,7 +11,85 @@ import { bcvService } from '../services/bcvService';
 const formatUSD = (val) => `$${Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatBs = (val) => `Bs. ${Number(val || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const fmtDate = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
 export const reportExporter = {
+    /**
+     * Libro de Ventas en formato SENIAT (Providencia 0071): montos en Bolívares, un renglón por documento
+     * en orden cronológico, Notas de Crédito con su factura afectada y totales al pie.
+     */
+    exportLibroVentasSeniat: ({ ledger, from = null, to = null, company = {}, filename }) => {
+        const legalName = company.legalName || 'URBANSTEP VENEZUELA C.A.';
+        const rif = company.rif || 'J-50123456-7';
+        const rows = [...ledger].sort((a, b) => new Date(a.isoDate || 0) - new Date(b.isoDate || 0));
+
+        const header = [
+            'N° Oper.', 'Fecha del Documento', 'RIF / C.I. del Comprador', 'Nombre o Razón Social',
+            'N° Factura', 'N° Control', 'N° Nota de Débito', 'N° Nota de Crédito', 'Tipo de Transacción',
+            'N° Factura Afectada', 'Total Ventas Incluyendo IVA', 'Ventas Internas Exentas o no Gravadas',
+            'Base Imponible', '% Alícuota', 'Impuesto IVA', 'IVA Retenido por el Comprador',
+            'N° Comprobante de Retención', 'IGTF 3% (Pago en Divisas)'
+        ];
+
+        const body = rows.map((r, i) => {
+            const isNc = r.docType === 'NCR';
+            return [
+                i + 1,
+                fmtDate(r.isoDate),
+                r.customerDoc || 'V-00000000',
+                r.customer || 'Cliente General',
+                isNc ? '' : r.receiptNumber,
+                r.controlNumber || '',
+                '',
+                isNc ? r.receiptNumber : '',
+                isNc ? '03-Ajuste' : '01-Registro',
+                isNc ? r.affectedInvoiceNumber : '',
+                r2(r.totalBs),
+                r2(r.exemptBs),
+                r2(r.taxableBaseBs),
+                r.taxBs ? 16 : 0,
+                r2(r.taxBs),
+                0,
+                '',
+                r2(r.igtfBs)
+            ];
+        });
+
+        const sum = (idx) => r2(body.reduce((acc, row) => acc + (Number(row[idx]) || 0), 0));
+        const totals = ['', '', '', 'TOTALES DEL PERÍODO', '', '', '', '', '', '', sum(10), sum(11), sum(12), '', sum(14), sum(15), '', sum(17)];
+
+        const period = `${from ? fmtDate(from) : 'Inicio'} al ${to ? fmtDate(to) : fmtDate(new Date().toISOString())}`;
+        const sheet = [
+            [legalName.toUpperCase()],
+            [`RIF: ${rif}`],
+            ['LIBRO DE VENTAS (Providencia Administrativa SENIAT N° 0071) — Montos expresados en Bolívares (Bs.)'],
+            [`Período: ${period}`, '', '', '', `Emitido: ${new Date().toLocaleString('es-VE')}`],
+            [],
+            header,
+            ...body,
+            totals,
+            [],
+            ['RESUMEN DEBITO FISCAL'],
+            ['Base imponible alícuota general', sum(12)],
+            ['Débito fiscal (IVA 16%)', sum(14)],
+            ['Ventas exentas o no gravadas', sum(11)],
+            ['IGTF percibido (3%)', sum(17)]
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(sheet);
+        ws['!cols'] = header.map((h, i) => ({ wch: i === 3 ? 34 : i === 2 ? 18 : 17 }));
+        ws['!freeze'] = { xSplit: 0, ySplit: 6 };
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Libro de Ventas');
+        XLSX.writeFile(wb, `${filename || 'Libro_de_Ventas_SENIAT'}.xlsx`);
+        return { rows: body.length, totalIvaBs: sum(14) };
+    },
+
     /**
      * Exporta cualquier reporte a Excel (.xlsx) estructurado
      */

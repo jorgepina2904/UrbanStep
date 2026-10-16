@@ -211,6 +211,8 @@ export const reportService = {
             return {
                 seq: index + 1,
                 docType: 'FAC',
+                controlNumber: s.fiscalControlNumber || '',
+                isoDate: s.date || '',
                 receiptNumber: s.receiptNumber || s.id,
                 affectedInvoiceNumber: '—',
                 date: s.date ? new Date(s.date).toLocaleDateString('es-VE') : 'N/A',
@@ -250,6 +252,8 @@ export const reportService = {
             ledger.push({
                 seq: sales.length + ncIdx + 1,
                 docType: 'NCR',
+                controlNumber: nc.fiscalControlNumber || '',
+                isoDate: nc.date || '',
                 receiptNumber: nc.creditNoteNumber,
                 affectedInvoiceNumber: nc.affectedInvoiceNumber || 'TKT-PENDIENTE',
                 date: nc.date ? new Date(nc.date).toLocaleDateString('es-VE') : 'N/A',

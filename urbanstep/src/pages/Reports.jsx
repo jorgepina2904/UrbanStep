@@ -36,6 +36,7 @@ import toast from 'react-hot-toast';
 
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
+import Button from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
 import { reportService } from '../services/reportService';
 import { accountingService } from '../services/accountingService';
@@ -1287,6 +1288,24 @@ export default function Reports() {
                                 <p className="text-xs text-gray-500">
                                     Comprobantes fiscales de venta con base gravable 16%, débito fiscal e IGTF en divisas.
                                 </p>
+                                <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="mt-3 gap-2"
+                                    onClick={() => {
+                                        const dates = seniatReport.ledger.map(r => r.isoDate).filter(Boolean).sort();
+                                        const res = reportExporter.exportLibroVentasSeniat({
+                                            ledger: seniatReport.ledger,
+                                            from: dates[0] || null,
+                                            to: dates[dates.length - 1] || null,
+                                            filename: 'Libro_de_Ventas_SENIAT'
+                                        });
+                                        toast.success(`Libro de Ventas SENIAT generado: ${res.rows} documentos`);
+                                    }}
+                                >
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                    Libro de Ventas SENIAT (.xlsx, en Bs.)
+                                </Button>
                             </div>
                             <ExportButtonGroup
                                 reportTitle="Libro de Ventas Fiscal SENIAT (IVA 16% / IGTF)"

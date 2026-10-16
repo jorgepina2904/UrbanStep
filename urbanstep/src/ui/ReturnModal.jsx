@@ -24,6 +24,8 @@ import {
     ArrowLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import SupervisorPinModal from './SupervisorPinModal';
+import { supervisorPinService } from '../services/supervisorPinService';
 
 export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initialSale = null }) {
     const { formatUSD, formatBs, rate } = useCurrency();
@@ -39,6 +41,7 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
     const [authorizedBy, setAuthorizedBy] = useState(user?.name || 'Supervisor de Caja');
     const [processing, setProcessing] = useState(false);
     const [issuedNote, setIssuedNote] = useState(null);
+    const [pinOpen, setPinOpen] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -115,8 +118,8 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
     const currentRate = selectedSale?.bcvRate || rate || bcvService.getRate().rate;
     const totalReturnBs = Math.round(totalReturnUsd * currentRate * 100) / 100;
 
-    const handleProcessReturn = async (e) => {
-        if (e) e.preventDefault();
+    const handleProcessReturn = async (e, approver = null) => {
+        if (e && e.preventDefault) e.preventDefault();
 
         if (!selectedSale) {
             toast.error('Debe seleccionar una factura o ticket de venta');
@@ -125,6 +128,13 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
 
         if (activeReturnItems.length === 0) {
             toast.error('Debe seleccionar al menos un producto a devolver');
+            return;
+        }
+
+        // Un cajero necesita el PIN de un supervisor/administrador para emitir una Nota de Crédito
+        // (mientras no se configure ningún PIN en el equipo se conserva el flujo anterior para no bloquear la caja)
+        if (user?.role === 'Cajero' && !approver && supervisorPinService.hasAnyPin()) {
+            setPinOpen(true);
             return;
         }
 
@@ -156,7 +166,7 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
                 notes: notes.trim(),
                 refundMethod,
                 refundMethodLabel: refundMethodLabels[refundMethod] || 'Efectivo',
-                authorizedBy: authorizedBy.trim() || 'Supervisor de Caja',
+                authorizedBy: approver ? approver.name : (authorizedBy.trim() || 'Supervisor de Caja'),
                 cashier: user?.name || selectedSale.cashier || 'Cajero'
             });
 
@@ -184,6 +194,7 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
     };
 
     return (
+        <>
         <Modal
             isOpen={isOpen}
             onClose={onClose}
@@ -578,5 +589,13 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
                 </form>
             )}
         </Modal>
+        <SupervisorPinModal
+            isOpen={pinOpen}
+            onClose={() => setPinOpen(false)}
+            action="emisión de Nota de Crédito"
+            requestedBy={user?.name}
+            onApproved={(approver) => { setPinOpen(false); handleProcessReturn(null, approver); }}
+        />
+        </>
     );
 }
