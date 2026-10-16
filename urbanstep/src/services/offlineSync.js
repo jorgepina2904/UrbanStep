@@ -8,6 +8,7 @@
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { offlineStore } from './offlineStore';
+import { round2 } from '../utils/money';
 
 const VALID_PAYMENT_ENUMS = ['pagomovil', 'zelle', 'punto_venta', 'efectivo_usd', 'efectivo_bs', 'transferencia', 'mixto'];
 const SEQ_KEY = 'urbanstep_offline_seq';
@@ -112,11 +113,17 @@ export const pushSaleRecords = async (sale) => {
                 color: item.color || 'Multicolor',
                 cantidad: Number(item.quantity) || 1,
                 precio_unitario_usd: Number(item.price) || 0,
-                precio_unitario_bs: Number((item.price * bcvRate).toFixed(2)) || 0,
-                subtotal_usd: Number((item.price * (item.quantity || 1)).toFixed(2)) || 0,
-                subtotal_bs: Number((item.price * (item.quantity || 1) * bcvRate).toFixed(2)) || 0
+                precio_unitario_bs: round2(item.price * bcvRate),
+                subtotal_usd: round2(item.price * (item.quantity || 1)),
+                subtotal_bs: round2(round2(item.price * (item.quantity || 1)) * bcvRate),
+                costo_unitario_usd: item.costUnitUsd ?? null
             }));
-            const { error: detErr } = await supabase.from('detalles_venta').insert(itemsToInsert);
+            let { error: detErr } = await supabase.from('detalles_venta').insert(itemsToInsert);
+            // Si la migración del costo histórico aún no se ejecutó, reintenta sin esa columna (la venta no se pierde)
+            if (detErr && /costo_unitario_usd/i.test(String(detErr.message || ''))) {
+                console.warn('detalles_venta sin columna costo_unitario_usd: ejecuta modificaciones_fase6_costo_historico.sql');
+                ({ error: detErr } = await supabase.from('detalles_venta').insert(itemsToInsert.map(({ costo_unitario_usd: _omit, ...row }) => row)));
+            }
             if (detErr) return { ok: false, networkError: isNetworkError(detErr), error: detErr };
         }
 

@@ -20,6 +20,9 @@ export const findProduct = (item, index) =>
 /** Costo unitario real del ítem; known=false si el producto no existe o no tiene costo cargado. */
 export const itemUnitCost = (item, index) => {
     const product = findProduct(item, index);
+    // Costo histórico congelado al vender (detalles_venta.costo_unitario_usd) tiene prioridad sobre el costo actual
+    const frozen = Number(item.costUnitUsd);
+    if (frozen > 0) return { cost: frozen, known: true, product };
     const cost = Number(product?.cost);
     return cost > 0 ? { cost, known: true, product } : { cost: 0, known: false, product };
 };

@@ -1,9 +1,9 @@
 import { saleService } from './saleServices';
+import { round2, usdToVes, computeBsBreakdown } from '../utils/money';
 import { bcvService } from './bcvService';
 import { productService } from './productService';
 import { buildCostIndex, saleCostUsd } from '../utils/costing';
 import { purchaseService } from './purchaseService';
-import { shiftService } from './shiftService';
 import { returnService } from './returnService';
 
 /**
@@ -74,6 +74,7 @@ export const DEFAULT_PLAN_CUENTAS = [
     { id: '4.1', codigo: '4.1', nombre: 'Ingresos Operacionales', nivel: 2, tipo: 'ingreso', naturaleza: 'acreedora', acepta_movimiento: false, cuenta_padre_id: '4' },
     { id: '4.1.01.01.001', codigo: '4.1.01.01.001', nombre: 'Ventas de Calzado Mostrador POS', nivel: 5, tipo: 'ingreso', naturaleza: 'acreedora', acepta_movimiento: true, cuenta_padre_id: '4.1' },
     { id: '4.1.01.01.002', codigo: '4.1.01.01.002', nombre: 'Ventas de Calzado Canal Tienda Online', nivel: 5, tipo: 'ingreso', naturaleza: 'acreedora', acepta_movimiento: true, cuenta_padre_id: '4.1' },
+    { id: '4.1.01.02.001', codigo: '4.1.01.02.001', nombre: 'Ingresos por Servicio de Delivery', nivel: 5, tipo: 'ingreso', naturaleza: 'acreedora', acepta_movimiento: true, cuenta_padre_id: '4.1' },
     { id: '4.2.01.01.001', codigo: '4.2.01.01.001', nombre: 'Ganancia Cambiaria (Diferencial Tasa BCV)', nivel: 5, tipo: 'ingreso', naturaleza: 'acreedora', acepta_movimiento: true, cuenta_padre_id: '4' },
 
     // 5. COSTO DE VENTAS
@@ -101,10 +102,9 @@ export const accountingService = {
      * Genera el Libro Diario formal consolidando Ventas, Compras y Cierres Z reales con Partida Doble
      */
     getLibroDiario: async ({ from = null, to = null, modulo = 'all' } = {}) => {
-        const [sales, purchases, shifts, creditNotes, products] = await Promise.all([
+        const [sales, purchases, creditNotes, products] = await Promise.all([
             saleService.getAll(),
             purchaseService.getAll(),
-            shiftService.getAll(),
             returnService.getAll().catch(() => []),
             productService.getAll().catch(() => [])
         ]);
@@ -121,15 +121,22 @@ export const accountingService = {
             if (modulo !== 'all' && modulo !== 'ventas') return;
 
             const bcvRate = Number(sale.bcvRate || sale.bcv_rate) || bcvService.getRate().rate;
-            const subtotalUsd = Number(sale.subtotal) || (Number(sale.total) / 1.16);
-            const ivaUsd = Number(sale.iva) || (Number(sale.total) - subtotalUsd);
-            const igtfUsd = Number(sale.igtf) || (sale.paymentMethod === 'efectivo_usd' ? subtotalUsd * 0.03 : 0.00);
-            const totalUsd = Number(sale.total) + igtfUsd;
+            // Montos tal como quedaron en el documento (ticket / factura / Libro de Ventas). Redondeo fiscal por renglón.
+            const hasFiscalBreakdown = sale.subtotal !== undefined && sale.tax !== undefined && sale.total !== undefined;
+            const totalUsd = round2(sale.total);
+            const ivaUsd = hasFiscalBreakdown ? round2(sale.tax) : round2(totalUsd - totalUsd / 1.16);
+            const igtfUsd = round2(sale.igtf);
+            const shippingUsd = round2(sale.shippingCost);
+            // Ingreso neto de descuento; se obtiene por diferencia para que el asiento cuadre exactamente al céntimo
+            const ventasUsd = round2(totalUsd - ivaUsd - igtfUsd - shippingUsd);
 
-            const totalBs = Math.round(totalUsd * bcvRate * 100) / 100;
-            const subtotalBs = Math.round(subtotalUsd * bcvRate * 100) / 100;
-            const ivaBs = Math.round(ivaUsd * bcvRate * 100) / 100;
-            const igtfBs = Math.round(igtfUsd * bcvRate * 100) / 100;
+            const totalBs = Number(sale.totalBs) > 0 ? round2(sale.totalBs) : usdToVes(totalUsd, bcvRate);
+            const ivaBs = Number(sale.taxBs) > 0 || ivaUsd === 0 ? round2(sale.taxBs) : usdToVes(ivaUsd, bcvRate);
+            const igtfBs = Number(sale.igtfBs) > 0 || igtfUsd === 0 ? round2(sale.igtfBs) : usdToVes(igtfUsd, bcvRate);
+            const shippingBs = usdToVes(shippingUsd, bcvRate);
+            const ventasBs = round2(totalBs - ivaBs - igtfBs - shippingBs);
+            // Para el asiento de costo (más abajo)
+            const subtotalUsd = hasFiscalBreakdown ? round2(sale.subtotal) : ventasUsd;
 
             // Determinar cuenta de cobro según método
             let cuentaCobroId = '1.1.01.01.001';
@@ -167,9 +174,9 @@ export const accountingService = {
                     cuenta_nombre: 'Ventas de Calzado Mostrador POS',
                     concepto: `Ingreso por venta de sneakers Fact. ${sale.invoiceNumber || sale.id}`,
                     debe_bs: 0.00,
-                    haber_bs: subtotalBs,
+                    haber_bs: ventasBs,
                     debe_usd: 0.00,
-                    haber_usd: subtotalUsd
+                    haber_usd: ventasUsd
                 },
                 // HABER: Débito Fiscal IVA 16%
                 {
@@ -198,6 +205,25 @@ export const accountingService = {
                 });
             }
 
+            // Servicio de delivery cobrado en la factura
+            if (shippingUsd > 0) {
+                renglones.push({
+                    renglon: renglones.length + 1,
+                    cuenta_id: '4.1.01.02.001',
+                    cuenta_nombre: 'Ingresos por Servicio de Delivery',
+                    concepto: `Servicio de delivery facturado Fact. ${sale.invoiceNumber || sale.id}`,
+                    debe_bs: 0.00,
+                    haber_bs: shippingBs,
+                    debe_usd: 0.00,
+                    haber_usd: shippingUsd
+                });
+            }
+
+            const sumDebeUsd = round2(renglones.reduce((acc, r) => acc + r.debe_usd, 0));
+            const sumHaberUsd = round2(renglones.reduce((acc, r) => acc + r.haber_usd, 0));
+            const sumDebeBs = round2(renglones.reduce((acc, r) => acc + r.debe_bs, 0));
+            const sumHaberBs = round2(renglones.reduce((acc, r) => acc + r.haber_bs, 0));
+
             asientos.push({
                 id: `asiento-vta-${sale.id}`,
                 numero_asiento: asientoSeq++,
@@ -209,11 +235,11 @@ export const accountingService = {
                 descripcion: `Venta de Calzado a ${sale.customer?.name || 'Cliente de Mostrador'}`,
                 usuario: sale.cashier || 'Administrador General',
                 tasa_bcv: bcvRate,
-                total_debe_bs: totalBs,
-                total_haber_bs: totalBs,
-                total_debe_usd: totalUsd,
-                total_haber_usd: totalUsd,
-                cuadrado: true,
+                total_debe_bs: sumDebeBs,
+                total_haber_bs: sumHaberBs,
+                total_debe_usd: sumDebeUsd,
+                total_haber_usd: sumHaberUsd,
+                cuadrado: sumDebeUsd === sumHaberUsd && sumDebeBs === sumHaberBs,
                 renglones
             });
 
@@ -222,8 +248,8 @@ export const accountingService = {
             const realCost = saleCostUsd(sale, costIndex);
             const costoEstimadoUsd = realCost.complete && realCost.costUsd > 0
                 ? realCost.costUsd
-                : Math.round(subtotalUsd * 0.52 * 100) / 100;
-            const costoEstimadoBs = Math.round(costoEstimadoUsd * bcvRate * 100) / 100;
+                : round2(subtotalUsd * 0.52);
+            const costoEstimadoBs = usdToVes(costoEstimadoUsd, bcvRate);
 
             asientos.push({
                 id: `asiento-costo-${sale.id}`,
@@ -278,9 +304,10 @@ export const accountingService = {
             const taxUsd = Number(nc.taxUsd) || 0;
             const totalUsd = Number(nc.totalUsd) || 0;
 
-            const totalBs = Math.round(totalUsd * bcvRate * 100) / 100;
-            const subtotalBs = Math.round(subtotalUsd * bcvRate * 100) / 100;
-            const taxBs = Math.round(taxUsd * bcvRate * 100) / 100;
+            const ncBs = computeBsBreakdown({ subtotal: subtotalUsd, tax: taxUsd, rate: bcvRate });
+            const subtotalBs = Number(nc.subtotalBs) > 0 ? round2(nc.subtotalBs) : ncBs.subtotalBs;
+            const taxBs = Number(nc.taxBs) > 0 ? round2(nc.taxBs) : ncBs.taxBs;
+            const totalBs = Number(nc.totalBs) > 0 ? round2(nc.totalBs) : round2(subtotalBs + taxBs);
 
             let cuentaReembolsoId = '1.1.01.01.002';
             let cuentaReembolsoNombre = 'Caja Moneda Extranjera (USD)';

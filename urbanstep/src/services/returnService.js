@@ -6,6 +6,7 @@
  */
 
 import { generateId } from '../utils/generateId';
+import { computeInvoiceTotals, computeBsBreakdown } from '../utils/money';
 import { bcvService } from './bcvService';
 import { auditService } from './auditService';
 import { stockMovementService } from './stockMovementService';
@@ -142,7 +143,8 @@ export const returnService = {
         refundMethod = 'efectivo_usd',
         refundMethodLabel = 'Efectivo ($)',
         authorizedBy = 'Administrador General',
-        cashier = 'Cajero de Turno'
+        cashier = 'Cajero de Turno',
+        bcvRate = null
     }) => {
         if (!items || items.length === 0) {
             throw new Error('Debe seleccionar al menos un producto para la devolución.');
@@ -154,22 +156,23 @@ export const returnService = {
         const ncNumber = `NC-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
         const fiscalControlNumber = `00-${String(Math.floor(100000 + Math.random() * 900000))}`;
 
-        const currentRate = bcvService.getRate()?.rate || bcvService.getRate().rate;
+        // La Nota de Crédito usa la tasa de la factura afectada; solo sin dato se recurre a la tasa vigente
+        const currentRate = Number(bcvRate) > 0 ? Number(bcvRate) : bcvService.getRate().rate;
 
         // Cálculos monetarios del calzado devuelto
-        let subtotalUsd = 0;
-        items.forEach(item => {
-            const qty = Math.max(1, parseInt(item.quantity) || 1);
-            const price = Number(item.price) || 0;
-            subtotalUsd += price * qty;
+        // Criterio fiscal unificado: IVA redondeado por renglón y Bs. por concepto (ver utils/money.js)
+        const ncTotals = computeInvoiceTotals({
+            items: items.map(i => ({ price: Number(i.price) || 0, quantity: Math.max(1, parseInt(i.quantity) || 1) })),
+            taxRate: 0.16
         });
+        const subtotalUsd = ncTotals.subtotal;
+        const taxUsd = ncTotals.tax;
+        const totalUsd = ncTotals.total;
 
-        const taxUsd = Math.round(subtotalUsd * 0.16 * 100) / 100;
-        const totalUsd = Math.round((subtotalUsd + taxUsd) * 100) / 100;
-
-        const subtotalBs = Math.round(subtotalUsd * currentRate * 100) / 100;
-        const taxBs = Math.round(taxUsd * currentRate * 100) / 100;
-        const totalBs = Math.round(totalUsd * currentRate * 100) / 100;
+        const ncBs = computeBsBreakdown({ subtotal: subtotalUsd, tax: taxUsd, rate: currentRate });
+        const subtotalBs = ncBs.subtotalBs;
+        const taxBs = ncBs.taxBs;
+        const totalBs = ncBs.totalBs;
 
         // 1. Manejo de Inventario y Kardex según el Motivo SGF
         let restoredToStock = false;

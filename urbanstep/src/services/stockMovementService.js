@@ -12,6 +12,12 @@ export const MOVEMENT_TYPES = {
     recepcion_compra: { label: 'Entrada por Compra', badgeVariant: 'success', sign: '+' },
     salida_venta: { label: 'Salida por Venta', badgeVariant: 'primary', sign: '-' },
     merma_dano: { label: 'Merma / Defecto', badgeVariant: 'danger', sign: '-' },
+    // Catálogo homologado SGF (alias de compatibilidad con los valores históricos incluidos)
+    entrada_compra: { label: 'Entrada por Compra', badgeVariant: 'success', sign: '+' },
+    entrada_devolucion: { label: 'Entrada por Devolución', badgeVariant: 'success', sign: '+' },
+    baja_merma_dano: { label: 'Baja por Merma / Defecto', badgeVariant: 'danger', sign: '-' },
+    traslado_origen: { label: 'Traslado: salida de origen', badgeVariant: 'warning', sign: '-' },
+    traslado_destino: { label: 'Traslado: entrada a destino', badgeVariant: 'primary', sign: '+' },
 };
 
 const mapMovFromDb = (m) => ({

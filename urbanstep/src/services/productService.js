@@ -773,7 +773,7 @@ export const productService = {
      * Actualizar stock individual (e.g. tras venta, compra o ajuste manual)
      * Soporta actualizar una talla específica o el total distribuido y registra Kardex
      */
-    updateStock: async (id, newStock, specificSize = null, reason = 'Ajuste manual de inventario', userName = 'Administrador', specificColor = null) => {
+    updateStock: async (id, newStock, specificSize = null, reason = 'Ajuste manual de inventario', userName = 'Administrador', specificColor = null, movementType = 'ajuste_manual') => {
         const product = db.products.find(p => p.id === id);
         if (!product) throw new Error("Producto no encontrado");
 
@@ -833,7 +833,7 @@ export const productService = {
                     previousStock,
                     newStock: safeStock,
                     delta: safeStock - previousStock,
-                    type: 'ajuste_manual',
+                    type: movementType,
                     reason: reason || 'Ajuste manual de existencias',
                     size: specificSize,
                     color: specificColor || product.color,

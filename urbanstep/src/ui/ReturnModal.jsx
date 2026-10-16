@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { computeInvoiceTotals } from '../utils/money';
 import { bcvService } from '../services/bcvService';
 import Modal from './Modal';
 import Button from './Button';
@@ -111,9 +112,10 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
 
     // Calcular montos de devolución
     const activeReturnItems = Object.values(selectedItems).filter(i => i.selected);
-    const subtotalReturnUsd = activeReturnItems.reduce((acc, i) => acc + (Number(i.price) || 0) * (i.returnQty || 1), 0);
-    const taxReturnUsd = Math.round(subtotalReturnUsd * 0.16 * 100) / 100;
-    const totalReturnUsd = Math.round((subtotalReturnUsd + taxReturnUsd) * 100) / 100;
+    const returnTotals = computeInvoiceTotals({ items: activeReturnItems.map(i => ({ price: Number(i.price) || 0, quantity: i.returnQty || 1 })), taxRate: 0.16 });
+    const subtotalReturnUsd = returnTotals.subtotal;
+    const taxReturnUsd = returnTotals.tax;
+    const totalReturnUsd = returnTotals.total;
 
     const currentRate = selectedSale?.bcvRate || rate || bcvService.getRate().rate;
     const totalReturnBs = Math.round(totalReturnUsd * currentRate * 100) / 100;
@@ -167,7 +169,8 @@ export default function ReturnModal({ isOpen, onClose, onReturnCompleted, initia
                 refundMethod,
                 refundMethodLabel: refundMethodLabels[refundMethod] || 'Efectivo',
                 authorizedBy: approver ? approver.name : (authorizedBy.trim() || 'Supervisor de Caja'),
-                cashier: user?.name || selectedSale.cashier || 'Cajero'
+                cashier: user?.name || selectedSale.cashier || 'Cajero',
+                bcvRate: selectedSale.bcvRate || null
             });
 
             setIssuedNote(note);

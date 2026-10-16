@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react';
+import { computeInvoiceTotals } from '../utils/money';
 import { getAvailableStockForItem, getColorVariantImage } from '../utils/shoeSizes';
 
 export const CartContext = createContext();
@@ -154,18 +155,18 @@ export const CartProvider = ({ children }) => {
 
     const items = state.items;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    const discountAmount = subtotal * (state.discount / 100);
-    const subtotalAfterDiscount = subtotal - discountAmount;
-    
-    // IVA 16%
-    const tax = subtotalAfterDiscount * state.taxRate;
-    
-    // IGTF 3% sobre base gravable en divisas si aplica
-    const igtf = state.applyIgtf ? (subtotalAfterDiscount + tax) * state.igtfRate : 0;
-    
-    const shipping = Number(state.shippingCost) || 0;
-    const total = subtotalAfterDiscount + tax + igtf + shipping;
+    // Totales con redondeo fiscal por renglón (utils/money.js): subtotal, descuento, IVA, IGTF y total
+    const totals = computeInvoiceTotals({
+        items,
+        discountPct: state.discount,
+        taxRate: state.taxRate,
+        igtfRate: state.igtfRate,
+        applyIgtf: state.applyIgtf,
+        shipping: state.shippingCost
+    });
+    const { subtotal, tax, igtf, total } = totals;
+    const discountAmount = totals.discount;
+    const shipping = totals.shipping;
 
     const addItem = (product, size = 'N/A', quantity = 1, color = null) => {
         dispatch({ type: 'ADD_ITEM', payload: { product, size, quantity, color } });

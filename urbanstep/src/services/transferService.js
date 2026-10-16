@@ -33,13 +33,13 @@ const requireDb = () => {
 };
 
 /** Suma (delta>0) o resta (delta<0) pares en una ubicación, sea la principal o una sucursal. */
-const applyStock = async (branchId, item, delta, reason, userName) => {
+const applyStock = async (branchId, item, delta, reason, userName, movementType = 'ajuste_manual') => {
     if (branchId === PRINCIPAL_ID) {
         const product = (await productService.getAll()).find(p => p.id === item.productId);
         if (!product) throw new Error(`El producto ${item.name || item.productId} ya no existe en el catálogo`);
         const current = await branchService.getVariantQty(PRINCIPAL_ID, product, item.color, item.size);
         if (current + delta < 0) throw new Error(`Existencia insuficiente de ${product.name} talla ${item.size} en la tienda principal`);
-        await productService.updateStock(product.id, current + delta, item.size, reason, userName, item.color || null);
+        await productService.updateStock(product.id, current + delta, item.size, reason, userName, item.color || null, movementType);
     } else {
         await branchService.moveStock(branchId, { productId: item.productId, name: item.name, sku: item.sku, color: item.color, size: item.size, delta });
     }
@@ -111,7 +111,7 @@ export const transferService = {
         const done = [];
         try {
             for (const item of t.items) {
-                await applyStock(t.fromId, item, -item.sent, `Traslado ${id} en tránsito`, user);
+                await applyStock(t.fromId, item, -item.sent, `Traslado ${id} en tránsito`, user, 'traslado_origen');
                 done.push(item);
             }
         } catch (err) {
@@ -145,7 +145,7 @@ export const transferService = {
         const differences = [];
         for (const item of t.items) {
             const received = Number(counts[item.id]);
-            if (received > 0) await applyStock(t.toId, item, received, `Recepción de traslado ${id}`, user);
+            if (received > 0) await applyStock(t.toId, item, received, `Recepción de traslado ${id}`, user, 'traslado_destino');
             const { error } = await supabase.from('traslado_items').update({ cantidad_recibida: received }).eq('id', item.id);
             if (error) throw new Error(error.message);
             if (received !== item.sent) differences.push({ ...item, received, diff: received - item.sent });

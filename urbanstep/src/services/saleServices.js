@@ -1,4 +1,5 @@
 import { db } from './api';
+import { round2, usdToVes, computeBsBreakdown } from '../utils/money';
 import { pushSaleRecords, enqueueSale, isOffline, nextOfflineReceipt } from './offlineSync';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -52,6 +53,7 @@ export const saleService = {
                                         color: d.color,
                                         quantity: Number(d.cantidad) || 1,
                                         price: Number(d.precio_unitario_usd) || 0,
+                                        costUnitUsd: Number(d.costo_unitario_usd) > 0 ? Number(d.costo_unitario_usd) : null,
                                         total: Number(d.subtotal_usd) || 0
                                     }))
                                     : (local?.items || []);
@@ -163,14 +165,25 @@ export const saleService = {
         }
 
         const bcvRate = saleData.bcvRate || bcvService.getRate().rate;
-        const subtotalUsd = Number(saleData.subtotal) || 0;
-        const discountUsd = Number(saleData.discountAmount || saleData.discount) || 0;
-        const taxUsd = Number(saleData.tax) || 0;
-        const igtfUsd = Number(saleData.igtf) || 0;
-        const shippingCostUsd = Number(saleData.shippingCost) || 0;
-        const totalUsd = Number(saleData.total) || 0;
+        // Criterio fiscal unificado: cada monto a 2 decimales y el equivalente en Bs. por concepto (ver utils/money.js)
+        const subtotalUsd = round2(saleData.subtotal);
+        const discountUsd = round2(saleData.discountAmount || saleData.discount);
+        const taxUsd = round2(saleData.tax);
+        const igtfUsd = round2(saleData.igtf);
+        const shippingCostUsd = round2(saleData.shippingCost);
+        const totalUsd = round2(saleData.total);
 
-        const toBs = (val) => Number((val * bcvRate).toFixed(2));
+        const bs = computeBsBreakdown({ subtotal: subtotalUsd, discount: discountUsd, tax: taxUsd, igtf: igtfUsd, shipping: shippingCostUsd, rate: bcvRate });
+        const componentsTotal = round2(subtotalUsd - discountUsd + taxUsd + igtfUsd + shippingCostUsd);
+        // Si el total recibido no equivale a la suma de sus conceptos, se respeta el total y se convierte directo
+        const totalBsFinal = Math.abs(componentsTotal - totalUsd) <= 0.011 ? bs.totalBs : usdToVes(totalUsd, bcvRate);
+
+        // Costo Promedio Ponderado vigente al vender (inmutable para el margen histórico, NIIF Pymes sec. 13)
+        const itemsWithCost = (saleData.items || []).map((i) => {
+            const p = currentProducts.find(prod => prod.id === (i.productId || i.id) || prod.name === i.name);
+            const unitCost = Number(p?.cost) > 0 ? round2(p.cost) : null;
+            return unitCost ? { ...i, costUnitUsd: unitCost } : i;
+        });
 
         const newSale = {
             id: generateId('VEN'),
@@ -181,7 +194,7 @@ export const saleService = {
             customer: customerName,
             customerDoc,
             customerPhone,
-            items: saleData.items || [],
+            items: itemsWithCost,
             bcvRate,
             
             // Montos USD
@@ -193,10 +206,10 @@ export const saleService = {
             total: totalUsd,
 
             // Montos equivalentes en Bolívares
-            subtotalBs: toBs(subtotalUsd),
-            taxBs: toBs(taxUsd),
-            igtfBs: toBs(igtfUsd),
-            totalBs: toBs(totalUsd),
+            subtotalBs: bs.subtotalBs,
+            taxBs: bs.taxBs,
+            igtfBs: bs.igtfBs,
+            totalBs: totalBsFinal,
 
             // Pago
             paymentMethod: saleData.paymentMethod || 'pagomovil',
@@ -391,6 +404,9 @@ export const saleService = {
                 console.warn('Error durante sincronización Supabase de venta:', err);
             }
         }
+
+        // La venta nueva debe verse de inmediato en reportes y libros (no esperar al vencimiento de la caché de 4 s)
+        invalidateSalesCache();
 
         return newSale;
     },
