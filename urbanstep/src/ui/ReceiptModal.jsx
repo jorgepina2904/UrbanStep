@@ -1,14 +1,38 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
 import BrandLogo from './BrandLogo';
 import { formatCurrency } from '../utils/formatCurrency';
 import { usdToVes, resolveSaleRate } from '../utils/money';
 import { bcvService } from '../services/bcvService';
-import { Printer, CheckCircle, Store, Truck } from 'lucide-react';
+import { Printer, CheckCircle, Store, Truck, Usb } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { isDirectPrintSupported, printSaleDirect, getPrinterPref, setPrinterPref } from '../services/escposPrinter';
 
 export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSale }) {
+    const [paper, setPaper] = useState(() => getPrinterPref().paper);
+    const [printing, setPrinting] = useState(false);
+
     if (!sale) return null;
+
+    const handleDirectPrint = async () => {
+        setPrinting(true);
+        try {
+            await printSaleDirect(sale, settings, bcvService.getRate().rate);
+            toast.success('Ticket enviado a la impresora térmica');
+        } catch (err) {
+            console.warn('Impresión directa falló, usando diálogo del navegador:', err);
+            toast.error('No se pudo imprimir directo; se abre el diálogo del navegador');
+            window.print();
+        } finally {
+            setPrinting(false);
+        }
+    };
+
+    const handlePaperChange = (value) => {
+        setPaper(value);
+        setPrinterPref({ paper: value });
+    };
 
     const handlePrint = () => {
         window.print();
@@ -213,6 +237,23 @@ export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSal
                         <Printer className="w-4 h-4" />
                         Imprimir Ticket
                     </Button>
+                    {isDirectPrintSupported() && (
+                        <div className="flex items-stretch gap-1">
+                            <Button variant="secondary" className="flex items-center justify-center gap-2" onClick={handleDirectPrint} isLoading={printing}>
+                                <Usb className="w-4 h-4" />
+                                Térmica
+                            </Button>
+                            <select
+                                aria-label="Ancho de papel de la impresora térmica"
+                                value={paper}
+                                onChange={(e) => handlePaperChange(e.target.value)}
+                                className="rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-xs px-2"
+                            >
+                                <option value="80">80 mm</option>
+                                <option value="58">58 mm</option>
+                            </select>
+                        </div>
+                    )}
                     <Button variant="primary" className="flex-1 flex items-center justify-center gap-2" onClick={onNewSale}>
                         <CheckCircle className="w-4 h-4" />
                         Nueva Venta
