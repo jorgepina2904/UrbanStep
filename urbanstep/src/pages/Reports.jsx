@@ -1,7 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 import {
     FileText,
@@ -18,14 +15,11 @@ import {
     Receipt,
     Monitor,
     Building2,
-    PieChart,
-    ShoppingBag,
     FileSpreadsheet,
     Search,
     Filter,
     Flame,
     Sparkles,
-    RefreshCw,
     Clock,
     RotateCcw,
     BookOpen,
@@ -34,21 +28,12 @@ import {
     Landmark,
     Sliders,
     Lock,
-    Database,
-    ArrowUpRight,
-    ArrowDownRight,
-    Info,
-    Calendar,
-    ChevronRight,
-    ExternalLink,
-    Check,
-    XCircle
+    Database
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
-import Button from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
 import { reportService } from '../services/reportService';
 import { accountingService } from '../services/accountingService';
@@ -2427,9 +2412,9 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-blue-600">
                             <p className="text-xs font-semibold text-gray-500">Ticket Promedio General</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(summary?.avgTicket || 85.00)}
+                                {formatUSD(summary?.avgTicket || 0)}
                             </p>
-                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(summary?.avgTicket || 85.00))}</p>
+                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(summary?.avgTicket || 0))}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Facturación Acumulada</p>

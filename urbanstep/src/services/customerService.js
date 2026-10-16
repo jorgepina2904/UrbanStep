@@ -1,4 +1,4 @@
-import { simulateNetworkDelay, db } from './api';
+import { db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
@@ -6,7 +6,6 @@ const PUBLIC_CUSTOMER_ID = 'publico';
 
 export const customerService = {
     getAll: async () => {
-        await simulateNetworkDelay(50);
         if (isSupabaseConfigured() && supabase) {
             try {
                 const { data, error } = await supabase.from('clientes').select('*');
@@ -37,7 +36,6 @@ export const customerService = {
     },
 
     getById: async (id) => {
-        await simulateNetworkDelay(50);
         let customer = db.customers.find(c => c.id === id);
         if (!customer && isSupabaseConfigured() && supabase) {
             try {
@@ -67,7 +65,6 @@ export const customerService = {
     },
 
     create: async (data) => {
-        await simulateNetworkDelay(100);
         const newCustomer = {
             id: generateId('CLT'),
             docType:        data.docType || 'V',
@@ -129,7 +126,6 @@ export const customerService = {
     },
 
     update: async (id, data) => {
-        await simulateNetworkDelay(100);
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser editado');
 
         const index = db.customers.findIndex(c => c.id === id);
@@ -193,7 +189,6 @@ export const customerService = {
      * Alternar estado habilitado / deshabilitado del cliente
      */
     toggleStatus: async (id) => {
-        await simulateNetworkDelay(150);
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser deshabilitado');
         const index = db.customers.findIndex(c => c.id === id);
         if (index === -1) throw new Error('Cliente no encontrado');
@@ -217,9 +212,35 @@ export const customerService = {
     },
 
     delete: async (id) => {
-        await simulateNetworkDelay(100);
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser eliminado');
         const index = db.customers.findIndex(c => c.id === id);
+
+        // Providencia 0071: un cliente con facturas emitidas no se elimina físicamente, se archiva.
+        let hasSales = (db.sales || []).some(s => s.customerId === id);
+        if (!hasSales && isSupabaseConfigured() && supabase) {
+            try {
+                const { count } = await supabase
+                    .from('ventas')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('cliente_id', id);
+                hasSales = (count || 0) > 0;
+            } catch (err) {
+                console.warn('No se pudo verificar historial del cliente; se archiva por seguridad:', err);
+                hasSales = true;
+            }
+        }
+
+        if (hasSales) {
+            if (isSupabaseConfigured() && supabase) {
+                const { error: archErr } = await supabase.from('clientes').update({ disabled: true }).eq('id', id);
+                if (archErr) throw new Error(`No se pudo archivar el cliente: ${archErr.message}`);
+            }
+            if (index !== -1) db.customers.splice(index, 1);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('customers_updated', { detail: [...db.customers] }));
+            }
+            return true;
+        }
 
         if (index !== -1) {
             db.customers.splice(index, 1);

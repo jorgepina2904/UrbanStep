@@ -3,6 +3,8 @@ import Modal from './Modal';
 import Button from './Button';
 import BrandLogo from './BrandLogo';
 import { formatCurrency } from '../utils/formatCurrency';
+import { usdToVes, resolveSaleRate } from '../utils/money';
+import { bcvService } from '../services/bcvService';
 import { Printer, CheckCircle, Store, Truck } from 'lucide-react';
 
 export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSale }) {
@@ -12,8 +14,8 @@ export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSal
         window.print();
     };
 
-    const bcvRate = sale.bcvRate || 42.50;
-    const toBs = (usd) => (Number(usd) || 0) * bcvRate;
+    const bcvRate = resolveSaleRate(sale, bcvService.getRate().rate);
+    const toBs = (usd) => usdToVes(usd, bcvRate);
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="🧾 Comprobante de Venta" size="md">
@@ -132,7 +134,7 @@ export default function ReceiptModal({ isOpen, onClose, sale, settings, onNewSal
                         </div>
                         <div className="flex justify-between text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             <span>TOTAL BOLÍVARES (Bs.):</span>
-                            <span>{formatCurrency(toBs(sale.total), 'VES')}</span>
+                            <span>{formatCurrency(Number(sale.totalBs) > 0 ? Number(sale.totalBs) : toBs(sale.total), 'VES')}</span>
                         </div>
                     </div>
 

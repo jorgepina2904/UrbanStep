@@ -1,4 +1,4 @@
-import { db, simulateNetworkDelay } from './api';
+import { db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
@@ -117,7 +117,6 @@ export const purchaseService = {
                 console.warn('Aviso leyendo proveedores Supabase:', err);
             }
         }
-        await simulateNetworkDelay(100);
         return [...db.suppliers];
     },
 
@@ -250,7 +249,6 @@ export const purchaseService = {
      * Registrar una nueva orden de compra o recepción de mercancía
      */
     create: async (purchaseData) => {
-        await simulateNetworkDelay(200);
 
         const bcvRate = Number(purchaseData.bcvRate) || bcvService.getRate().rate;
         const subtotalUsd = Number(purchaseData.subtotalUsd) || 0;
@@ -451,7 +449,6 @@ export const purchaseService = {
      * Resumen de compras y reposición
      */
     getSummary: async () => {
-        await simulateNetworkDelay(100);
         const totalPurchasedUsd = db.purchases.reduce((sum, p) => sum + (p.totalUsd || 0), 0);
         const totalItemsCount = db.purchases.reduce((sum, p) => sum + (p.itemsCount || 0), 0);
         const suppliersCount = db.suppliers.length;

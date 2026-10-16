@@ -1,5 +1,5 @@
-const simulateNetworkDelay = () => Promise.resolve();
-import { cashRegisterService } from './cashRegisterService';
+import { round2, resolveSaleRate } from '../utils/money';
+import { bcvService } from './bcvService';
 import { saleService } from './saleServices';
 import { productService } from './productService';
 import { purchaseService } from './purchaseService';
@@ -14,7 +14,6 @@ const isWithinRange = (isoDate, from, to) => {
     return true;
 };
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // Consultas unificadas a la Fuente Única de la Verdad (Supabase Cloud)
 const getSales = async () => await saleService.getAll();
@@ -26,7 +25,6 @@ export const reportService = {
      * KPI summary: revenue, sales count, average ticket, units sold.
      */
     getSummary: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -54,7 +52,6 @@ export const reportService = {
      * Daily revenue for the last N days (defaults to 7), oldest first.
      */
     getSalesByDay: async (days = 7) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const result = [];
         const now = new Date();
@@ -79,7 +76,6 @@ export const reportService = {
      * Top selling products by units sold.
      */
     getTopProducts: async (limit = 10) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const acc = new Map();
 
@@ -97,7 +93,7 @@ export const reportService = {
                 };
                 entry.unitsSold += item.quantity || 0;
                 entry.revenue += (item.price || 0) * (item.quantity || 0);
-                entry.revenueBs += ((item.price || 0) * (item.quantity || 0)) * (sale.bcvRate || 42.5);
+                entry.revenueBs += round2((item.price || 0) * (item.quantity || 0) * resolveSaleRate(sale, bcvService.getRate().rate));
                 acc.set(key, entry);
             }
         }
@@ -112,7 +108,6 @@ export const reportService = {
      * Revenue/ticket breakdown by payment method.
      */
     getPaymentMethodBreakdown: async () => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const acc = new Map();
 
@@ -142,7 +137,6 @@ export const reportService = {
      * Inventory alerts: products at or below minStock.
      */
     getLowStockProducts: async () => {
-        await simulateNetworkDelay(100);
         const products = await getProducts();
         return products
             .filter(p => p.stock <= (p.minStock || 5))
@@ -167,7 +161,6 @@ export const reportService = {
      * Reporte Administrativo 1: Cierre Fiscal SENIAT (IVA 16% + IGTF 3% & Libro de Ventas)
      */
     getSeniatFiscalReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const [allSales, allCreditNotes] = await Promise.all([
             getSales(),
             returnService.getAll().catch(() => [])
@@ -221,7 +214,7 @@ export const reportService = {
                 date: s.date ? new Date(s.date).toLocaleDateString('es-VE') : 'N/A',
                 customer: s.customer || 'Cliente General',
                 customerDoc: s.customerDoc || 'V-00000000',
-                bcvRate: s.bcvRate || 42.50,
+                bcvRate: resolveSaleRate(s, bcvService.getRate().rate),
                 exemptUsd: isExempt ? round2(subtotal) : 0,
                 taxableBaseUsd: !isExempt ? round2(subtotal) : 0,
                 taxUsd: round2(tax),
@@ -299,7 +292,6 @@ export const reportService = {
      * Reporte Administrativo 2: Arqueo y Cierres de Caja (Cortes Z & Turnos en Supabase)
      */
     getCashRegisterAuditReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const rawHistory = await shiftService.getHistory(100);
 
         const filteredShifts = rawHistory.filter(sh => isWithinRange(sh.closedAt || sh.openedAt, from, to));
@@ -321,7 +313,6 @@ export const reportService = {
      * Reporte Administrativo 3: Auditoría y Libro de Comprobantes Emitidos
      */
     getOperationsAuditReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -358,7 +349,6 @@ export const reportService = {
      * Reporte Gerencial 1: Estado de Resultados y Rentabilidad (Ventas vs Costos COGS)
      */
     getProfitabilityMarginReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
         const products = await getProducts();
@@ -438,7 +428,6 @@ export const reportService = {
      * Reporte Gerencial 2: Análisis de Ticket Promedio y Tendencia de Ventas
      */
     getSalesTrendsAndTicketReport: async ({ days = 30 } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const result = [];
         const now = new Date();
@@ -467,7 +456,6 @@ export const reportService = {
      * Reporte Gerencial 3: Desempeño por Cajero y Productividad de Terminal
      */
     getCashierPerformanceReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -505,7 +493,6 @@ export const reportService = {
      * Reporte Operativo 1: Rotación de Inventario Crítico y Valorización de Stock
      */
     getCriticalStockReport: async () => {
-        await simulateNetworkDelay(100);
         const products = await getProducts();
 
         let totalCostValuation = 0;
@@ -568,7 +555,6 @@ export const reportService = {
      * Reporte Operativo 2: Conciliación de Métodos de Pago y Bancos Nacionales
      */
     getPaymentMethodReconciliationReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -615,7 +601,6 @@ export const reportService = {
      * Reporte Operativo 3: Logística de Envíos y Delivery Urbano
      */
     getDeliveryLogisticsReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -657,7 +642,6 @@ export const reportService = {
      * Reporte de Compras, Proveedores y Entradas de Almacén
      */
     getPurchasesReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allPurchases = await getPurchases();
         const purchases = allPurchases.filter(p => isWithinRange(p.date, from, to));
 
@@ -705,7 +689,6 @@ export const reportService = {
      * Reporte Gerencial 4: Top Calzados Más Vendidos vs Rotación de Inventario
      */
     getTopProductsRotationReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
         const products = await getProducts();
@@ -726,7 +709,7 @@ export const reportService = {
                 };
                 existing.unitsSold += item.quantity || 1;
                 existing.revenueUsd += (item.price || 0) * (item.quantity || 1);
-                existing.revenueBs += ((item.price || 0) * (item.quantity || 1)) * (s.bcvRate || 42.5);
+                existing.revenueBs += round2((item.price || 0) * (item.quantity || 1) * resolveSaleRate(s, bcvService.getRate().rate));
                 prodMap.set(key, existing);
             }
         }
@@ -758,7 +741,6 @@ export const reportService = {
      * Reporte Gerencial 5: Ventas y Participación por Marca
      */
     getSalesByBrandReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
         const totalRev = sales.reduce((sum, s) => sum + (s.total || 0), 0) || 1;
@@ -776,7 +758,7 @@ export const reportService = {
                 };
                 entry.unitsSold += item.quantity || 1;
                 entry.revenueUsd += (item.price || 0) * (item.quantity || 1);
-                entry.revenueBs += ((item.price || 0) * (item.quantity || 1)) * (s.bcvRate || 42.5);
+                entry.revenueBs += round2((item.price || 0) * (item.quantity || 1) * resolveSaleRate(s, bcvService.getRate().rate));
                 entry.salesCount += 1;
                 brandMap.set(brand, entry);
             }
@@ -800,7 +782,6 @@ export const reportService = {
      * Reporte Operativo 4: Control de Cambios de Talla y Garantías de Calzado
      */
     getWarrantyAndReturnsReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allNotes = await returnService.getAll().catch(() => []);
         const filtered = (allNotes || []).filter(n => isWithinRange(n.date, from, to));
 
@@ -836,7 +817,6 @@ export const reportService = {
      * Reporte Operativo 5: Auditoría de Tráfico Horario y Picos de Venta
      */
     getHourlyTrafficReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allSales = await getSales();
         const sales = allSales.filter(s => isWithinRange(s.date, from, to));
 
@@ -893,7 +873,6 @@ export const reportService = {
      * Proyección de Tesorería a 30, 60 y 90 días basado en tasa de rotación y vencimientos
      */
     getProjectedCashFlow: async ({ horizonDays = 90 } = {}) => {
-        await simulateNetworkDelay(100);
         const [sales, purchases, shifts] = await Promise.all([
             getSales(),
             getPurchases(),
@@ -991,7 +970,6 @@ export const reportService = {
      * Kardex Valorizado de Calzado con costos unitarios, entradas, salidas y existencias
      */
     getValuedKardex: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const [products, sales, purchases] = await Promise.all([
             getProducts(),
             getSales(),
@@ -1078,7 +1056,6 @@ export const reportService = {
      * Libro de Compras Fiscal SENIAT según Providencia SNAT/2011/0071
      */
     getSeniatPurchasesReport: async ({ from = null, to = null } = {}) => {
-        await simulateNetworkDelay(100);
         const allPurchases = await getPurchases();
         const purchases = allPurchases.filter(p => isWithinRange(p.date, from, to));
 

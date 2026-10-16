@@ -1,4 +1,4 @@
-import { simulateNetworkDelay, db } from './api';
+import { db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
@@ -111,7 +111,6 @@ export const saleService = {
     },
 
     create: async (saleData) => {
-        await simulateNetworkDelay(200);
 
         if (!saleData.items || !Array.isArray(saleData.items) || saleData.items.length === 0) {
             throw new Error("No hay artículos en la venta para procesar.");

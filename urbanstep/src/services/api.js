@@ -92,7 +92,3 @@ export const clearAllLocalData = (keepAuth = true) => {
     window.dispatchEvent(new CustomEvent('deliveries_updated', { detail: [] }));
     window.dispatchEvent(new CustomEvent('shift_status_changed', { detail: null }));
 };
-
-// Retardo simulado para operaciones asíncronas
-export const simulateNetworkDelay = (ms = 150) =>
-    new Promise(resolve => setTimeout(resolve, ms));

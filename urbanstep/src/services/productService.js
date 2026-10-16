@@ -1,4 +1,4 @@
-import { simulateNetworkDelay, db } from './api';
+import { db } from './api';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { generateId } from '../utils/generateId';
 import { 

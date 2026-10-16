@@ -399,6 +399,12 @@ export const deliveryService = {
      * Elimina un registro de delivery de Supabase Cloud
      */
     async deleteDelivery(deliveryId) {
+        // Trazabilidad fiscal: un envío ligado a una venta se archiva (cancelado), no se elimina.
+        const linked = _cachedDeliveries.find(d => d.id === deliveryId);
+        if (linked && linked.saleId) {
+            await deliveryService.updateStatus(deliveryId, 'cancelado');
+            return true;
+        }
         if (isSupabaseConfigured() && supabase) {
             const { error } = await supabase.from('envios').delete().eq('id', deliveryId);
             if (error) {

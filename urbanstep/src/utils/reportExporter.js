@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { bcvService } from '../services/bcvService';
 
 /**
  * reportExporter.js — Motor Full-Stack de Exportación de Reportes UrbanStep
@@ -14,7 +15,7 @@ export const reportExporter = {
     /**
      * Exporta cualquier reporte a Excel (.xlsx) estructurado
      */
-    exportToExcel: ({ reportTitle, categoryName, columns, rows, summaryCards = [], bcvRate = 42.50, filename }) => {
+    exportToExcel: ({ reportTitle, categoryName, columns, rows, summaryCards = [], bcvRate = bcvService.getRate().rate, filename }) => {
         const wb = XLSX.utils.book_new();
 
         const sheetData = [];
@@ -70,7 +71,7 @@ export const reportExporter = {
     /**
      * Exporta cualquier reporte a PDF corporativo con jsPDF y autoTable
      */
-    exportToPDF: ({ reportTitle, categoryName, columns, rows, summaryCards = [], bcvRate = 42.50, filename, orientation = 'landscape' }) => {
+    exportToPDF: ({ reportTitle, categoryName, columns, rows, summaryCards = [], bcvRate = bcvService.getRate().rate, filename, orientation = 'landscape' }) => {
         const doc = new jsPDF({
             orientation,
             unit: 'mm',

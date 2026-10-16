@@ -43,3 +43,48 @@ html::-webkit-scrollbar {
   scrollbar-width: none !important;
 }
 
+
+/* ===== Impresión fiscal: ticket térmico 80 mm (por defecto) y hoja carta (.print-letter) ===== */
+@media print {
+  @page { margin: 4mm; }
+
+  html, body { background: #fff !important; }
+
+  body * { visibility: hidden !important; }
+
+  #printable-receipt, #printable-receipt *,
+  #credit-note-print-area, #credit-note-print-area *,
+  #printable-shift-close, #printable-shift-close * {
+    visibility: visible !important;
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  #printable-receipt, #credit-note-print-area, #printable-shift-close {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    font-family: 'Courier New', ui-monospace, monospace !important;
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-letter #printable-receipt,
+  .print-letter #credit-note-print-area,
+  .print-letter #printable-shift-close {
+    width: 100% !important;
+    max-width: 190mm !important;
+    font-size: 12px !important;
+  }
+
+  #printable-receipt img, #credit-note-print-area img { max-width: 40mm; }
+}

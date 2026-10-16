@@ -540,7 +540,6 @@ export default function CashierTerminal() {
                                 const currentVariantStock = productService.getColorSizeStock(product, currentColor);
                                 
                                 const currentSize = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
-                                const imgSrc = product.imageUrl || product.image;
                                 const sizeCount = currentVariantStock ? (currentVariantStock[currentSize] ?? 0) : (product.sizeStock ? (product.sizeStock[currentSize] ?? 0) : 0);
                                 const isSelectedSizeOut = sizeCount <= 0;
 

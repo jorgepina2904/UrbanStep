@@ -404,7 +404,17 @@ export default function Settings() {
 
         setWipingData(true);
         try {
-            // Vaciar transaccionales y productos
+            // Providencia SENIAT 0071: prohibido destruir libros con documentos emitidos.
+            const [{ count: ventasCount }, { count: comprasCount }] = await Promise.all([
+                supabase.from('ventas').select('id', { count: 'exact', head: true }),
+                supabase.from('compras').select('id', { count: 'exact', head: true })
+            ]);
+            if ((ventasCount || 0) > 0 || (comprasCount || 0) > 0) {
+                toast.error(`Bloqueado por normativa fiscal: existen ${ventasCount || 0} ventas y ${comprasCount || 0} compras registradas. Anule mediante Nota de Crédito; no se permite el vaciado.`);
+                return;
+            }
+
+            // Base sin documentos fiscales: se permite limpiar datos de prueba
             await supabase.from('detalles_venta').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await supabase.from('pagos_venta').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             await supabase.from('ventas').delete().neq('id', '___none___');

@@ -2,7 +2,6 @@
  * settingsService.js — Gestión de configuraciones de la tienda y SENIAT
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { simulateNetworkDelay } from './api';
 
 const SETTINGS_KEY = 'urbanstep_store_settings';
 
@@ -204,7 +203,6 @@ export const settingsService = {
     },
 
     getSettings: async () => {
-        await simulateNetworkDelay(50);
 
         if (isSupabaseConfigured() && supabase) {
             try {
@@ -298,7 +296,6 @@ export const settingsService = {
     },
 
     saveSettings: async (newSettings) => {
-        await simulateNetworkDelay(100);
         const merged = { ...DEFAULT_SETTINGS, ...newSettings };
         
         if (newSettings.paymentMethods) {

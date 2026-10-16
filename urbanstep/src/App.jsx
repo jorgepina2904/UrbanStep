@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
@@ -10,18 +10,17 @@ import { Layout } from './layout/Layout';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
 // Pages
-import Login from './pages/Login';
-import Landing from './pages/Landing';
-import Dashboard from './pages/Dashboard';
-import POS from './pages/POS';
-import CashierTerminal from './pages/CashierTerminal';
-import Products from './pages/Products';
-import Inventory from './pages/Inventory';
-import Customers from './pages/Customers';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
-import Delivery from './pages/Delivery';
-import Purchases from './pages/Purchases';
+const Landing = lazy(() => import('./pages/Landing'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const POS = lazy(() => import('./pages/POS'));
+const CashierTerminal = lazy(() => import('./pages/CashierTerminal'));
+const Products = lazy(() => import('./pages/Products'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Delivery = lazy(() => import('./pages/Delivery'));
+const Purchases = lazy(() => import('./pages/Purchases'));
 
 export const App = () => {
   return (
@@ -31,6 +30,7 @@ export const App = () => {
           <CartProvider>
             <ShiftProvider>
               <BrowserRouter>
+                <Suspense fallback={<div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center text-sm text-gray-500">Cargando…</div>}>
                 <Routes>
                   <Route path="/landing" element={<Landing />} />
                   <Route path="/login" element={<Navigate to="/landing?login=true" replace />} />
@@ -50,6 +50,7 @@ export const App = () => {
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
+                </Suspense>
               </BrowserRouter>
               <Toaster position="top-right" />
             </ShiftProvider>
