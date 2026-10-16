@@ -1,4 +1,5 @@
 import { db } from './api';
+import { offlineStore } from './offlineStore';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { generateId } from '../utils/generateId';
 import { 
@@ -186,6 +187,7 @@ export const productService = {
                             const mapped = data.map(mapSupabaseProduct);
                             db.products = mapped;
                             db.save('products');
+                            offlineStore.kvSet('products', mapped); // instantánea para operar sin conexión
                             cachedProducts = mapped;
                             lastProductsFetchTime = Date.now();
                             return mapped;
@@ -193,6 +195,11 @@ export const productService = {
                     } catch (err) {
                         console.warn('Supabase offline o sin tablas, usando caché local:', err);
                     }
+                }
+                // Sin conexión y sin memoria (recarga offline): recuperar la última instantánea del catálogo
+                if (db.products.length === 0) {
+                    const snapshot = await offlineStore.kvGet('products');
+                    if (Array.isArray(snapshot) && snapshot.length > 0) db.products = snapshot;
                 }
                 // Asegurar que cada producto local tenga proveedor y variantes de color
                 const mappedLocal = db.products.map(p => {

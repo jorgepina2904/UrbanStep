@@ -7,6 +7,7 @@ import { CurrencyProvider } from './contexts/CurrencyContext';
 import { CartProvider } from './contexts/CartContext';
 import { ShiftProvider } from './contexts/ShiftContext';
 import { Layout } from './layout/Layout';
+import OfflineBanner from './ui/OfflineBanner';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
 // Pages
@@ -53,6 +54,7 @@ export const App = () => {
                 </Suspense>
               </BrowserRouter>
               <Toaster position="top-right" />
+              <OfflineBanner />
             </ShiftProvider>
           </CartProvider>
         </AuthProvider>

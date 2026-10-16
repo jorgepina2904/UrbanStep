@@ -1,4 +1,5 @@
 import { db } from './api';
+import { pushSaleRecords, enqueueSale, isOffline, nextOfflineReceipt } from './offlineSync';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { bcvService } from './bcvService';
@@ -173,7 +174,9 @@ export const saleService = {
 
         const newSale = {
             id: generateId('VEN'),
-            receiptNumber: `TKT-${new Date().getFullYear()}-${1000 + db.sales.length}`,
+            receiptNumber: isOffline()
+                ? nextOfflineReceipt(saleData.cajaId)
+                : `TKT-${new Date().getFullYear()}-${1000 + db.sales.length}`,
             customerId,
             customer: customerName,
             customerDoc,
@@ -329,99 +332,19 @@ export const saleService = {
         // Sincronizar en Supabase si está disponible
         if (isSupabaseConfigured() && supabase) {
             try {
-                const validEnums = ['pagomovil', 'zelle', 'punto_venta', 'efectivo_usd', 'efectivo_bs', 'transferencia', 'mixto'];
-                const dbPaymentMethod = validEnums.includes(newSale.paymentMethod) ? newSale.paymentMethod : 'pagomovil';
-
-                // Validar claves foráneas antes de insertar en ventas
-                let validClienteId = null;
-                if (customerId && customerId !== 'publico') {
-                    try {
-                        const { data: cExists } = await supabase.from('clientes').select('id').eq('id', customerId).maybeSingle();
-                        if (cExists) validClienteId = customerId;
-                    } catch {
-                        validClienteId = null;
-                    }
-                }
-
-                let validCajaId = null;
-                if (newSale.cajaId) {
-                    try {
-                        const { data: cajaExists } = await supabase.from('cajas').select('id').eq('id', newSale.cajaId).maybeSingle();
-                        if (cajaExists) validCajaId = newSale.cajaId;
-                    } catch {
-                        validCajaId = null;
-                    }
-                }
-
-                let validTurnoId = null;
-                if (newSale.shiftId) {
-                    try {
-                        const { data: turnoExists } = await supabase.from('turnos_caja').select('id').eq('id', newSale.shiftId).maybeSingle();
-                        if (turnoExists) validTurnoId = newSale.shiftId;
-                    } catch {
-                        validTurnoId = null;
-                    }
-                }
-
-                // 1. Insertar en tabla relacional 'ventas'
-                const { error: saleErr } = await supabase.from('ventas').insert({
-                    id: newSale.id,
-                    numero_recibo: newSale.receiptNumber,
-                    cliente_id: validClienteId,
-                    nombre_cliente: newSale.customer,
-                    caja_id: validCajaId,
-                    turno_id: validTurnoId,
-                    nombre_cajero: newSale.cashier,
-                    tasa_bcv: bcvRate,
-                    subtotal_usd: newSale.subtotal,
-                    descuento_usd: newSale.discount,
-                    iva_usd: newSale.tax,
-                    igtf_usd: newSale.igtf,
-                    costo_delivery_usd: newSale.shippingCost,
-                    total_usd: newSale.total,
-                    subtotal_bs: newSale.subtotalBs,
-                    iva_bs: newSale.taxBs,
-                    igtf_bs: newSale.igtfBs,
-                    total_bs: newSale.totalBs,
-                    metodo_pago_principal: dbPaymentMethod,
-                    estado_pago: 'completado',
-                    empresa_envio: newSale.shippingCarrier || 'retiro_tienda',
-                    tiene_delivery: Boolean(newSale.shippingCarrier === 'delivery_local'),
-                    observaciones: `${newSale.paymentMethodLabel}${newSale.paymentReference ? ` - Ref: ${newSale.paymentReference}` : ''}`
-                });
-
-                if (saleErr) {
-                    console.warn('Aviso guardando en ventas Supabase:', saleErr);
+                // Pasos 1-3 (ventas, detalles_venta, pagos_venta): idempotentes y con cola offline
+                let syncedToCloud = true;
+                if (isOffline()) {
+                    syncedToCloud = false;
+                    await enqueueSale(newSale);
                 } else {
-                    // 2. Insertar detalles_venta (dispara trigger de stock fn_descontar_stock_venta en Supabase)
-                    if (newSale.items && newSale.items.length > 0) {
-                        const itemsToInsert = newSale.items.map(item => ({
-                            venta_id: newSale.id,
-                            producto_id: item.productId || item.id,
-                            nombre_producto: item.name,
-                            marca: item.brand || 'UrbanStep',
-                            talla: String(item.size || item.talla || '41'),
-                            color: item.color || 'Multicolor',
-                            cantidad: Number(item.quantity) || 1,
-                            precio_unitario_usd: Number(item.price) || 0,
-                            precio_unitario_bs: Number((item.price * bcvRate).toFixed(2)) || 0,
-                            subtotal_usd: Number((item.price * (item.quantity || 1)).toFixed(2)) || 0,
-                            subtotal_bs: Number((item.price * (item.quantity || 1) * bcvRate).toFixed(2)) || 0
-                        }));
-
-                        await supabase.from('detalles_venta').insert(itemsToInsert);
+                    const result = await pushSaleRecords(newSale);
+                    if (result.networkError) {
+                        syncedToCloud = false;
+                        await enqueueSale(newSale);
+                    } else if (!result.ok) {
+                        console.warn('Aviso guardando en ventas Supabase:', result.error);
                     }
-
-                    // 3. Insertar pagos_venta
-                    await supabase.from('pagos_venta').insert({
-                        venta_id: newSale.id,
-                        metodo_pago: dbPaymentMethod,
-                        monto_usd: newSale.total,
-                        monto_bs: newSale.totalBs,
-                        banco_origen: newSale.paymentBank || null,
-                        numero_referencia: newSale.paymentReference || null,
-                        observaciones: newSale.paymentMethodLabel
-                    });
                 }
 
                 // 4. Asegurar actualización directa y resiliente del stock en tabla 'productos' de Supabase
@@ -434,7 +357,7 @@ export const saleService = {
                     }
                 }
 
-                for (const p of updatedProductsMap.values()) {
+                for (const p of (syncedToCloud ? updatedProductsMap.values() : [])) {
                     const safeStock = Math.max(0, Number(p.stock) || 0);
                     const safeEstado = safeStock <= 0 ? 'deshabilitado' : (safeStock > (p.minStock || 5) ? 'in_stock' : 'low_stock');
                     

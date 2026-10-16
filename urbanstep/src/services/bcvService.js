@@ -6,7 +6,21 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const DEFAULT_RATE = 42.50;
 
-let _cachedRate = {
+const RATE_STORAGE_KEY = 'urbanstep_last_bcv_rate';
+
+const loadStoredRate = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(RATE_STORAGE_KEY) || 'null');
+        if (stored && Number(stored.rate) > 0) return { ...stored, source: `${stored.source || 'BCV'} (última guardada)` };
+    } catch { /* sin almacenamiento disponible */ }
+    return null;
+};
+
+const storeRate = (data) => {
+    try { localStorage.setItem(RATE_STORAGE_KEY, JSON.stringify(data)); } catch { /* sin almacenamiento disponible */ }
+};
+
+let _cachedRate = loadStoredRate() || {
     rate: DEFAULT_RATE,
     lastUpdated: new Date().toISOString(),
     source: 'Oficial BCV (Inicial)'
@@ -28,6 +42,7 @@ const initRateFromCloud = async () => {
                     lastUpdated: data.actualizado_el || new Date().toISOString(),
                     source: 'Configuración Tienda Supabase'
                 };
+                storeRate(_cachedRate);
                 if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: _cachedRate }));
                 }
@@ -94,6 +109,7 @@ export const bcvService = {
         };
 
         _cachedRate = updatedData;
+        storeRate(updatedData);
 
         // Persistir en Supabase de forma asíncrona sin bloquear la UI
         if (isSupabaseConfigured() && supabase) {
