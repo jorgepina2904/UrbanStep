@@ -1804,6 +1804,47 @@ export default function Reports() {
                         </Card>
                     </div>
 
+                    <Card className="p-6 space-y-3">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-amber-600" />
+                            Reporte de Diferencias por Cajero
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                            {shiftsReport.shiftsWithDifference || 0} turno(s) con descuadre · Faltantes {formatUSD(shiftsReport.shortageUsd || 0)} / {formatBs(shiftsReport.shortageBs || 0)} · Sobrantes {formatUSD(shiftsReport.overageUsd || 0)} / {formatBs(shiftsReport.overageBs || 0)}
+                        </p>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                                <thead>
+                                    <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
+                                        <th className="px-3 py-3 text-left">Cajero</th>
+                                        <th className="px-3 py-3 text-center">Turnos</th>
+                                        <th className="px-3 py-3 text-center">Con descuadre</th>
+                                        <th className="px-3 py-3 text-right">Faltante ($)</th>
+                                        <th className="px-3 py-3 text-right">Sobrante ($)</th>
+                                        <th className="px-3 py-3 text-right">Faltante (Bs.)</th>
+                                        <th className="px-3 py-3 text-right">Sobrante (Bs.)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
+                                    {(shiftsReport.differencesByCashier || []).map((r) => (
+                                        <tr key={r.cashier}>
+                                            <td className="px-3 py-2.5 font-sans font-medium">{r.cashier}</td>
+                                            <td className="px-3 py-2.5 text-center">{r.shifts}</td>
+                                            <td className={`px-3 py-2.5 text-center font-bold ${r.withDifference > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{r.withDifference}</td>
+                                            <td className="px-3 py-2.5 text-right text-red-600 font-bold">{formatUSD(r.shortageUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right text-blue-600 font-bold">{formatUSD(r.overageUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right text-red-600">{formatBs(r.shortageBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-blue-600">{formatBs(r.overageBs)}</td>
+                                        </tr>
+                                    ))}
+                                    {(shiftsReport.differencesByCashier || []).length === 0 && (
+                                        <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400 font-sans">Sin turnos cerrados en el periodo.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+
                     <Card className="p-6 space-y-4">
                         <div className="flex justify-between items-center">
                             <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">

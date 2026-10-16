@@ -12,14 +12,21 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const USD_BILLS = [100, 50, 20, 10, 5, 2, 1];
+const BS_BILLS = [500, 200, 100, 50, 20, 10, 5];
+const emptyCount = (list) => Object.fromEntries(list.map(d => [d, '']));
+const sumBills = (counts) => Object.entries(counts).reduce((acc, [d, n]) => acc + Number(d) * (parseInt(n, 10) || 0), 0);
+
 export default function ShiftCloseModal({ isOpen, onClose, settings }) {
     const { activeShift, closeShift, getShiftSummary } = useShift();
     const { formatBs, formatUSD } = useCurrency();
 
     const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [countedUsd, setCountedUsd] = useState('');
-    const [countedBs, setCountedBs] = useState('');
+    const [usdBills, setUsdBills] = useState(() => emptyCount(USD_BILLS));
+    const [bsBills, setBsBills] = useState(() => emptyCount(BS_BILLS));
+    const [bsOther, setBsOther] = useState('');
+    const [declared, setDeclared] = useState({ puntoBs: '', pagomovilBs: '', zelleUsd: '' });
     const [notes, setNotes] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [closedReport, setClosedReport] = useState(null);
@@ -30,8 +37,10 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
             const data = await getShiftSummary(activeShift?.id);
             // Cierre ciego: el cajero cuenta sin ver el total esperado
             setSummary(data);
-            setCountedUsd('');
-            setCountedBs('');
+            setUsdBills(emptyCount(USD_BILLS));
+            setBsBills(emptyCount(BS_BILLS));
+            setBsOther('');
+            setDeclared({ puntoBs: '', pagomovilBs: '', zelleUsd: '' });
         } finally {
             setLoading(false);
         }
@@ -43,10 +52,11 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
         }
     }, [isOpen, activeShift, loadSummary]);
 
-    const numCountedUsd = parseFloat(countedUsd) || 0;
-    const numCountedBs = parseFloat(countedBs) || 0;
+    const numCountedUsd = sumBills(usdBills);
+    const numCountedBs = sumBills(bsBills) + (parseFloat(bsOther) || 0);
 
-    const hasCounted = countedUsd !== '' && countedBs !== '' && numCountedUsd >= 0 && numCountedBs >= 0;
+    // Cierre ciego: todos los métodos deben declararse (0 es válido) antes de confirmar
+    const hasCounted = Object.values(declared).every(v => v !== '' && Number(v) >= 0);
 
     const handleConfirmClose = async () => {
         setSubmitting(true);
@@ -55,6 +65,7 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                 countedCashUsd: numCountedUsd,
                 countedCashBs: numCountedBs,
                 notes,
+                vault: { usdBills, bsBills, bsOther: parseFloat(bsOther) || 0, declared },
             });
             setClosedReport(report);
             toast.success('¡Caja cerrada y turno finalizado exitosamente!');
@@ -182,7 +193,25 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                             </div>
                         </div>
 
-                        {(closedReport.differenceUsd !== 0 || closedReport.differenceBs !== 0) && (
+                        {closedReport.vault?.nonCash && (
+                            <div className="space-y-1.5 text-xs border-b border-dashed border-gray-300 dark:border-gray-700 pb-3 mb-3">
+                                <p className="font-bold text-gray-700 dark:text-gray-300 uppercase text-[10px]">Otros Métodos (Declarado / Sistema):</p>
+                                {[
+                                    ['Punto de Venta (Bs.)', closedReport.vault.nonCash.puntoBs, formatBs],
+                                    ['Pago Móvil (Bs.)', closedReport.vault.nonCash.pagomovilBs, formatBs],
+                                    ['Zelle / Binance ($)', closedReport.vault.nonCash.zelleUsd, formatUSD]
+                                ].map(([label, m, fmt]) => (
+                                    <div key={label} className="flex justify-between gap-2">
+                                        <span>{label}:</span>
+                                        <span className={m.diff === 0 ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                                            {fmt(m.declared ?? 0)} / {fmt(m.expected)} ({m.diff > 0 ? '+' : ''}{fmt(m.diff ?? 0)})
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {(closedReport.differenceUsd !== 0 || closedReport.differenceBs !== 0 || Object.values(closedReport.vault?.nonCash || {}).some(m => m.diff)) && (
                             <p role="alert" className="mb-3 p-2 border border-amber-500 text-amber-700 dark:text-amber-300 font-bold text-center text-[11px]">
                                 ⚠ DESCUADRE DETECTADO — {closedReport.differenceUsd < 0 || closedReport.differenceBs < 0 ? 'FALTANTE' : 'SOBRANTE'}: notificar a gerencia
                             </p>
@@ -253,45 +282,93 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                         </div>
                     </div>
 
-                    {/* Physical Cash Count */}
+                    {/* Bóveda: conteo físico por denominación y declaración por método (cierre ciego) */}
                     <div className="space-y-3">
                         <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
-                            Conteo Físico de Dinero en Gaveta:
+                            Bóveda: Conteo Físico por Método de Pago
                         </p>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                                    Efectivo $ USD Contado
-                                </label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={countedUsd}
-                                    onChange={(e) => setCountedUsd(e.target.value)}
-                                    placeholder="0"
-                                    className="font-bold text-emerald-600"
-                                />
+                        <fieldset className="p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                            <legend className="px-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                                <DollarSign className="w-3.5 h-3.5" /> Efectivo USD — cantidad de billetes
+                            </legend>
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                {USD_BILLS.map((d) => (
+                                    <Input
+                                        key={d}
+                                        label={`$${d}`}
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        value={usdBills[d]}
+                                        onChange={(e) => setUsdBills({ ...usdBills, [d]: e.target.value })}
+                                        placeholder="0"
+                                    />
+                                ))}
                             </div>
+                            <p className="text-right text-xs mt-2 font-bold text-emerald-700 dark:text-emerald-400">Total contado: {formatUSD(numCountedUsd)}</p>
+                        </fieldset>
 
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                                    <Coins className="w-3.5 h-3.5 text-blue-600" />
-                                    Efectivo Bs. Contado
-                                </label>
+                        <fieldset className="p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                            <legend className="px-1 text-xs font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1">
+                                <Coins className="w-3.5 h-3.5" /> Efectivo Bs. — cantidad de billetes
+                            </legend>
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                {BS_BILLS.map((d) => (
+                                    <Input
+                                        key={d}
+                                        label={`Bs ${d}`}
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        value={bsBills[d]}
+                                        onChange={(e) => setBsBills({ ...bsBills, [d]: e.target.value })}
+                                        placeholder="0"
+                                    />
+                                ))}
+                            </div>
+                            <Input
+                                className="mt-2"
+                                label="Monedas / otras denominaciones (Bs.)"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={bsOther}
+                                onChange={(e) => setBsOther(e.target.value)}
+                                placeholder="0.00"
+                            />
+                            <p className="text-right text-xs mt-2 font-bold text-blue-700 dark:text-blue-400">Total contado: {formatBs(numCountedBs)}</p>
+                        </fieldset>
+
+                        <fieldset className="p-3 rounded-xl border border-gray-200 dark:border-gray-800">
+                            <legend className="px-1 text-xs font-semibold text-gray-700 dark:text-gray-300">Otros métodos — total según comprobantes / estado de cuenta</legend>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={countedBs}
-                                    onChange={(e) => setCountedBs(e.target.value)}
-                                    placeholder="0"
-                                    className="font-bold text-blue-600"
+                                    label="Punto de Venta (Bs.)"
+                                    type="number" min="0" step="0.01"
+                                    value={declared.puntoBs}
+                                    onChange={(e) => setDeclared({ ...declared, puntoBs: e.target.value })}
+                                    placeholder="0.00"
+                                />
+                                <Input
+                                    label="Pago Móvil (Bs.)"
+                                    type="number" min="0" step="0.01"
+                                    value={declared.pagomovilBs}
+                                    onChange={(e) => setDeclared({ ...declared, pagomovilBs: e.target.value })}
+                                    placeholder="0.00"
+                                />
+                                <Input
+                                    label="Zelle / Binance (USD)"
+                                    type="number" min="0" step="0.01"
+                                    value={declared.zelleUsd}
+                                    onChange={(e) => setDeclared({ ...declared, zelleUsd: e.target.value })}
+                                    placeholder="0.00"
                                 />
                             </div>
-                        </div>
+                            <p className="text-[10px] text-gray-400 mt-2">Escribe 0 si no hubo ventas con ese método. Es obligatorio declararlos.</p>
+                        </fieldset>
 
                         <p className="p-3 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 rounded-xl text-[11px]">
                             Cierre ciego: ingresa lo que contaste físicamente. El monto esperado y la diferencia se mostrarán en el comprobante después de confirmar.

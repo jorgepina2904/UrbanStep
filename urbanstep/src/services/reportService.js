@@ -300,11 +300,38 @@ export const reportService = {
         const totalCashCollectedUsd = filteredShifts.reduce((acc, s) => acc + (s.salesCashUsd || 0), 0);
         const totalDifferencesUsd = filteredShifts.reduce((acc, s) => acc + (s.differenceUsd || 0), 0);
 
+        // Diferencias de arqueo: faltantes y sobrantes por separado (el neto oculta descuadres que se compensan)
+        const closedShifts = filteredShifts.filter(s => s.status === 'closed');
+        const byCashierMap = {};
+        let shortageUsd = 0, overageUsd = 0, shortageBs = 0, overageBs = 0;
+        closedShifts.forEach((s) => {
+            const dUsd = s.differenceUsd || 0;
+            const dBs = s.differenceBs || 0;
+            if (dUsd < 0) shortageUsd += -dUsd; else overageUsd += dUsd;
+            if (dBs < 0) shortageBs += -dBs; else overageBs += dBs;
+            const nonCashDiff = Object.values(s.vault?.nonCash || {}).some(m => m.diff);
+            const key = s.cashierName || 'Cajero';
+            const row = byCashierMap[key] || (byCashierMap[key] = { cashier: key, shifts: 0, withDifference: 0, shortageUsd: 0, overageUsd: 0, shortageBs: 0, overageBs: 0 });
+            row.shifts += 1;
+            if (dUsd !== 0 || dBs !== 0 || nonCashDiff) row.withDifference += 1;
+            if (dUsd < 0) row.shortageUsd += -dUsd; else row.overageUsd += dUsd;
+            if (dBs < 0) row.shortageBs += -dBs; else row.overageBs += dBs;
+        });
+        const differencesByCashier = Object.values(byCashierMap)
+            .map(r => ({ ...r, shortageUsd: round2(r.shortageUsd), overageUsd: round2(r.overageUsd), shortageBs: round2(r.shortageBs), overageBs: round2(r.overageBs) }))
+            .sort((x, y) => y.shortageUsd - x.shortageUsd);
+
         return {
             shiftsCount: filteredShifts.length,
             totalSalesInShiftsUsd: round2(totalSalesInShiftsUsd),
             totalCashCollectedUsd: round2(totalCashCollectedUsd),
             totalDifferencesUsd: round2(totalDifferencesUsd),
+            shortageUsd: round2(shortageUsd),
+            overageUsd: round2(overageUsd),
+            shortageBs: round2(shortageBs),
+            overageBs: round2(overageBs),
+            shiftsWithDifference: differencesByCashier.reduce((acc, r) => acc + r.withDifference, 0),
+            differencesByCashier,
             shifts: filteredShifts
         };
     },

@@ -4,10 +4,27 @@
  */
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { auditService } from './auditService';
+import { round2 } from '../utils/money';
+
+// La bóveda (conteo por denominación y métodos no efectivo) viaja dentro de observaciones_cierre
+// para no requerir cambios de esquema: "<notas> + salto de línea + [BOVEDA]{json}"
+const VAULT_TAG = '[BOVEDA]';
+
+const splitClosingNotes = (raw) => {
+    const text = raw || '';
+    const idx = text.indexOf(VAULT_TAG);
+    if (idx === -1) return { notes: text, vault: null };
+    let vault = null;
+    try { vault = JSON.parse(text.slice(idx + VAULT_TAG.length)); } catch { vault = null; }
+    return { notes: text.slice(0, idx).trim(), vault };
+};
 
 const isValidUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-const mapShiftFromDb = (s) => ({
+const mapShiftFromDb = (s) => {
+    const { notes: closingNotes, vault } = splitClosingNotes(s.observaciones_cierre);
+    return {
     id: s.id,
     cashierId: s.cajero_id,
     cashierName: s.nombre_cajero || 'Cajero',
@@ -27,8 +44,13 @@ const mapShiftFromDb = (s) => ({
     differenceUsd: Number(s.diferencia_usd) || 0,
     differenceBs: Number(s.diferencia_bs) || 0,
     notes: s.observaciones_apertura || '',
-    closingNotes: s.observaciones_cierre || ''
-});
+    closingNotes,
+    vault,
+    // Esperado derivado: contado - diferencia (el esquema solo guarda declarado y diferencia)
+    expectedCashUsd: round2((Number(s.efectivo_declarado_usd) || 0) - (Number(s.diferencia_usd) || 0)),
+    expectedCashBs: round2((Number(s.efectivo_declarado_bs) || 0) - (Number(s.diferencia_bs) || 0))
+    };
+};
 
 // Referencias en memoria para respuesta síncrona inmediata en render
 let _cachedActiveShift = null;
@@ -228,7 +250,7 @@ export const shiftService = {
     /**
      * Cierra el turno de caja (Arqueo / Corte Z) actualizando 'turnos_caja' en Supabase
      */
-    closeShift: async ({ countedCashUsd, countedCashBs, notes = '' }) => {
+    closeShift: async ({ countedCashUsd, countedCashBs, notes = '', vault = null }) => {
         const shift = _cachedActiveShift || (await shiftService.fetchCurrentShift());
         if (!shift) throw new Error('No hay un turno de caja abierto actualmente');
 
@@ -237,9 +259,29 @@ export const shiftService = {
         const countedUsd = Number(countedCashUsd) || 0;
         const countedBs = Number(countedCashBs) || 0;
 
-        const diffUsd = countedUsd - (summary?.expectedCashUsd || 0);
-        const diffBs = countedBs - (summary?.expectedCashBs || 0);
+        const diffUsd = round2(countedUsd - (summary?.expectedCashUsd || 0));
+        const diffBs = round2(countedBs - (summary?.expectedCashBs || 0));
         const nowIso = new Date().toISOString();
+
+        // Bóveda: métodos no efectivo declarados (cierre ciego) vs lo vendido en el turno
+        let closingVault = null;
+        if (vault) {
+            const declared = vault.declared || {};
+            const dPunto = declared.puntoBs === '' || declared.puntoBs == null ? null : Number(declared.puntoBs) || 0;
+            const dPm = declared.pagomovilBs === '' || declared.pagomovilBs == null ? null : Number(declared.pagomovilBs) || 0;
+            const dZelle = declared.zelleUsd === '' || declared.zelleUsd == null ? null : Number(declared.zelleUsd) || 0;
+            closingVault = {
+                usdBills: vault.usdBills || {},
+                bsBills: vault.bsBills || {},
+                bsOther: Number(vault.bsOther) || 0,
+                nonCash: {
+                    puntoBs: { expected: round2(summary?.salesPuntoBs || 0), declared: dPunto, diff: dPunto == null ? null : round2(dPunto - (summary?.salesPuntoBs || 0)) },
+                    pagomovilBs: { expected: round2(summary?.salesPagomovilBs || 0), declared: dPm, diff: dPm == null ? null : round2(dPm - (summary?.salesPagomovilBs || 0)) },
+                    zelleUsd: { expected: round2(summary?.salesZelleUsd || 0), declared: dZelle, diff: dZelle == null ? null : round2(dZelle - (summary?.salesZelleUsd || 0)) }
+                }
+            };
+        }
+        const storedNotes = closingVault ? `${notes || ''}\n${VAULT_TAG}${JSON.stringify(closingVault)}`.trim() : (notes || '');
 
         if (isSupabaseConfigured() && supabase) {
             const { error } = await supabase
@@ -254,7 +296,7 @@ export const shiftService = {
                     efectivo_declarado_bs: countedBs,
                     diferencia_usd: diffUsd,
                     diferencia_bs: diffBs,
-                    observaciones_cierre: notes || ''
+                    observaciones_cierre: storedNotes
                 })
                 .eq('id', shift.id);
 
@@ -283,7 +325,26 @@ export const shiftService = {
             differenceUsd: diffUsd,
             differenceBs: diffBs,
             closingNotes: notes,
+            vault: closingVault,
         };
+
+        const nonCashDiffs = closingVault ? Object.values(closingVault.nonCash).map(m => m.diff).filter(d => d != null && d !== 0) : [];
+        if (diffUsd !== 0 || diffBs !== 0 || nonCashDiffs.length > 0) {
+            try {
+                auditService.log({
+                    userId: shift.cashierId,
+                    userName: shift.cashierName,
+                    action: 'cierre_turno',
+                    actionLabel: `ALERTA descuadre de caja (${diffUsd < 0 || diffBs < 0 ? 'faltante' : 'sobrante'}) - turno ${shift.id}`,
+                    module: 'cashier',
+                    entityType: 'shift',
+                    entityId: shift.id,
+                    details: { diffUsd, diffBs, nonCash: closingVault?.nonCash || null }
+                });
+            } catch (e) {
+                console.warn('No se pudo registrar la alerta de descuadre:', e);
+            }
+        }
 
         _cachedActiveShift = null;
 
