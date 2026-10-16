@@ -28,12 +28,10 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
         setLoading(true);
         try {
             const data = await getShiftSummary(activeShift?.id);
+            // Cierre ciego: el cajero cuenta sin ver el total esperado
             setSummary(data);
-            if (data) {
-                // Prellenar con el monto esperado para agilizar
-                setCountedUsd(data.expectedCashUsd.toString());
-                setCountedBs(data.expectedCashBs.toString());
-            }
+            setCountedUsd('');
+            setCountedBs('');
         } finally {
             setLoading(false);
         }
@@ -48,8 +46,7 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
     const numCountedUsd = parseFloat(countedUsd) || 0;
     const numCountedBs = parseFloat(countedBs) || 0;
 
-    const diffUsd = summary ? numCountedUsd - summary.expectedCashUsd : 0;
-    const diffBs = summary ? numCountedBs - summary.expectedCashBs : 0;
+    const hasCounted = countedUsd !== '' && countedBs !== '' && numCountedUsd >= 0 && numCountedBs >= 0;
 
     const handleConfirmClose = async () => {
         setSubmitting(true);
@@ -185,6 +182,12 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                             </div>
                         </div>
 
+                        {(closedReport.differenceUsd !== 0 || closedReport.differenceBs !== 0) && (
+                            <p role="alert" className="mb-3 p-2 border border-amber-500 text-amber-700 dark:text-amber-300 font-bold text-center text-[11px]">
+                                ⚠ DESCUADRE DETECTADO — {closedReport.differenceUsd < 0 || closedReport.differenceBs < 0 ? 'FALTANTE' : 'SOBRANTE'}: notificar a gerencia
+                            </p>
+                        )}
+
                         <div className="text-center pt-2 text-[10px] text-gray-400">
                             <p>Firma del Cajero: ________________________</p>
                             <p className="mt-2">UrbanStep POS • Cierre de Turno</p>
@@ -264,15 +267,13 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                                 </label>
                                 <Input
                                     type="number"
-                                    step="1"
+                                    step="0.01"
+                                    min="0"
                                     value={countedUsd}
                                     onChange={(e) => setCountedUsd(e.target.value)}
                                     placeholder="0"
                                     className="font-bold text-emerald-600"
                                 />
-                                <p className="text-[10px] text-gray-400 mt-1">
-                                    Esperado: {formatUSD(summary?.expectedCashUsd || 0)}
-                                </p>
                             </div>
 
                             <div>
@@ -282,33 +283,19 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                                 </label>
                                 <Input
                                     type="number"
-                                    step="10"
+                                    step="0.01"
+                                    min="0"
                                     value={countedBs}
                                     onChange={(e) => setCountedBs(e.target.value)}
                                     placeholder="0"
                                     className="font-bold text-blue-600"
                                 />
-                                <p className="text-[10px] text-gray-400 mt-1">
-                                    Esperado: {formatBs(summary?.expectedCashBs || 0)}
-                                </p>
                             </div>
                         </div>
 
-                        {/* Live Discrepancies */}
-                        <div className="p-3 bg-gray-50 dark:bg-gray-800/70 rounded-xl space-y-1 text-xs">
-                            <div className="flex justify-between items-center">
-                                <span>Diferencia USD:</span>
-                                <span className={`font-bold ${diffUsd === 0 ? 'text-emerald-600' : diffUsd > 0 ? 'text-blue-600' : 'text-red-500'}`}>
-                                    {diffUsd === 0 ? 'Cuadrado ($0.00)' : diffUsd > 0 ? `Sobrante +${formatUSD(diffUsd)}` : `Faltante ${formatUSD(diffUsd)}`}
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span>Diferencia Bs.:</span>
-                                <span className={`font-bold ${diffBs === 0 ? 'text-emerald-600' : diffBs > 0 ? 'text-blue-600' : 'text-red-500'}`}>
-                                    {diffBs === 0 ? 'Cuadrado (Bs. 0,00)' : diffBs > 0 ? `Sobrante +${formatBs(diffBs)}` : `Faltante ${formatBs(diffBs)}`}
-                                </span>
-                            </div>
-                        </div>
+                        <p className="p-3 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 rounded-xl text-[11px]">
+                            Cierre ciego: ingresa lo que contaste físicamente. El monto esperado y la diferencia se mostrarán en el comprobante después de confirmar.
+                        </p>
 
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -332,7 +319,7 @@ export default function ShiftCloseModal({ isOpen, onClose, settings }) {
                             variant="danger"
                             className="flex-1 text-xs flex items-center justify-center gap-1.5 font-bold"
                             onClick={handleConfirmClose}
-                            disabled={submitting}
+                            disabled={submitting || !hasCounted}
                         >
                             <Lock className="w-4 h-4" />
                             {submitting ? 'Cerrando...' : 'Cerrar Turno de Caja'}

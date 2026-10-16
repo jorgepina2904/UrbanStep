@@ -88,3 +88,16 @@ html::-webkit-scrollbar {
 
   #printable-receipt img, #credit-note-print-area img { max-width: 40mm; }
 }
+
+/* Etiquetas adhesivas de calzado: una por página, tamaño según @page */
+@media print {
+  #printable-labels, #printable-labels * { visibility: visible !important; }
+  #printable-labels {
+    position: absolute !important; inset: 0 auto auto 0 !important;
+    display: block !important; max-height: none !important; overflow: visible !important;
+  }
+  #printable-labels .label-item {
+    break-after: page; page-break-after: always; border: 0 !important; border-radius: 0 !important;
+    color: #000 !important; background: #fff !important; margin: 0 !important; padding: 1mm !important;
+  }
+}

@@ -17,6 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useShift } from '../contexts/ShiftContext';
 import { productService } from '../services/productService';
+import { decodeVariantBarcode } from '../utils/barcodeLabel';
 import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
@@ -183,9 +184,24 @@ export default function CashierTerminal() {
         return matchesSearch && matchesCat;
     });
 
-    const handleAddToCart = (product) => {
-        const color = selectedColor[product.id] || product.color || (Array.isArray(product.colors) && product.colors[0]) || null;
-        const size = selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
+    // Escáner USB/Bluetooth (emula teclado + Enter): SKU o SKU|TALLA|COLOR agrega la variante exacta
+    const handleScanKeyDown = (e) => {
+        if (e.key !== 'Enter') return;
+        const decoded = decodeVariantBarcode(search);
+        if (!decoded) return;
+        const match = products.find(p => String(p.sku || '').toLowerCase() === decoded.sku.toLowerCase());
+        if (!match) return;
+        e.preventDefault();
+        const color = decoded.color
+            ? ((Array.isArray(match.colorVariants) ? match.colorVariants.map(v => v.color) : []).find(c => String(c).toLowerCase() === decoded.color.toLowerCase()) || decoded.color)
+            : null;
+        handleAddToCart(match, { size: decoded.size || undefined, color: color || undefined });
+        setSearch('');
+    };
+
+    const handleAddToCart = (product, overrides = {}) => {
+        const color = overrides.color || selectedColor[product.id] || product.color || (Array.isArray(product.colors) && product.colors[0]) || null;
+        const size = overrides.size || selectedSize[product.id] || (product.sizes?.length > 0 ? product.sizes[0] : 'N/A');
         const availableStock = productService.getAvailableStock(product, size, color);
 
         if (availableStock <= 0) {
@@ -502,6 +518,8 @@ export default function CashierTerminal() {
                                 placeholder="Escanear SKU o buscar por nombre (Atajo F2)..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
+                                onKeyDown={handleScanKeyDown}
+                                aria-label="Escanear código de barras o buscar producto"
                                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium"
                             />
                         </div>

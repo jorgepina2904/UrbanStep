@@ -8,14 +8,12 @@ import { Layers, ShieldCheck, CheckCircle2, XCircle, SlidersHorizontal, AlertTri
 import toast from 'react-hot-toast';
 
 export default function VariantAvailabilityModal({ isOpen, onClose, product, onSaved }) {
-    if (!product) return null;
-
-    const availableColors = Array.isArray(product.colors) && product.colors.length > 0
+    const availableColors = Array.isArray(product?.colors) && product.colors.length > 0
         ? product.colors
-        : (product.color ? [product.color] : ['Original']);
+        : (product?.color ? [product.color] : ['Original']);
 
     const [selectedColor, setSelectedColor] = useState(availableColors[0] || 'Original');
-    const [globalDisabled, setGlobalDisabled] = useState(Boolean(product.disabled));
+    const [globalDisabled, setGlobalDisabled] = useState(Boolean(product?.disabled));
     const [disabledVariants, setDisabledVariants] = useState({});
     const [saving, setSaving] = useState(false);
 
@@ -26,6 +24,8 @@ export default function VariantAvailabilityModal({ isOpen, onClose, product, onS
             setDisabledVariants(product.disabledVariants ? { ...product.disabledVariants } : {});
         }
     }, [product]);
+
+    if (!product) return null;
 
     // Obtener desglose de stock para el color actual
     const currentVariantStock = productService.getColorSizeStock(product, selectedColor) || product.sizeStock || {};

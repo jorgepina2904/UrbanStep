@@ -23,9 +23,11 @@ import {
     X,
     Package,
     Truck,
-    SlidersHorizontal
+    SlidersHorizontal,
+    Tag
 } from 'lucide-react';
 import VariantAvailabilityModal from '../ui/VariantAvailabilityModal';
+import LabelPrintModal from '../ui/LabelPrintModal';
 import toast from 'react-hot-toast';
 
 /**
@@ -50,6 +52,7 @@ export default function Inventory() {
   const [targetProduct, setTargetProduct] = useState(null);
   const [availabilityProduct, setAvailabilityProduct] = useState(null);
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
+  const [labelProduct, setLabelProduct] = useState(null);
   const [adjustForm, setAdjustForm] = useState({
     newStock: '',
     reason: 'Ajuste manual de conteo físico',
@@ -490,6 +493,17 @@ export default function Inventory() {
                               <SlidersHorizontal className="w-3.5 h-3.5" />
                             </button>
 
+                            {/* Etiquetas con código de barras */}
+                            <button
+                              type="button"
+                              onClick={() => setLabelProduct(product)}
+                              aria-label={`Imprimir etiquetas de ${product.name}`}
+                              className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-gray-500 hover:text-indigo-600 transition-colors"
+                              title="Imprimir etiquetas con código de barras"
+                            >
+                              <Tag className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Deshabilitar / Habilitar */}
                             <button
                               type="button"
@@ -734,6 +748,12 @@ export default function Inventory() {
           </form>
         </Modal>
       )}
+
+      <LabelPrintModal
+        isOpen={Boolean(labelProduct)}
+        onClose={() => setLabelProduct(null)}
+        product={labelProduct}
+      />
 
       {/* Subpantalla SGF: Disponibilidad y Agotamiento de Variantes */}
       <VariantAvailabilityModal
