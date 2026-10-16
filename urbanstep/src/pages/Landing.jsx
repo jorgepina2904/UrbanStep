@@ -14,6 +14,8 @@ import { promotionService, accountService, addressBookService } from '../service
 import { computePromotions } from '../utils/promotions';
 import { cartRecoveryService, isValidPhone } from '../services/marketingService';
 import { tierPromotions, tierForPoints } from '../utils/loyalty';
+import { wishlistService } from '../services/storefrontService';
+import { PromoBar, TrustStrip, VipClubSection, FaqSection, SiteFooter, WhatsAppFab, MobileCartBar } from './landing/LandingSections';
 import { authService } from '../services/authService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { getDefaultRoute } from '../utils/permissions';
@@ -24,6 +26,7 @@ import {
     Truck,
     ArrowRight,
     Star,
+    Heart,
     Flame,
     Sparkles,
     MapPin,
@@ -56,6 +59,7 @@ import { getColorHex, SHOE_COLORS } from '../utils/shoeSizes';
 import BrandLogo from '../ui/BrandLogo';
 
 const mapProductToCatalog = (p) => ({
+    createdAt: p.createdAt || p.creado_el || null,
     id: p.id,
     brand: (p.brand || 'URBANSTEP').toUpperCase(),
     name: p.name,
@@ -175,6 +179,8 @@ export default function Landing() {
     const [couponInput, setCouponInput] = useState('');
     const [couponCode, setCouponCode] = useState('');
     const [contactConsent, setContactConsent] = useState(false);
+    const [sortBy, setSortBy] = useState('relevancia');
+    const [wishIds, setWishIds] = useState(() => wishlistService.get(null));
     const [loyalty, setLoyalty] = useState(null);
 
     // Single Unified Auth Modal state
@@ -292,7 +298,7 @@ export default function Landing() {
 
     // Filtered drops
     const filteredProducts = useMemo(() => {
-        return products.filter(p => {
+        const list = products.filter(p => {
             const matchBrand = selectedBrand === 'TODAS' || p.brand.includes(selectedBrand);
             const q = searchQuery.toLowerCase().trim();
             const matchSearch = !q || (
@@ -302,7 +308,26 @@ export default function Landing() {
             );
             return matchBrand && matchSearch;
         });
-    }, [products, selectedBrand, searchQuery]);
+        const sorters = {
+            'precio-asc': (a, b) => a.price - b.price,
+            'precio-desc': (a, b) => b.price - a.price,
+            nombre: (a, b) => a.name.localeCompare(b.name, 'es'),
+            novedades: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        };
+        return sorters[sortBy] ? [...list].sort(sorters[sortBy]) : list;
+    }, [products, selectedBrand, searchQuery, sortBy]);
+
+    useEffect(() => {
+        setWishIds(wishlistService.get(user));
+        const refresh = () => setWishIds(wishlistService.get(user));
+        window.addEventListener('wishlist_changed', refresh);
+        return () => window.removeEventListener('wishlist_changed', refresh);
+    }, [user]);
+
+    const toggleWish = (product) => {
+        const now = wishlistService.toggle(user, product.id);
+        toast.success(now ? 'Guardado en tu lista de deseos' : 'Quitado de tu lista de deseos', { icon: now ? '❤️' : undefined });
+    };
 
     // Size selection handler per product
     const handleSelectSize = (productId, size) => {
@@ -674,6 +699,8 @@ export default function Landing() {
         <div className={`min-h-screen font-sans selection:bg-blue-600 selection:text-white flex flex-col transition-colors duration-200 ${
             isDark ? 'bg-[#07090e] text-gray-100' : 'bg-gray-50 text-gray-900'
         }`}>
+            <PromoBar promotions={promotions} />
+
             {/* Live Ticker Bar: BCV Official Rate & Lara Express Delivery */}
             <div className={`border-b text-[11px] py-2 px-4 sticky top-0 z-40 backdrop-blur-md transition-colors ${
                 isDark
@@ -1205,6 +1232,8 @@ export default function Landing() {
                 </div>
             </section>
 
+            <TrustStrip isDark={isDark} />
+
             {/* Catalog Section */}
             <main id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 flex-1 w-full space-y-8">
                 {/* Brand Filter Pills without scrollbars */}
@@ -1228,9 +1257,24 @@ export default function Landing() {
                         ))}
                     </div>
 
-                    <p className="text-xs text-gray-400 font-mono">
-                        Mostrando <strong className={isDark ? "text-white" : "text-gray-900"}>{filteredProducts.length}</strong> calzados
-                    </p>
+                    <div className="flex items-center gap-3">
+                        <p className="text-xs text-gray-400 font-mono hidden sm:block">
+                            <strong className={isDark ? "text-white" : "text-gray-900"}>{filteredProducts.length}</strong> calzados
+                        </p>
+                        <label className="sr-only" htmlFor="catalog-sort">Ordenar catálogo</label>
+                        <select
+                            id="catalog-sort"
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className={`text-xs font-bold rounded-xl px-3 py-2 border outline-none ${isDark ? 'bg-white/[0.04] border-white/[0.08] text-gray-200' : 'bg-white border-gray-200 text-gray-700'}`}
+                        >
+                            <option value="relevancia">Ordenar: relevancia</option>
+                            <option value="novedades">Novedades</option>
+                            <option value="precio-asc">Precio: menor a mayor</option>
+                            <option value="precio-desc">Precio: mayor a menor</option>
+                            <option value="nombre">Nombre A-Z</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1287,6 +1331,16 @@ export default function Landing() {
                                             className="w-full h-full max-h-full max-w-full object-contain filter drop-shadow-[0_14px_22px_rgba(0,0,0,0.28)] group-hover:scale-[1.04] group-hover:-translate-y-1 transition-all duration-300 relative z-10"
                                             loading="lazy"
                                         />
+
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleWish(product)}
+                                            aria-pressed={wishIds.includes(product.id)}
+                                            aria-label={wishIds.includes(product.id) ? `Quitar ${product.name} de la lista de deseos` : `Guardar ${product.name} en la lista de deseos`}
+                                            className="absolute top-2.5 right-2.5 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center"
+                                        >
+                                            <Heart className={`w-[18px] h-[18px] ${wishIds.includes(product.id) ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
+                                        </button>
 
                                         {/* Stock Badge on bottom-left */}
                                         <span className="absolute bottom-2.5 left-2.5 z-20 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 border border-emerald-500/30 shadow-sm">
@@ -1614,35 +1668,24 @@ export default function Landing() {
             </section>
 
             {/* Footer */}
-            <footer className={`border-t py-10 text-xs transition-colors ${
-                isDark ? 'border-white/[0.06] bg-[#05070c] text-gray-500' : 'border-slate-200 bg-white text-slate-500'
-            }`}>
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="flex items-center gap-3">
-                        <BrandLogo variant="compact" size="sm" showSubtitle={false} />
-                        <span className="text-gray-400">•</span>
-                        <span className="font-mono text-[11px] text-gray-400">RIF: J-50123456-7</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="font-mono text-[11px] text-gray-400">Barquisimeto, Estado Lara</span>
-                    </div>
+            <VipClubSection
+                isDark={isDark}
+                isLoggedIn={isAuthenticated}
+                onJoin={() => { setIsAuthModalOpen(true); setAuthTab('register'); }}
+            />
+            <div id="faq"><FaqSection isDark={isDark} /></div>
 
-                    <div className="flex items-center gap-6 text-[11px]">
-                        <a
-                            href="https://www.google.com/maps?q=10.068330144675503,-69.28499381534304"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-blue-500 flex items-center gap-1 transition-colors font-bold"
-                        >
-                            <MapPin className="w-3.5 h-3.5 text-red-500" />
-                            <span>Ubicación Maps (10.06833, -69.28499)</span>
-                        </a>
-                        <span>•</span>
-                        <span>BCV: {formatBs(rate)} / USD</span>
-                        <span>•</span>
-                        <span>© 2026 Todos los derechos reservados</span>
-                    </div>
-                </div>
-            </footer>
+            <SiteFooter
+                isDark={isDark}
+                rate={rate}
+                formatBs={formatBs}
+                paymentMethods={paymentMethods}
+                BrandLogo={BrandLogo}
+                onLogin={() => { setIsAuthModalOpen(true); setAuthTab('login'); }}
+            />
+
+            <WhatsAppFab phone={import.meta.env.VITE_WHATSAPP_PHONE} raised={totalItemsCount > 0} />
+            <MobileCartBar count={totalItemsCount} totalLabel={`$${totalCartUsd.toFixed(2)}`} onOpen={() => setIsCartOpen(true)} />
 
             {/* ========================================================================= */}
             {/* SLIDE-OUT SHOPPING BAG DRAWER */}
@@ -1998,7 +2041,7 @@ export default function Landing() {
                                 >
                                     {paymentMethods.map(pm => (
                                         <option key={pm.id} value={pm.id}>
-                                            {pm.name} ({pm.currency === 'VES' ? 'Bs. Tasa BCV' : '$ USD'})
+                                            {pm.label || pm.name} ({pm.currency === 'VES' ? 'Bs. Tasa BCV' : '$ USD'})
                                         </option>
                                     ))}
                                 </select>

@@ -4,7 +4,7 @@
  */
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const DEFAULT_RATE = 42.50;
+const DEFAULT_RATE = Number(import.meta.env.VITE_DEFAULT_BCV_RATE) > 0 ? Number(import.meta.env.VITE_DEFAULT_BCV_RATE) : 42.50;
 
 const RATE_STORAGE_KEY = 'urbanstep_last_bcv_rate';
 
