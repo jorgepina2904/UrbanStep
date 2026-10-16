@@ -12,6 +12,8 @@ import { settingsService } from '../services/settingsService';
 import { deliveryService } from '../services/deliveryService';
 import { promotionService, accountService, addressBookService } from '../services/storefrontService';
 import { computePromotions } from '../utils/promotions';
+import { cartRecoveryService, isValidPhone } from '../services/marketingService';
+import { tierPromotions, tierForPoints } from '../utils/loyalty';
 import { authService } from '../services/authService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { getDefaultRoute } from '../utils/permissions';
@@ -172,6 +174,8 @@ export default function Landing() {
     const [promotions, setPromotions] = useState([]);
     const [couponInput, setCouponInput] = useState('');
     const [couponCode, setCouponCode] = useState('');
+    const [contactConsent, setContactConsent] = useState(false);
+    const [loyalty, setLoyalty] = useState(null);
 
     // Single Unified Auth Modal state
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -354,13 +358,49 @@ export default function Landing() {
         promotionService.getActive().then(setPromotions);
     }, []);
 
+    // Nivel del Club VIP del cliente con sesión iniciada (sus beneficios se aplican solos)
+    useEffect(() => {
+        if (user?.role !== 'Cliente') { setLoyalty(null); return; }
+        accountService.getLoyalty(user).then(setLoyalty).catch(() => setLoyalty(null));
+    }, [user]);
+
+    // Carrito abandonado: solo si el cliente aceptó que lo contactemos por WhatsApp
+    useEffect(() => {
+        if (!contactConsent || cartItems.length === 0 || !isValidPhone(checkoutForm.phone)) return undefined;
+        const t = setTimeout(() => {
+            cartRecoveryService.save({ name: checkoutForm.name || user?.name, phone: checkoutForm.phone, items: cartItems, totalUsd: subtotal });
+        }, 1500);
+        return () => clearTimeout(t);
+    }, [contactConsent, cartItems, checkoutForm.phone, checkoutForm.name, subtotal, user]);
+
+    // Enlace de recuperación ?recover=<id>: restaura la bolsa con validación de stock
+    const recoveredRef = React.useRef(false);
+    useEffect(() => {
+        const id = new URLSearchParams(location.search).get('recover');
+        if (!id || recoveredRef.current || products.length === 0) return;
+        recoveredRef.current = true;
+        cartRecoveryService.getForRecovery(id).then((saved) => {
+            if (!saved || saved.length === 0) { toast('Tu bolsa guardada ya no está disponible', { icon: 'ℹ️' }); return; }
+            let restored = 0;
+            saved.forEach((it) => {
+                const product = products.find(p => String(p.id) === String(it.productId));
+                if (!product) return;
+                if (productService.getAvailableStock(product, it.size, it.color) <= 0) return;
+                addItem({ ...product, imageUrl: productService.getColorVariantImage(product, it.color) || product.imageUrl }, it.size, Math.min(it.quantity, productService.getAvailableStock(product, it.size, it.color)), it.color);
+                restored += 1;
+            });
+            if (restored > 0) { toast.success('¡Recuperamos tu bolsa!', { icon: '🛍️' }); setIsCartOpen(true); }
+            else toast.error('Lo sentimos, esos pares ya se agotaron');
+        });
+    }, [products, location.search, addItem]);
+
     const promo = useMemo(() => computePromotions({
         items: cartItems,
         subtotal,
         shippingCost: cartItems.length > 0 ? shippingCostUsd : 0,
-        promotions,
+        promotions: [...promotions, ...tierPromotions(loyalty?.tier || tierForPoints(0))],
         couponCode
-    }), [cartItems, subtotal, shippingCostUsd, promotions, couponCode]);
+    }), [cartItems, subtotal, shippingCostUsd, promotions, couponCode, loyalty]);
 
     const effectiveShippingUsd = cartItems.length > 0 ? Math.max(0, shippingCostUsd - promo.shippingDiscountUsd) : 0;
     const totalCartUsd = Math.max(0, subtotal - promo.discountUsd) + effectiveShippingUsd;
@@ -559,6 +599,7 @@ export default function Landing() {
             }
 
             promotionService.registerUse(promo.applied);
+            cartRecoveryService.markConverted();
             setCouponCode('');
             setCouponInput('');
             clearCart();
@@ -1915,6 +1956,10 @@ export default function Landing() {
                                         placeholder="0414-5551234"
                                         className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
                                     />
+                                    <label className="mt-2 flex items-start gap-2 text-[10px] text-gray-400 cursor-pointer">
+                                        <input type="checkbox" checked={contactConsent} onChange={(e) => setContactConsent(e.target.checked)} className="mt-0.5" />
+                                        <span>Guardar mi bolsa y avisarme por WhatsApp si no termino mi compra (puedes pedir que no te escribamos más).</span>
+                                    </label>
                                 </div>
                                 <div>
                                     <label className="block font-semibold text-gray-300 mb-1">Zona / Municipio (Lara)</label>

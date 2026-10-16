@@ -25,6 +25,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Delivery = lazy(() => import('./pages/Delivery'));
 const Purchases = lazy(() => import('./pages/Purchases'));
 const Warehouse = lazy(() => import('./pages/Warehouse'));
+const Marketing = lazy(() => import('./pages/Marketing'));
 
 export const App = () => {
   return (
@@ -50,6 +51,7 @@ export const App = () => {
                     <Route path="inventory" element={<ProtectedRoute module="inventory"><Inventory /></ProtectedRoute>} />
                     <Route path="purchases" element={<ProtectedRoute module="purchases"><Purchases /></ProtectedRoute>} />
                     <Route path="warehouse" element={<ProtectedRoute module="warehouse"><Warehouse /></ProtectedRoute>} />
+                    <Route path="marketing" element={<ProtectedRoute module="marketing"><Marketing /></ProtectedRoute>} />
                     <Route path="customers" element={<ProtectedRoute module="customers"><Customers /></ProtectedRoute>} />
                     <Route path="delivery" element={<ProtectedRoute module="delivery"><Delivery /></ProtectedRoute>} />
                     <Route path="reports" element={<ProtectedRoute module="reports"><Reports /></ProtectedRoute>} />

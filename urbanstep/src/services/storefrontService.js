@@ -8,6 +8,8 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { customerService } from './customerService';
 import { saleService } from './saleServices';
 import { deliveryService } from './deliveryService';
+import { returnService } from './returnService';
+import { computeLoyalty } from '../utils/loyalty';
 
 const readJson = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
@@ -127,7 +129,7 @@ export const promotionService = {
     async registerUse(applied = []) {
         if (!isSupabaseConfigured() || !supabase) return;
         for (const a of applied) {
-            if (!a.id) continue;
+            if (!a.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(a.id))) continue; // solo cupones de la tabla
             try {
                 await supabase.rpc('incrementar_uso_cupon', { p_id: a.id });
             } catch (e) {
@@ -205,6 +207,14 @@ export const accountService = {
             .filter(s => s.customerId === customer.id)
             .sort((a, b) => new Date(b.date) - new Date(a.date))
             .map(s => ({ ...s, delivery: bySale.get(s.id) || null }));
+    },
+
+    /** Puntos y nivel del Club VIP (1 punto por USD, neto de notas de crédito). */
+    async getLoyalty(user) {
+        const orders = await accountService.getOrders(user);
+        const receipts = new Set(orders.map(o => o.receiptNumber));
+        const notes = (await returnService.getAll().catch(() => [])).filter(n => receipts.has(n.affectedInvoiceNumber));
+        return { ...computeLoyalty({ sales: orders, creditNotes: notes }), orders: orders.length };
     },
 
     /** ¿El cliente compró este producto? (para marcar la reseña como compra verificada). */

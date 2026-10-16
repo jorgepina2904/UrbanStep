@@ -19,7 +19,8 @@ import {
     X,
     FolderKanban,
     Building2,
-    Warehouse
+    Warehouse,
+    Megaphone
 } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission, RoleMeta } from '../utils/permissions';
@@ -71,6 +72,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
             collapsible: true,
             items: [
                 { name: 'Clientes', icon: Users, path: '/customers', module: 'customers' },
+                { name: 'Marketing & VIP', icon: Megaphone, path: '/marketing', module: 'marketing' },
                 { name: 'Reportes', icon: FileBarChart, path: '/reports', module: 'reports' },
                 { name: 'Configuración', icon: Settings, path: '/settings', module: 'settings' },
             ]

@@ -9,6 +9,7 @@ import { productService } from '../services/productService';
 import { accountService, wishlistService, addressBookService } from '../services/storefrontService';
 import { usdToVes, resolveSaleRate } from '../utils/money';
 import { bcvService } from '../services/bcvService';
+import { VIP_TIERS } from '../utils/loyalty';
 
 const TRACK_STEPS = [
     { key: 'pendiente', label: 'Empacando', icon: Package },
@@ -76,14 +77,16 @@ export default function Account() {
     const [wishIds, setWishIds] = useState([]);
     const [catalog, setCatalog] = useState([]);
     const [addresses, setAddresses] = useState([]);
+    const [loyalty, setLoyalty] = useState(null);
     const [addrForm, setAddrForm] = useState({ label: 'Casa', address: '', zone: '', phone: '' });
 
     const load = useCallback(async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const [o, all] = await Promise.all([accountService.getOrders(user), productService.getAll()]);
+            const [o, all, loy] = await Promise.all([accountService.getOrders(user), productService.getAll(), accountService.getLoyalty(user).catch(() => null)]);
             setOrders(o);
+            setLoyalty(loy);
             setCatalog(all);
             setWishIds(wishlistService.get(user));
             setAddresses(addressBookService.list(user));
@@ -144,6 +147,28 @@ export default function Account() {
                     <h1 className="text-2xl font-black">Hola, {user.name}</h1>
                     <p className="text-sm text-gray-500">{user.email}</p>
                 </div>
+
+                {loyalty && (
+                    <section aria-label="Club VIP" className="p-5 rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-[11px] font-bold tracking-widest opacity-80">URBANSTEP VIP CLUB</p>
+                                <p className="text-2xl font-black">{loyalty.tier.name}</p>
+                                <p className="text-xs opacity-90">{loyalty.tier.perk}</p>
+                            </div>
+                            <div className="text-right"><p className="text-3xl font-black">{loyalty.points}</p><p className="text-[11px] opacity-80">puntos</p></div>
+                        </div>
+                        <div>
+                            <div className="h-2 rounded-full bg-white/25 overflow-hidden" role="progressbar" aria-valuenow={loyalty.progressPct} aria-valuemin={0} aria-valuemax={100} aria-label="Progreso al siguiente nivel">
+                                <div className="h-full bg-white" style={{ width: `${loyalty.progressPct}%` }} />
+                            </div>
+                            <p className="text-[11px] mt-1 opacity-90">{loyalty.next ? `Te faltan ${loyalty.toNext} puntos ($${loyalty.toNext} en compras) para ${loyalty.next.name}` : 'Llegaste al nivel máximo'}</p>
+                        </div>
+                        <ul className="grid grid-cols-3 gap-2 text-[10px]">
+                            {VIP_TIERS.map(t => <li key={t.id} className={`p-2 rounded-xl ${t.id === loyalty.tier.id ? 'bg-white text-blue-700 font-bold' : 'bg-white/10'}`}>{t.name}<br />{t.minPoints}+ pts</li>)}
+                        </ul>
+                    </section>
+                )}
 
                 <div role="tablist" className="flex gap-2 border-b border-gray-200 dark:border-gray-800">
                     {tabs.map(t => {

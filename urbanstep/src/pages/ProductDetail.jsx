@@ -7,6 +7,7 @@ import { useCart } from '../contexts/CartContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService } from '../services/productService';
 import { wishlistService, reviewService, accountService } from '../services/storefrontService';
+import { stockAlertService } from '../services/marketingService';
 import { getColorHex } from '../utils/shoeSizes';
 import { getSizeRows, recommendSize } from '../utils/sizeGuide';
 import BrandLogo from '../ui/BrandLogo';
@@ -53,6 +54,9 @@ export default function ProductDetail() {
     const [reviews, setReviews] = useState([]);
     const [reviewForm, setReviewForm] = useState({ rating: 0, title: '', comment: '' });
     const [sendingReview, setSendingReview] = useState(false);
+    const [alertSize, setAlertSize] = useState(null);
+    const [alertForm, setAlertForm] = useState({ name: '', contact: '' });
+    const [sendingAlert, setSendingAlert] = useState(false);
 
     useEffect(() => {
         let alive = true;
@@ -87,7 +91,22 @@ export default function ProductDetail() {
     const sizeRows = useMemo(() => getSizeRows(sizes, product?.sizeCategory || 'unisex'), [sizes, product]);
     const summary = useMemo(() => reviewService.summarize(reviews), [reviews]);
 
-    useEffect(() => { setImgIndex(0); }, [color]);
+    useEffect(() => { setImgIndex(0); setAlertSize(null); }, [color]);
+
+    const submitAlert = async (e) => {
+        e.preventDefault();
+        setSendingAlert(true);
+        try {
+            const res = await stockAlertService.subscribe({ product, color, size: alertSize, name: alertForm.name || user?.name, contact: alertForm.contact });
+            toast.success(res.duplicated ? 'Ya estabas en la lista: te avisaremos' : `¡Listo! Te avisamos cuando llegue la talla ${alertSize}`);
+            setAlertSize(null);
+            setAlertForm({ name: '', contact: '' });
+        } catch (err) {
+            toast.error(err.message);
+        } finally {
+            setSendingAlert(false);
+        }
+    };
 
     const selectedStock = size ? available(size) : 0;
     const totalAvailable = useMemo(() => sizes.reduce((acc, s) => acc + available(s), 0), [sizes, available]);
@@ -248,9 +267,9 @@ export default function ProductDetail() {
                                 const left = available(s);
                                 const out = left <= 0;
                                 return (
-                                    <button key={s} type="button" disabled={out} onClick={() => setSize(s)} aria-pressed={size === s}
-                                        aria-label={`Talla ${s}${out ? ', agotada' : ''}`}
-                                        className={`py-2.5 rounded-xl border text-sm font-bold ${size === s ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 dark:border-gray-700'} ${out ? 'opacity-40 line-through cursor-not-allowed' : 'hover:border-blue-500'}`}>
+                                    <button key={s} type="button" onClick={() => { if (out) { setAlertSize(s); setSize(null); } else { setSize(s); setAlertSize(null); } }} aria-pressed={size === s}
+                                        aria-label={out ? `Talla ${s}, agotada: avísame cuando llegue` : `Talla ${s}`}
+                                        className={`py-2.5 rounded-xl border text-sm font-bold ${size === s ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 dark:border-gray-700'} ${out ? `opacity-50 line-through ${alertSize === s ? 'ring-2 ring-amber-400' : ''}` : 'hover:border-blue-500'}`}>
                                         {s}
                                     </button>
                                 );
@@ -261,6 +280,17 @@ export default function ProductDetail() {
                             {!lowForSelected && lowOverall && <span className="inline-flex items-center gap-1 text-amber-600"><Flame className="w-4 h-4" /> Últimas unidades de este modelo</span>}
                         </p>
                     </fieldset>
+
+                    {alertSize && (
+                        <form onSubmit={submitAlert} className="p-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 space-y-2">
+                            <p className="text-sm font-bold text-amber-800 dark:text-amber-300">La talla {alertSize} está agotada. ¿Te avisamos cuando llegue?</p>
+                            <input aria-label="Tu nombre" value={alertForm.name} onChange={(e) => setAlertForm({ ...alertForm, name: e.target.value })} placeholder="Tu nombre"
+                                className="w-full rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-900 px-3 py-2 text-sm" />
+                            <input aria-label="WhatsApp o correo" required value={alertForm.contact} onChange={(e) => setAlertForm({ ...alertForm, contact: e.target.value })} placeholder="WhatsApp (0414-1234567) o correo"
+                                className="w-full rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-900 px-3 py-2 text-sm" />
+                            <button type="submit" disabled={sendingAlert} className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-bold disabled:opacity-60">Avisarme cuando esté disponible</button>
+                        </form>
+                    )}
 
                     <button type="button" onClick={handleAdd} className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center justify-center gap-2">
                         <ShoppingBag className="w-5 h-5" /> Agregar a la bolsa

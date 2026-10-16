@@ -6,6 +6,7 @@ import Badge from '../ui/Badge';
 import Modal from '../ui/Modal';
 import { purchaseService } from '../services/purchaseService';
 import { productService } from '../services/productService';
+import { stockAlertService } from '../services/marketingService';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -203,6 +204,9 @@ export default function Purchases() {
             });
 
             toast.success('¡Mercancía recibida e inventario actualizado exitosamente!');
+            stockAlertService.countReadyForProducts(purchaseForm.items.map(i => i.productId || i.id)).then((n) => {
+                if (n > 0) toast(`${n} cliente(s) pidieron aviso de estos modelos: revisa Marketing → Alertas de talla`, { icon: '🔔', duration: 6000 });
+            }).catch(() => {});
             setShowPurchaseModal(false);
             setPurchaseForm({ supplierId: '', invoiceNumber: '', controlNumber: '', freightUsd: '', importTaxUsd: '', notes: '', items: [] });
             await loadData();
