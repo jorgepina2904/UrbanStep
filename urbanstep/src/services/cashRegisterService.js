@@ -337,7 +337,7 @@ export const cashRegisterService = {
                 if (data) {
                     caja = mapCajaFromDb(data);
                 }
-            } catch {}
+            } catch (e) { console.warn("Aviso:", e); }
         }
 
         if (!caja) {

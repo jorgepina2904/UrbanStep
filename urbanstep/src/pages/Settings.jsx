@@ -423,7 +423,7 @@ export default function Settings() {
             await supabase.from('envios').delete().neq('id', '00000000-0000-0000-0000-000000000000');
             try {
                 await supabase.from('movimientos_inventario').delete().neq('id', '___none___');
-            } catch {}
+            } catch (e) { console.warn("Aviso:", e); }
             await supabase.from('productos').delete().neq('id', '___none___');
             await supabase.from('clientes').delete().neq('id', 'publico');
 

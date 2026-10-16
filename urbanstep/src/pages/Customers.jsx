@@ -141,7 +141,24 @@ export default function Customers() {
         const errors = {};
         if (!form.firstName.trim()) errors.firstName = 'El nombre es obligatorio';
         if (!form.lastName.trim()) errors.lastName = 'El apellido es obligatorio';
-        if (!form.rawDoc.trim() && !editing) errors.rawDoc = 'La cédula o RIF es obligatorio';
+        const rawDoc = form.rawDoc.trim().replace(/[-.\s]/g, '');
+        if (!rawDoc && !editing) {
+            errors.rawDoc = 'La cédula o RIF es obligatorio';
+        } else if (rawDoc) {
+            const type = String(form.docType || 'V').toUpperCase();
+            const rules = {
+                V: [/^\d{6,9}$/, 'La cédula debe tener entre 6 y 9 dígitos'],
+                E: [/^\d{6,9}$/, 'La cédula debe tener entre 6 y 9 dígitos'],
+                J: [/^\d{8,10}$/, 'El RIF debe tener entre 8 y 10 dígitos'],
+                G: [/^\d{8,10}$/, 'El RIF debe tener entre 8 y 10 dígitos'],
+                P: [/^[A-Za-z0-9]{5,15}$/, 'El pasaporte debe tener entre 5 y 15 caracteres alfanuméricos']
+            };
+            const rule = rules[type];
+            if (rule && !rule[0].test(rawDoc)) errors.rawDoc = rule[1];
+        }
+        if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+            errors.email = 'Correo electrónico inválido';
+        }
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -440,6 +457,7 @@ export default function Customers() {
                                 value={form.email}
                                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                                 placeholder="cliente@correo.com"
+                                error={formErrors.email}
                             />
                         </div>
                     </div>

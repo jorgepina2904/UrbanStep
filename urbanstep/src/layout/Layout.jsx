@@ -21,7 +21,7 @@ export const Layout = () => {
             const next = !prev;
             try {
                 localStorage.setItem('urbanstep_sidebar_collapsed', String(next));
-            } catch {}
+            } catch (e) { console.warn("Aviso:", e); }
             return next;
         });
     };
