@@ -69,15 +69,15 @@ export default function CinematicLandingExperience({ isDark = true, activeBrand 
         // -------------------------------------------------------------
         // 2. ILLUMINATION & DYNAMIC LIGHTING
         // -------------------------------------------------------------
-        // Ambient fill light
+        // Ambient fill light (balanced so light mode maintains crisp shadows and definition)
         const ambientLight = new THREE.AmbientLight(
-            isDark ? 0x1e293b : 0xf8fafc,
-            isDark ? 1.4 : 1.9
+            isDark ? 0x1e293b : 0xe2e8f0,
+            isDark ? 1.4 : 1.05
         );
         scene.add(ambientLight);
 
         // Key spotlight casting contact shadows on metallic facets
-        const keyLight = new THREE.SpotLight(0x38bdf8, 4.2);
+        const keyLight = new THREE.SpotLight(isDark ? 0x38bdf8 : 0x0284c7, isDark ? 4.2 : 5.0);
         keyLight.position.set(-3, 6, 6);
         keyLight.angle = Math.PI / 4;
         keyLight.penumbra = 0.55;
@@ -90,19 +90,19 @@ export default function CinematicLandingExperience({ isDark = true, activeBrand 
         scene.add(keyLight);
 
         // Electric blue fill spotlight from right side
-        const fillLight = new THREE.SpotLight(0x2563eb, 3.5);
+        const fillLight = new THREE.SpotLight(0x2563eb, isDark ? 3.5 : 4.0);
         fillLight.position.set(5, 4, 5);
         fillLight.angle = Math.PI / 3.5;
         fillLight.penumbra = 0.7;
         scene.add(fillLight);
 
         // Electric indigo rim light (depth contour)
-        const rimLight = new THREE.PointLight(0x818cf8, 3.2, 16);
+        const rimLight = new THREE.PointLight(isDark ? 0x818cf8 : 0x4338ca, 3.2, 16);
         rimLight.position.set(-6, 2, -3);
         scene.add(rimLight);
 
         // Cyber cyan underglow light
-        const cyanUnderglow = new THREE.PointLight(0x00f2fe, 2.5, 12);
+        const cyanUnderglow = new THREE.PointLight(isDark ? 0x00f2fe : 0x0284c7, 2.5, 12);
         cyanUnderglow.position.set(-1.8, -3.5, 2.5);
         scene.add(cyanUnderglow);
 
@@ -111,26 +111,26 @@ export default function CinematicLandingExperience({ isDark = true, activeBrand 
         // -------------------------------------------------------------
         const logoGroup = new THREE.Group();
 
-        // 3.1 Materials
+        // 3.1 Adaptive Materials (Ultra-defined in both light and dark mode)
         const chromeMaterial = new THREE.MeshStandardMaterial({
-            color: isDark ? 0xf8fafc : 0xffffff,
-            roughness: 0.16,
-            metalness: 0.92,
+            color: isDark ? 0xf8fafc : 0xcfd8dc,
+            roughness: isDark ? 0.16 : 0.24,
+            metalness: isDark ? 0.94 : 0.88,
             flatShading: false
         });
 
         const electricBlueMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1d4ed8,
-            emissive: 0x1e40af,
-            emissiveIntensity: 0.45,
-            roughness: 0.22,
+            color: 0x2563eb,
+            emissive: isDark ? 0x1e40af : 0x1d4ed8,
+            emissiveIntensity: isDark ? 0.45 : 0.25,
+            roughness: 0.2,
             metalness: 0.8
         });
 
         const crownMaterial = new THREE.MeshPhysicalMaterial({
-            color: 0x00d2ff,
-            emissive: 0x0099ff,
-            emissiveIntensity: 0.85,
+            color: isDark ? 0x00d2ff : 0x0284c7,
+            emissive: isDark ? 0x0099ff : 0x0284c7,
+            emissiveIntensity: isDark ? 0.85 : 0.4,
             roughness: 0.12,
             metalness: 0.88,
             clearcoat: 1.0,
@@ -407,19 +407,19 @@ export default function CinematicLandingExperience({ isDark = true, activeBrand 
         scene.add(logoGroup);
 
         // Responsive position: On desktop/widescreen move to the LEFT side (x: -2.25)
-        // so it never overlaps the product card on the right and stays prominently visible!
+        // On tablet/mobile (<1024px), push upwards (y: 1.25, z: -1.8) so it stays in the upper atmosphere without covering text!
         const isWide = container.clientWidth >= 1280;
         const isDesktop = container.clientWidth >= 1024;
-        const initialX = isWide ? -2.25 : (isDesktop ? -1.95 : 0);
-        const initialY = isDesktop ? 0.2 : 0.45;
-        const initialZ = isDesktop ? 0.15 : -0.5;
-        const initialScale = isWide ? 1.2 : (isDesktop ? 1.05 : 0.85);
+        const initialX = isWide ? -0.35 : (isDesktop ? -0.2 : 0);
+        const initialY = isDesktop ? 0.25 : 1.35;
+        const initialZ = isDesktop ? 0.25 : -1.8;
+        const initialScale = isWide ? 1.15 : (isDesktop ? 1.0 : 0.65);
 
         logoGroup.position.set(initialX, initialY, initialZ);
         logoGroup.rotation.set(0.18, 0.42, -0.06);
         logoGroup.scale.set(initialScale, initialScale, initialScale);
 
-        shadowMesh.position.set(initialX, -1.35, initialZ);
+        shadowMesh.position.set(initialX, isDesktop ? -1.35 : -0.2, initialZ);
         ringMesh.position.set(initialX, initialY, initialZ);
         ringMesh2.position.set(initialX, initialY, initialZ);
 
@@ -643,36 +643,19 @@ export default function CinematicLandingExperience({ isDark = true, activeBrand 
             <div className="sticky top-0 h-[92vh] w-full pointer-events-none z-0">
                 <canvas ref={canvasRef} className="w-full h-full block" />
 
-                {/* Layered 3D Depth Typography & Parallax Badges */}
-                <div className="absolute inset-0 flex flex-col justify-between p-6 sm:p-12 pointer-events-none">
-                    {/* Top HUD Tag */}
-                    <div className="flex items-center justify-between text-xs font-mono">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-600/10 backdrop-blur-md border border-blue-500/20 text-blue-400">
-                            <Compass className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '8s' }} />
-                            <span>URBANSTEP 3D CINEMATIC · LOGO EMBLEM EXP</span>
-                        </div>
-
-                        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-[11px] text-gray-300">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>FASE {currentSceneStage}/3: {currentSceneStage === 1 ? 'HERO EMBLEM PERSPECTIVE' : currentSceneStage === 2 ? '360° 3D LOGO LAB' : 'CATALOG DOCK'}</span>
-                        </div>
-                    </div>
-
+                {/* Subtle Scroll & Stage Indicator */}
+                <div className="absolute inset-x-0 bottom-4 flex flex-col items-center justify-end pointer-events-none p-4">
                     {/* Stage 2 Depth Badge Pill (appears during mid-scroll) */}
                     {currentSceneStage === 2 && (
-                        <div className="self-center flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-black/75 backdrop-blur-xl border border-blue-500/40 text-white shadow-2xl animate-fade-in">
-                            <Zap className="w-4 h-4 text-cyan-400 animate-pulse" />
-                            <span className="text-xs font-bold uppercase tracking-wider font-mono">
-                                ROTACIÓN 360° URBANSTEP 3D EMBLEM · SNEAKERS & STREETWEAR CULTURE
+                        <div className={`mb-3 flex items-center gap-2.5 px-4 py-2 rounded-2xl backdrop-blur-xl border shadow-xl animate-fade-in ${
+                            isDark ? 'bg-black/80 border-blue-500/40 text-white' : 'bg-white/90 border-blue-400 text-blue-900'
+                        }`}>
+                            <Zap className="w-3.5 h-3.5 text-cyan-500 animate-pulse" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider font-mono">
+                                ROTACIÓN 360° URBANSTEP 3D EMBLEM
                             </span>
                         </div>
                     )}
-
-                    {/* Scroll Prompt Arrow */}
-                    <div className="self-center flex flex-col items-center gap-1.5 text-gray-400 text-[11px] font-mono animate-bounce">
-                        <span>Desplaza hacia abajo para navegar la experiencia</span>
-                        <ArrowDown className="w-4 h-4 text-blue-400" />
-                    </div>
                 </div>
             </div>
         </div>
