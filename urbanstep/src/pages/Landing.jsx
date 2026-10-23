@@ -910,7 +910,7 @@ export default function Landing() {
                                 SNEAKERS & STREETWEAR STORE • VENEZUELA 2026
                             </div>
 
-                            <h1 className={`text-4xl sm:text-6xl md:text-7xl font-black uppercase italic tracking-tight leading-[0.95] ${
+                            <h1 className={`text-4xl sm:text-6xl md:text-7xl font-black uppercase italic tracking-tight leading-[0.95] drop-shadow-md ${
                                 isDark ? 'text-white' : 'text-slate-950'
                             }`}>
                                 THE STREETS <br />
@@ -923,8 +923,8 @@ export default function Landing() {
                                 </span>
                             </h1>
 
-                            <p className={`text-sm sm:text-base max-w-xl font-normal leading-relaxed ${
-                                isDark ? 'text-slate-300' : 'text-slate-700'
+                            <p className={`text-sm sm:text-base max-w-xl font-normal leading-relaxed drop-shadow-sm ${
+                                isDark ? 'text-slate-200' : 'text-slate-800'
                             }`}>
                                 Encuentra las siluetas más buscadas de <strong>Nike, Air Jordan, Adidas y Yeezy</strong>. Precios en tiempo real en <strong>Dólares ($)</strong> y <strong>Bolívares (Bs.)</strong> a tasa oficial BCV, con entrega express en el <strong>Estado Lara</strong> y envíos asegurados a toda Venezuela.
                             </p>

@@ -319,6 +319,319 @@ export const mockProducts = [
         status: 'out_of_stock',
         active: false,
         disabled: true
+    },
+    {
+        id: 'PRD-PUM-SPEEDCAT-01',
+        sku: 'US-PUM-410057',
+        name: 'Puma Speedcat Low Jil Sander',
+        brand: 'Puma',
+        category: 'Sneakers',
+        sizeCategory: 'caballero',
+        description: 'Colaboración exclusiva con Jil Sander. Silueta icónica de automovilismo de perfil bajo con ante de primera calidad, suela de tracción aerodinámica y detalles co-brandeados.',
+        cost: 48,
+        price: 85,
+        salePrice: 85,
+        purchasePrice: 48,
+        stock: 42,
+        minStock: 4,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 6, '40': 8, '41': 10, '42': 8, '43': 6, '44': 4 },
+        color: 'Blanco / Azul Jewel',
+        colors: ['Blanco / Azul Jewel', 'Negro'],
+        colorVariants: [
+            {
+                color: 'Blanco / Azul Jewel',
+                hex: '#0284c7',
+                total: 25,
+                imageUrl: 'https://images.puma.com/image/upload/f_auto,q_auto,b_rgb:fafafa,w_600,h_600/global/410057/01/sv01/fnd/PNA/fmt/png/Tenis-Speedcat-Low-Jil-Sander',
+                sizeStock: { '39': 4, '40': 5, '41': 6, '42': 5, '43': 3, '44': 2 }
+            },
+            {
+                color: 'Negro',
+                hex: '#171717',
+                total: 17,
+                imageUrl: 'https://images.puma.com/image/upload/f_auto,q_auto,b_rgb:fafafa,w_600,h_600/global/398846/01/sv01/fnd/PNA/fmt/png/Tenis-Speedcat-OG',
+                sizeStock: { '39': 2, '40': 3, '41': 4, '42': 3, '43': 3, '44': 2 }
+            }
+        ],
+        imageUrl: 'https://images.puma.com/image/upload/f_auto,q_auto,b_rgb:fafafa,w_600,h_600/global/410057/01/sv01/fnd/PNA/fmt/png/Tenis-Speedcat-Low-Jil-Sander',
+        image: 'https://images.puma.com/image/upload/f_auto,q_auto,b_rgb:fafafa,w_600,h_600/global/410057/01/sv01/fnd/PNA/fmt/png/Tenis-Speedcat-Low-Jil-Sander',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-RS-90S-MEN-01',
+        sku: 'US-RS-016421',
+        name: '90s MEN',
+        brand: 'RS21',
+        category: 'Sneakers',
+        sizeCategory: 'caballero',
+        description: 'Estilo retro chunky de los años 90 con paneles transpirables, plantilla de amortiguación reforzada y suela dentada de alta tracción urbana.',
+        cost: 24,
+        price: 45.99,
+        salePrice: 45.99,
+        purchasePrice: 24,
+        stock: 65,
+        minStock: 5,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 10, '40': 15, '41': 15, '42': 12, '43': 8, '44': 5 },
+        color: 'Beige / Burgundy',
+        colors: ['Beige / Burgundy', 'Negro / Gris'],
+        colorVariants: [
+            {
+                color: 'Beige / Burgundy',
+                hex: '#d4b996',
+                total: 38,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0164210196/ImgThumb.jpg',
+                sizeStock: { '39': 5, '40': 8, '41': 10, '42': 8, '43': 5, '44': 2 }
+            },
+            {
+                color: 'Negro / Gris',
+                hex: '#27272a',
+                total: 27,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0164210074/ImgThumb.jpg',
+                sizeStock: { '39': 4, '40': 6, '41': 7, '42': 5, '43': 3, '44': 2 }
+            }
+        ],
+        imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0164210196/ImgThumb.jpg',
+        image: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0164210196/ImgThumb.jpg',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-RS-ADVENTURE-01',
+        sku: 'US-RS-013441',
+        name: 'ADVENTURE BOOT MEN',
+        brand: 'RS21',
+        category: 'Botas',
+        sizeCategory: 'caballero',
+        description: 'Bota outdoor de alta resistencia, cuello acolchado, cordones reforzados y suela de agarre todo terreno para senderos y asfalto.',
+        cost: 48,
+        price: 89.99,
+        salePrice: 89.99,
+        purchasePrice: 48,
+        stock: 38,
+        minStock: 3,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 5, '40': 8, '41': 10, '42': 8, '43': 5, '44': 2 },
+        color: 'Marrón / Beige',
+        colors: ['Marrón / Beige', 'Negro'],
+        colorVariants: [
+            {
+                color: 'Marrón / Beige',
+                hex: '#78350f',
+                total: 26,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0134410194/ImgThumb.jpg',
+                sizeStock: { '39': 3, '40': 5, '41': 8, '42': 5, '43': 3, '44': 2 }
+            },
+            {
+                color: 'Negro',
+                hex: '#18181b',
+                total: 12,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0134410198/ImgThumb.jpg',
+                sizeStock: { '39': 2, '40': 3, '41': 3, '42': 2, '43': 1, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0134410194/ImgThumb.jpg',
+        image: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0134410194/ImgThumb.jpg',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-RS-AIR180-01',
+        sku: 'US-RS-014511',
+        name: 'AIR180 MEN',
+        brand: 'RS21',
+        category: 'Deportivo',
+        sizeCategory: 'caballero',
+        description: 'Deportivo versátil con cámara de amortiguación Air180 visible en el talón, ligereza extrema y máxima ventilación.',
+        cost: 15,
+        price: 29.99,
+        salePrice: 29.99,
+        purchasePrice: 15,
+        stock: 48,
+        minStock: 4,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 8, '40': 10, '41': 12, '42': 10, '43': 5, '44': 3 },
+        color: 'Amarillo / Negro',
+        colors: ['Amarillo / Negro', 'Negro'],
+        colorVariants: [
+            {
+                color: 'Amarillo / Negro',
+                hex: '#eab308',
+                total: 31,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0145110355/ImgThumb.jpg',
+                sizeStock: { '39': 5, '40': 7, '41': 8, '42': 6, '43': 3, '44': 2 }
+            },
+            {
+                color: 'Negro',
+                hex: '#09090b',
+                total: 17,
+                imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0145110198/ImgThumb.jpg',
+                sizeStock: { '39': 3, '40': 4, '41': 4, '42': 3, '43': 2, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0145110355/ImgThumb.jpg',
+        image: 'https://rs.bigwise.com/DB-IMG-PRODUCT/0145110355/ImgThumb.jpg',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-NK-AM95-01',
+        sku: 'US-NK-AM95',
+        name: 'Nike Air Max 95 Big Bubble Premium',
+        brand: 'Nike',
+        category: 'Sneakers',
+        sizeCategory: 'caballero',
+        description: 'Inspirada en el cuerpo humano con paneles ondulados emblemáticos y unidades Nike Air dobles de gran volumen para una pisada inconfundible.',
+        cost: 110,
+        price: 190,
+        salePrice: 190,
+        purchasePrice: 110,
+        stock: 34,
+        minStock: 3,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 5, '40': 7, '41': 9, '42': 7, '43': 4, '44': 2 },
+        color: 'Negro / Neon Volt',
+        colors: ['Negro / Neon Volt', 'Gris Antracita'],
+        colorVariants: [
+            {
+                color: 'Negro / Neon Volt',
+                hex: '#84cc16',
+                total: 21,
+                imageUrl: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/13119edc-09b3-4e56-bdfb-54d8c096f55a/NIKE+AIR+MAX+95+BB+PRM.png',
+                sizeStock: { '39': 3, '40': 5, '41': 6, '42': 4, '43': 2, '44': 1 }
+            },
+            {
+                color: 'Gris Antracita',
+                hex: '#3f3f46',
+                total: 13,
+                imageUrl: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/13119edc-09b3-4e56-bdfb-54d8c096f55a/NIKE+AIR+MAX+95+BB+PRM.png',
+                sizeStock: { '39': 2, '40': 3, '41': 4, '42': 2, '43': 1, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/13119edc-09b3-4e56-bdfb-54d8c096f55a/NIKE+AIR+MAX+95+BB+PRM.png',
+        image: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/13119edc-09b3-4e56-bdfb-54d8c096f55a/NIKE+AIR+MAX+95+BB+PRM.png',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-NK-TIEMPO-01',
+        sku: 'US-NK-TIEMPO',
+        name: 'Nike Tiempo Maestro Elite FG',
+        brand: 'Nike',
+        category: 'Deportivo',
+        sizeCategory: 'caballero',
+        description: 'Bota de fútbol profesional de piel FlyTouch Plus ultrasuave, microtacos optimizados para aceleración y toque de precisión milimétrico.',
+        cost: 145,
+        price: 250,
+        salePrice: 250,
+        purchasePrice: 145,
+        stock: 22,
+        minStock: 2,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 3, '40': 5, '41': 6, '42': 5, '43': 2, '44': 1 },
+        color: 'Negro / Oro / Blanco',
+        colors: ['Negro / Oro / Blanco'],
+        colorVariants: [
+            {
+                color: 'Negro / Oro / Blanco',
+                hex: '#eab308',
+                total: 22,
+                imageUrl: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/c9113529-6aa5-494a-a267-6ea8469fc939/TIEMPO+MAESTRO+ELITE+FG.png',
+                sizeStock: { '39': 3, '40': 5, '41': 6, '42': 5, '43': 2, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/c9113529-6aa5-494a-a267-6ea8469fc939/TIEMPO+MAESTRO+ELITE+FG.png',
+        image: 'https://static.nike.com/a/images/t_web_pw_592_v2/f_auto/u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/c9113529-6aa5-494a-a267-6ea8469fc939/TIEMPO+MAESTRO+ELITE+FG.png',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-AD-SAMBA-01',
+        sku: 'US-AD-SAMBA',
+        name: 'Adidas Samba OG',
+        brand: 'Adidas',
+        category: 'Sneakers',
+        sizeCategory: 'caballero',
+        description: 'Silueta histórica nacida en las canchas de fútbol sala y convertida en la reina de la moda urbana. Puntera en T de ante y suela de caucho caramelo.',
+        cost: 68,
+        price: 120,
+        salePrice: 120,
+        purchasePrice: 68,
+        stock: 46,
+        minStock: 4,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 7, '40': 10, '41': 12, '42': 9, '43': 5, '44': 3 },
+        color: 'Blanco / Core Black',
+        colors: ['Blanco / Core Black', 'Negro / Core White'],
+        colorVariants: [
+            {
+                color: 'Blanco / Core Black',
+                hex: '#f8fafc',
+                total: 30,
+                imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/9b983d5bc09a4d4aba39a8bf011869ba_9366/Zapatilla_Samba_OG_Blanco_B75806_00_plp_standard.jpg',
+                sizeStock: { '39': 4, '40': 6, '41': 8, '42': 6, '43': 4, '44': 2 }
+            },
+            {
+                color: 'Negro / Core White',
+                hex: '#0f172a',
+                total: 16,
+                imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/4c701051502345e79008a8bf01187fda_9366/Zapatilla_Samba_OG_Negro_B75807_00_plp_standard.jpg',
+                sizeStock: { '39': 3, '40': 4, '41': 4, '42': 3, '43': 1, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/9b983d5bc09a4d4aba39a8bf011869ba_9366/Zapatilla_Samba_OG_Blanco_B75806_00_plp_standard.jpg',
+        image: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/9b983d5bc09a4d4aba39a8bf011869ba_9366/Zapatilla_Samba_OG_Blanco_B75806_00_plp_standard.jpg',
+        status: 'in_stock',
+        active: true,
+        disabled: false
+    },
+    {
+        id: 'PRD-AD-SPEZIAL-01',
+        sku: 'US-AD-SPEZIAL',
+        name: 'Adidas Handball Spezial',
+        brand: 'Adidas',
+        category: 'Sneakers',
+        sizeCategory: 'caballero',
+        description: 'Clásico vintage del 79 confeccionado en ante de primera calidad, puntera suave reforzada y detalles dorados en relieve.',
+        cost: 62,
+        price: 110,
+        salePrice: 110,
+        purchasePrice: 62,
+        stock: 35,
+        minStock: 3,
+        sizes: ['39', '40', '41', '42', '43', '44'],
+        sizeStock: { '39': 5, '40': 8, '41': 10, '42': 7, '43': 3, '44': 2 },
+        color: 'Marrón / Cream / Gum',
+        colors: ['Marrón / Cream / Gum', 'Azul / Blanco'],
+        colorVariants: [
+            {
+                color: 'Marrón / Cream / Gum',
+                hex: '#78350f',
+                total: 21,
+                imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/08c7c0fc4ae84932864226ad74075e6e_9366/Zapatilla_Handball_Spezial_Marron_IF6490_00_plp_standard.jpg',
+                sizeStock: { '39': 3, '40': 5, '41': 6, '42': 4, '43': 2, '44': 1 }
+            },
+            {
+                color: 'Azul / Blanco',
+                hex: '#1d4ed8',
+                total: 14,
+                imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/71e3dbbb194548cfbc33a9ec00e7c5b6_9366/Zapatilla_Handball_Spezial_Azul_BD7632_00_plp_standard.jpg',
+                sizeStock: { '39': 2, '40': 3, '41': 4, '42': 3, '43': 1, '44': 1 }
+            }
+        ],
+        imageUrl: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/08c7c0fc4ae84932864226ad74075e6e_9366/Zapatilla_Handball_Spezial_Marron_IF6490_00_plp_standard.jpg',
+        image: 'https://assets.adidas.com/images/w_600,f_auto,q_auto/08c7c0fc4ae84932864226ad74075e6e_9366/Zapatilla_Handball_Spezial_Marron_IF6490_00_plp_standard.jpg',
+        status: 'in_stock',
+        active: true,
+        disabled: false
     }
 ];
 
