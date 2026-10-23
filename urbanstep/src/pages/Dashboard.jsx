@@ -7,6 +7,7 @@ import { productService } from '../services/productService';
 import { saleService } from '../services/saleServices';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import DashboardCharts from '../components/DashboardCharts';
 
 /**
  * Dashboard page with dual USD/VES KPI cards and recent activity.
@@ -139,6 +140,9 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {/* Interactive Business Intelligence Charts & Executive Metrics */}
+      <DashboardCharts allSales={allSales} products={products} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Sales */}

@@ -19,6 +19,7 @@ import { PromoBar, TrustStrip, VipClubSection, FaqSection, SiteFooter, WhatsAppF
 import { authService } from '../services/authService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { getDefaultRoute } from '../utils/permissions';
+import CinematicLandingExperience from '../components/CinematicLandingExperience';
 import {
     Store,
     ShoppingBag,
@@ -567,6 +568,14 @@ export default function Landing() {
         e.preventDefault();
         if (cartItems.length === 0) return;
 
+        if (!isAuthenticated) {
+            toast.error('Debes iniciar sesión o registrarte como cliente para realizar un pedido.', { icon: '🔒' });
+            setIsCheckoutModalOpen(false);
+            setAuthTab('login');
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         try {
             const customerName = checkoutForm.name.trim() || (user ? user.name : 'Cliente Ecommerce');
             const customerPhone = checkoutForm.phone.trim() || '0414-1234567';
@@ -873,12 +882,17 @@ export default function Landing() {
                 </div>
             </header>
 
-            {/* Hero Banner */}
-            <section className={`relative overflow-hidden pt-10 pb-16 md:pt-16 md:pb-24 border-b transition-colors ${
+            {/* Hero Banner with Three.js + GSAP ScrollTrigger Cinematic Experience */}
+            <section className={`relative overflow-hidden pt-6 pb-16 md:pt-10 md:pb-24 border-b transition-colors ${
                 isDark 
                     ? 'border-white/[0.06] bg-[#07090e]' 
                     : 'border-slate-200/80 bg-gradient-to-b from-blue-50/70 via-white to-slate-50/40'
             }`}>
+                {/* 3D Cinematic Canvas & Camera Depth Rig (Three.js + GSAP ScrollTrigger) */}
+                <div className="absolute inset-0 pointer-events-none z-0">
+                    <CinematicLandingExperience isDark={isDark} activeBrand={selectedBrand} />
+                </div>
+
                 {/* Ambient glow - subtle and de-noised for dark mode, fresh for light mode */}
                 <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 w-[650px] h-[550px] rounded-full blur-[160px] pointer-events-none ${
                     isDark ? 'bg-blue-600/[0.05]' : 'bg-blue-400/10'
@@ -1939,14 +1953,37 @@ export default function Landing() {
                                         </div>
                                     </div>
 
+                                    {!isAuthenticated && (
+                                        <div className={`p-3 rounded-2xl border text-xs flex items-center gap-2.5 transition-colors ${
+                                            isDark 
+                                                ? 'bg-amber-950/40 border-amber-800/60 text-amber-300' 
+                                                : 'bg-amber-50 border-amber-200 text-amber-800 shadow-xs'
+                                        }`}>
+                                            <span className="text-base shrink-0">🔒</span>
+                                            <div>
+                                                <p className="font-bold">Inicia sesión para comprar</p>
+                                                <p className="text-[11px] opacity-90">Debes tener una cuenta activa para despachar tu pedido y acumular puntos VIP.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <button
                                         type="button"
                                         onClick={() => {
+                                            if (!isAuthenticated) {
+                                                toast.error('Inicia sesión o regístrate para confirmar tu pedido', {
+                                                    icon: '🔒',
+                                                    duration: 4000
+                                                });
+                                                setAuthTab('login');
+                                                setIsAuthModalOpen(true);
+                                                return;
+                                            }
                                             setIsCheckoutModalOpen(true);
                                         }}
                                         className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30 active:scale-95"
                                     >
-                                        <span>Confirmar Pedido & Delivery</span>
+                                        <span>{isAuthenticated ? 'Confirmar Pedido & Delivery' : 'Iniciar Sesión para Comprar'}</span>
                                         <ArrowRight className="w-4 h-4" />
                                     </button>
                                 </div>
@@ -1960,16 +1997,28 @@ export default function Landing() {
             {/* CHECKOUT & DELIVERY MODAL */}
             {/* ========================================================================= */}
             {isCheckoutModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="bg-[#0f131c] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md transition-colors ${
+                    isDark ? 'bg-black/80' : 'bg-black/50'
+                }`}>
+                    <div className={`rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-5 border transition-all ${
+                        isDark 
+                            ? 'bg-[#0f131c] border-white/10 text-white shadow-black/80' 
+                            : 'bg-white border-slate-200 text-slate-900 shadow-slate-400/40'
+                    }`}>
+                        <div className={`flex items-center justify-between pb-3 border-b ${
+                            isDark ? 'border-white/10' : 'border-slate-200'
+                        }`}>
                             <div className="flex items-center gap-2">
-                                <Truck className="w-5 h-5 text-blue-400" />
-                                <h3 className="text-lg font-bold text-white uppercase">Datos de Despacho & Pago</h3>
+                                <Truck className="w-5 h-5 text-blue-500" />
+                                <h3 className={`text-lg font-bold uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                    Datos de Despacho & Pago
+                                </h3>
                             </div>
                             <button
                                 onClick={() => setIsCheckoutModalOpen(false)}
-                                className="text-gray-400 hover:text-white"
+                                className={`p-1 rounded-lg transition-colors ${
+                                    isDark ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
+                                }`}
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -1977,39 +2026,59 @@ export default function Landing() {
 
                         <form onSubmit={handleConfirmOrder} className="space-y-4 text-xs">
                             <div>
-                                <label className="block font-semibold text-gray-300 mb-1">Nombre Completo del Cliente *</label>
+                                <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                    Nombre Completo del Cliente *
+                                </label>
                                 <input
                                     type="text"
                                     required
                                     value={checkoutForm.name}
                                     onChange={(e) => setCheckoutForm({ ...checkoutForm, name: e.target.value })}
                                     placeholder="Ej. Carlos Mendoza"
-                                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                        isDark 
+                                            ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                            : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                    }`}
                                 />
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block font-semibold text-gray-300 mb-1">Teléfono WhatsApp *</label>
+                                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                        Teléfono WhatsApp *
+                                    </label>
                                     <input
                                         type="tel"
                                         required
                                         value={checkoutForm.phone}
                                         onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
                                         placeholder="0414-5551234"
-                                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                        className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                            isDark 
+                                                ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                        }`}
                                     />
-                                    <label className="mt-2 flex items-start gap-2 text-[10px] text-gray-400 cursor-pointer">
+                                    <label className={`mt-2 flex items-start gap-2 text-[10px] cursor-pointer ${
+                                        isDark ? 'text-gray-400' : 'text-slate-500'
+                                    }`}>
                                         <input type="checkbox" checked={contactConsent} onChange={(e) => setContactConsent(e.target.checked)} className="mt-0.5" />
-                                        <span>Guardar mi bolsa y avisarme por WhatsApp si no termino mi compra (puedes pedir que no te escribamos más).</span>
+                                        <span>Guardar mi bolsa y avisarme por WhatsApp si no termino mi compra.</span>
                                     </label>
                                 </div>
                                 <div>
-                                    <label className="block font-semibold text-gray-300 mb-1">Zona / Municipio (Lara)</label>
+                                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                        Zona / Municipio (Lara)
+                                    </label>
                                     <select
                                         value={checkoutForm.zone}
                                         onChange={(e) => setCheckoutForm({ ...checkoutForm, zone: e.target.value })}
-                                        className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                        className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                            isDark 
+                                                ? 'bg-black/60 border-white/10 text-white focus:border-blue-500' 
+                                                : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                                        }`}
                                     >
                                         <option value="Barquisimeto Este / Trinitarias">Barquisimeto Este / Trinitarias</option>
                                         <option value="Barquisimeto Centro / Carrera 19">Barquisimeto Centro / Carrera 19</option>
@@ -2021,23 +2090,35 @@ export default function Landing() {
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-gray-300 mb-1">Dirección Exacta de Entrega *</label>
+                                <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                    Dirección Exacta de Entrega *
+                                </label>
                                 <input
                                     type="text"
                                     required
                                     value={checkoutForm.address}
                                     onChange={(e) => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
                                     placeholder="Urb. El Parral, Calle 4 con Av. Los Leones, Casa #12"
-                                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                        isDark 
+                                            ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                            : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                    }`}
                                 />
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-gray-300 mb-1">Método de Pago Preferido *</label>
+                                <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                    Método de Pago Preferido *
+                                </label>
                                 <select
                                     value={checkoutForm.paymentMethod}
                                     onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
-                                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500 font-bold"
+                                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border font-bold transition-all ${
+                                        isDark 
+                                            ? 'bg-black/60 border-white/10 text-white focus:border-blue-500' 
+                                            : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                                    }`}
                                 >
                                     {paymentMethods.map(pm => (
                                         <option key={pm.id} value={pm.id}>
@@ -2050,44 +2131,58 @@ export default function Landing() {
                                     const selectedPm = paymentMethods.find(pm => pm.id === checkoutForm.paymentMethod);
                                     if (!selectedPm) return null;
                                     return (
-                                        <div className="mt-2 p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-gray-300 space-y-1 font-mono">
-                                            {selectedPm.bank && <p>Banco: <strong className="text-white">{selectedPm.bank}</strong></p>}
-                                            {selectedPm.phone && <p>Teléfono: <strong className="text-white">{selectedPm.phone}</strong></p>}
-                                            {selectedPm.rif && <p>RIF/Cédula: <strong className="text-white">{selectedPm.rif}</strong></p>}
-                                            {selectedPm.email && <p>Correo: <strong className="text-white">{selectedPm.email}</strong></p>}
-                                            {selectedPm.holder && <p>Titular: <strong className="text-white">{selectedPm.holder}</strong></p>}
-                                            {selectedPm.accountNumber && <p>Cuenta: <strong className="text-white">{selectedPm.accountNumber}</strong></p>}
-                                            {selectedPm.instructions && <p className="text-[10px] text-amber-300 italic">{selectedPm.instructions}</p>}
+                                        <div className={`mt-2 p-2.5 rounded-xl border text-[11px] space-y-1 font-mono transition-colors ${
+                                            isDark 
+                                                ? 'bg-white/[0.04] border-white/10 text-gray-300' 
+                                                : 'bg-slate-100/80 border-slate-200 text-slate-700'
+                                        }`}>
+                                            {selectedPm.bank && <p>Banco: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.bank}</strong></p>}
+                                            {selectedPm.phone && <p>Teléfono: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.phone}</strong></p>}
+                                            {selectedPm.rif && <p>RIF/Cédula: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.rif}</strong></p>}
+                                            {selectedPm.email && <p>Correo: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.email}</strong></p>}
+                                            {selectedPm.holder && <p>Titular: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.holder}</strong></p>}
+                                            {selectedPm.accountNumber && <p>Cuenta: <strong className={isDark ? "text-white" : "text-slate-900"}>{selectedPm.accountNumber}</strong></p>}
+                                            {selectedPm.instructions && <p className="text-[10px] text-amber-500 font-semibold italic">{selectedPm.instructions}</p>}
                                         </div>
                                     );
                                 })()}
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-gray-300 mb-1">Indicaciones para el Motorizado (Opcional)</label>
+                                <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                    Indicaciones para el Motorizado (Opcional)
+                                </label>
                                 <input
                                     type="text"
                                     value={checkoutForm.notes}
                                     onChange={(e) => setCheckoutForm({ ...checkoutForm, notes: e.target.value })}
                                     placeholder="Llevar cambio en efectivo de $20 o traer también talla 42 para medir"
-                                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                        isDark 
+                                            ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                            : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                    }`}
                                 />
                             </div>
 
-                            <div className="p-3.5 rounded-2xl bg-blue-950/40 border border-blue-800/60 flex items-center justify-between text-xs">
+                            <div className={`p-3.5 rounded-2xl flex items-center justify-between text-xs border transition-colors ${
+                                isDark 
+                                    ? 'bg-blue-950/40 border-blue-800/60' 
+                                    : 'bg-blue-50/80 border-blue-200'
+                            }`}>
                                 <div>
-                                    <p className="font-bold text-white">Total Final del Pedido:</p>
-                                    <p className="text-[11px] text-gray-400">Incluye calzados + despacho</p>
+                                    <p className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Total Final del Pedido:</p>
+                                    <p className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Incluye calzados + despacho</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-lg font-black text-white">${totalCartUsd.toFixed(2)}</p>
-                                    <p className="text-xs font-bold text-emerald-400 font-mono">{formatBs(totalCartBs)}</p>
+                                    <p className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>${totalCartUsd.toFixed(2)}</p>
+                                    <p className={`text-xs font-bold font-mono ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatBs(totalCartBs)}</p>
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
-                                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2"
+                                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95"
                             >
                                 <Check className="w-4 h-4" />
                                 Enviar Pedido a Despacho
@@ -2101,30 +2196,42 @@ export default function Landing() {
             {/* ORDER CONFIRMATION MODAL */}
             {/* ========================================================================= */}
             {orderSuccessData && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="bg-[#0f131c] border border-emerald-500/30 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-4">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-3xl">
+                <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md transition-colors ${
+                    isDark ? 'bg-black/80' : 'bg-black/50'
+                }`}>
+                    <div className={`rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-4 border transition-all ${
+                        isDark 
+                            ? 'bg-[#0f131c] border-emerald-500/30 text-white shadow-black/80' 
+                            : 'bg-white border-emerald-200 text-slate-900 shadow-emerald-600/15'
+                    }`}>
+                        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 flex items-center justify-center text-3xl font-bold">
                             ✓
                         </div>
 
-                        <h3 className="text-xl font-black text-white uppercase">¡Pedido Confirmado con Éxito!</h3>
-                        <p className="text-xs text-gray-300">
-                            Tu orden ha sido registrada con el folio <strong className="text-blue-400 font-mono">{orderSuccessData.receiptNumber}</strong>. Nuestro equipo de despacho ya está preparando tus sneakers.
+                        <h3 className={`text-xl font-black uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            ¡Pedido Confirmado con Éxito!
+                        </h3>
+                        <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-slate-600'}`}>
+                            Tu orden ha sido registrada con el folio <strong className="text-blue-500 font-mono">{orderSuccessData.receiptNumber}</strong>. Nuestro equipo de despacho ya está preparando tus sneakers.
                         </p>
 
-                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 text-left text-xs space-y-1.5 font-mono">
-                            <p className="text-gray-400">Cliente: <strong className="text-white">{orderSuccessData.customerName}</strong></p>
-                            <p className="text-gray-400">Entrega: <strong className="text-white">{orderSuccessData.deliveryAddress}</strong></p>
-                            <p className="text-gray-400">Pago: <strong className="text-emerald-400 capitalize">{orderSuccessData.paymentMethod}</strong></p>
-                            <div className="pt-2 border-t border-white/10 flex justify-between font-bold text-sm">
-                                <span className="text-white">Monto a pagar:</span>
-                                <span className="text-emerald-400">${orderSuccessData.totalUsd.toFixed(2)} ({formatBs(orderSuccessData.totalBs)})</span>
+                        <div className={`p-4 rounded-2xl border text-left text-xs space-y-1.5 font-mono transition-colors ${
+                            isDark ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+                        }`}>
+                            <p className={isDark ? "text-gray-400" : "text-slate-500"}>Cliente: <strong className={isDark ? "text-white" : "text-slate-900"}>{orderSuccessData.customerName}</strong></p>
+                            <p className={isDark ? "text-gray-400" : "text-slate-500"}>Entrega: <strong className={isDark ? "text-white" : "text-slate-900"}>{orderSuccessData.deliveryAddress}</strong></p>
+                            <p className={isDark ? "text-gray-400" : "text-slate-500"}>Pago: <strong className="text-emerald-500 capitalize">{orderSuccessData.paymentMethod}</strong></p>
+                            <div className={`pt-2 border-t flex justify-between font-bold text-sm ${
+                                isDark ? 'border-white/10' : 'border-slate-200'
+                            }`}>
+                                <span className={isDark ? "text-white" : "text-slate-900"}>Monto a pagar:</span>
+                                <span className="text-emerald-500">${orderSuccessData.totalUsd.toFixed(2)} ({formatBs(orderSuccessData.totalBs)})</span>
                             </div>
                         </div>
 
                         <button
                             onClick={() => setOrderSuccessData(null)}
-                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider"
+                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-blue-600/25 active:scale-95"
                         >
                             Volver a la Tienda
                         </button>
@@ -2136,15 +2243,23 @@ export default function Landing() {
             {/* SINGLE UNIFIED LOGIN & REGISTRATION MODAL (FOR ALL ROLES) */}
             {/* ========================================================================= */}
             {isAuthModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="bg-[#0f131c] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative space-y-5">
+                <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md transition-colors ${
+                    isDark ? 'bg-black/80' : 'bg-black/50'
+                }`}>
+                    <div className={`rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative space-y-5 border transition-all ${
+                        isDark 
+                            ? 'bg-[#0f131c] border-white/10 text-white shadow-black/80' 
+                            : 'bg-white border-slate-200 text-slate-900 shadow-slate-400/50'
+                    }`}>
                         {/* Close button */}
                         <button
                             onClick={() => {
                                 setIsAuthModalOpen(false);
                                 setAuthError('');
                             }}
-                            className="absolute top-5 right-5 text-gray-400 hover:text-white p-1 rounded-lg"
+                            className={`absolute top-5 right-5 p-1 rounded-lg transition-colors ${
+                                isDark ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
+                            }`}
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -2154,10 +2269,10 @@ export default function Landing() {
                             <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 border border-white/20 mb-2">
                                 <Lock className="w-6 h-6 text-white" />
                             </div>
-                            <h3 className="text-xl font-black text-white uppercase italic">
+                            <h3 className={`text-xl font-black uppercase italic ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                 {authTab === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta de Cliente'}
                             </h3>
-                            <p className="text-xs text-gray-400">
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
                                 {authTab === 'login'
                                     ? 'Portal de acceso único para Admin, Cajero, Supervisor o Cliente.'
                                     : 'Regístrate para comprar online con delivery express en Lara.'}
@@ -2165,7 +2280,9 @@ export default function Landing() {
                         </div>
 
                         {/* Tab Switcher */}
-                        <div className="grid grid-cols-2 p-1 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-bold">
+                        <div className={`grid grid-cols-2 p-1 rounded-xl text-xs font-bold border transition-colors ${
+                            isDark ? 'bg-white/[0.04] border-white/10' : 'bg-slate-100 border-slate-200'
+                        }`}>
                             <button
                                 type="button"
                                 onClick={() => {
@@ -2173,7 +2290,11 @@ export default function Landing() {
                                     setAuthError('');
                                 }}
                                 className={`py-2 rounded-lg transition-all ${
-                                    authTab === 'login' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
+                                    authTab === 'login' 
+                                        ? 'bg-blue-600 text-white shadow-md' 
+                                        : isDark 
+                                            ? 'text-gray-400 hover:text-white' 
+                                            : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 Iniciar Sesión
@@ -2185,7 +2306,11 @@ export default function Landing() {
                                     setAuthError('');
                                 }}
                                 className={`py-2 rounded-lg transition-all ${
-                                    authTab === 'register' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-white'
+                                    authTab === 'register' 
+                                        ? 'bg-blue-600 text-white shadow-md' 
+                                        : isDark 
+                                            ? 'text-gray-400 hover:text-white' 
+                                            : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 Registrarse (Cliente)
@@ -2194,7 +2319,11 @@ export default function Landing() {
 
                         {/* Error Notice */}
                         {authError && (
-                            <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
+                            <div className={`p-3 rounded-xl text-xs border ${
+                                isDark 
+                                    ? 'bg-red-950/60 border-red-800 text-red-300' 
+                                    : 'bg-red-50 border-red-200 text-red-700'
+                            }`}>
                                 {authError}
                             </div>
                         )}
@@ -2208,51 +2337,71 @@ export default function Landing() {
                                         const res = await authService.loginWithGoogle();
                                         if (!res.success) toast.error(res.error);
                                     }}
-                                    className="w-full py-2.5 rounded-xl bg-white text-gray-900 text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
+                                    className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-colors ${
+                                        isDark 
+                                            ? 'bg-white text-gray-900 hover:bg-gray-100 border-transparent shadow-md' 
+                                            : 'bg-white hover:bg-slate-50 border-slate-300 text-slate-800 shadow-xs'
+                                    }`}
                                 >
                                     <span aria-hidden="true" className="font-black text-blue-600">G</span>
                                     Continuar con Google
                                 </button>
-                                <p className="text-center text-[10px] text-gray-500 mt-2">o con tu correo y contraseña</p>
+                                <p className={`text-center text-[10px] mt-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
+                                    o con tu correo y contraseña
+                                </p>
                             </div>
                         )}
                         {authTab === 'login' && (
                             <form onSubmit={handleUnifiedLogin} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                                    <label className={`block text-xs font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
                                         Correo Electrónico o Usuario
                                     </label>
                                     <div className="relative">
-                                        <Mail className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                        <Mail className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                                            isDark ? 'text-gray-500' : 'text-slate-400'
+                                        }`} />
                                         <input
                                             type="text"
                                             required
                                             value={loginEmail}
                                             onChange={(e) => setLoginEmail(e.target.value)}
                                             placeholder="admin@urbanstep.com o tu correo"
-                                            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                            className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                                    <label className={`block text-xs font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
                                         Contraseña
                                     </label>
                                     <div className="relative">
-                                        <Lock className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                        <Lock className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${
+                                            isDark ? 'text-gray-500' : 'text-slate-400'
+                                        }`} />
                                         <input
                                             type={showLoginPassword ? 'text' : 'password'}
                                             required
                                             value={loginPassword}
                                             onChange={(e) => setLoginPassword(e.target.value)}
                                             placeholder="••••••••"
-                                            className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white text-xs outline-none focus:border-blue-500"
+                                            className={`w-full pl-10 pr-10 py-2.5 rounded-xl text-xs outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowLoginPassword(!showLoginPassword)}
-                                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                                            className={`absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded transition-colors ${
+                                                isDark ? 'text-gray-500 hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                                            }`}
                                         >
                                             {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
@@ -2262,7 +2411,7 @@ export default function Landing() {
                                 <button
                                     type="submit"
                                     disabled={authLoading}
-                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30"
+                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
                                 >
                                     {authLoading ? 'Verificando...' : 'Acceder al Sistema'}
                                     <ArrowRight className="w-4 h-4" />
@@ -2274,49 +2423,73 @@ export default function Landing() {
                         {authTab === 'register' && (
                             <form onSubmit={handleClientRegister} className="space-y-3 text-xs">
                                 <div>
-                                    <label className="block font-semibold text-gray-300 mb-1">Nombre Completo *</label>
+                                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                        Nombre Completo *
+                                    </label>
                                     <input
                                         type="text"
                                         required
                                         value={regForm.name}
                                         onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
                                         placeholder="Tu nombre y apellido"
-                                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                        className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                            isDark 
+                                                ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                        }`}
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
-                                        <label className="block font-semibold text-gray-300 mb-1">Correo Electrónico *</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Correo Electrónico *
+                                        </label>
                                         <input
                                             type="email"
                                             required
                                             value={regForm.email}
                                             onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
                                             placeholder="cliente@ejemplo.com"
-                                            className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                            className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block font-semibold text-gray-300 mb-1">Teléfono WhatsApp *</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Teléfono WhatsApp *
+                                        </label>
                                         <input
                                             type="tel"
                                             required
                                             value={regForm.phone}
                                             onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
                                             placeholder="0414-1234567"
-                                            className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                            className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-2">
                                     <div className="col-span-1">
-                                        <label className="block font-semibold text-gray-300 mb-1">Doc.</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Doc.
+                                        </label>
                                         <select
                                             value={regForm.docType}
                                             onChange={(e) => setRegForm({ ...regForm, docType: e.target.value })}
-                                            className="w-full px-2 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500 font-bold"
+                                            className={`w-full px-2 py-2 rounded-xl outline-none border font-bold transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white focus:border-blue-600'
+                                            }`}
                                         >
                                             <option value="V">V-</option>
                                             <option value="E">E-</option>
@@ -2324,49 +2497,73 @@ export default function Landing() {
                                         </select>
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="block font-semibold text-gray-300 mb-1">Cédula / RIF</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Cédula / RIF
+                                        </label>
                                         <input
                                             type="text"
                                             value={regForm.docNumber}
                                             onChange={(e) => setRegForm({ ...regForm, docNumber: e.target.value })}
                                             placeholder="28123456"
-                                            className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                            className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-gray-300 mb-1">Dirección de Entrega en Lara</label>
+                                    <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                        Dirección de Entrega en Lara
+                                    </label>
                                     <input
                                         type="text"
                                         value={regForm.address}
                                         onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
                                         placeholder="Barquisimeto / Cabudare, Urb. o Sector"
-                                        className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                        className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                            isDark 
+                                                ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                        }`}
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
-                                        <label className="block font-semibold text-gray-300 mb-1">Contraseña *</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Contraseña *
+                                        </label>
                                         <input
                                             type="password"
                                             required
                                             value={regForm.password}
                                             onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                                             placeholder="••••••••"
-                                            className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                            className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block font-semibold text-gray-300 mb-1">Repetir Contraseña *</label>
+                                        <label className={`block font-semibold mb-1 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>
+                                            Repetir Contraseña *
+                                        </label>
                                         <input
                                             type="password"
                                             required
                                             value={regForm.confirmPassword}
                                             onChange={(e) => setRegForm({ ...regForm, confirmPassword: e.target.value })}
                                             placeholder="••••••••"
-                                            className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/10 text-white outline-none focus:border-blue-500"
+                                            className={`w-full px-3 py-2 rounded-xl outline-none border transition-all ${
+                                                isDark 
+                                                    ? 'bg-black/60 border-white/10 text-white placeholder-gray-500 focus:border-blue-500' 
+                                                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                                            }`}
                                         />
                                     </div>
                                 </div>
@@ -2374,7 +2571,7 @@ export default function Landing() {
                                 <button
                                     type="submit"
                                     disabled={authLoading}
-                                    className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-cyan-600/30 flex items-center justify-center gap-1.5"
+                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5 active:scale-95"
                                 >
                                     {authLoading ? 'Creando cuenta...' : 'Crear Cuenta de Cliente'}
                                 </button>

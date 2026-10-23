@@ -305,45 +305,45 @@ export default function Delivery() {
     const [customDriverForm, setCustomDriverForm] = useState({ name: '', phone: '', vehicle: '' });
     const [isCustomDriver, setIsCustomDriver] = useState(false);
 
-    // Flota de motorizados sincronizada con la base de datos de usuarios
+    // Flota de motorizados sincronizada 100% con Supabase Cloud
     const [fleetDrivers, setFleetDrivers] = useState(() => {
-        const motorizados = userService.getAll().filter(u => u.role === 'Motorizado' && u.active);
-        if (motorizados.length > 0) {
-            return motorizados.map(m => ({
-                id: m.id,
-                name: m.name,
-                phone: m.phone || '0412-5551234',
-                vehicle: m.vehicle || 'Bera SBR 150 Azul',
-                plate: m.plate || 'AB1C23D',
-                rating: m.rating || 4.9,
-                deliveriesCount: m.deliveriesCount || 0,
-                active: m.active
-            }));
+        if (typeof window !== 'undefined') {
+            try {
+                const cached = localStorage.getItem('urbanstep_motorizados_cache');
+                if (cached) return JSON.parse(cached);
+            } catch {
+                // ignorar
+            }
         }
         return FLEET_DRIVERS;
     });
 
-    useEffect(() => {
-        const updateDrivers = () => {
-            const motorizados = userService.getAll().filter(u => u.role === 'Motorizado' && u.active);
-            if (motorizados.length > 0) {
-                setFleetDrivers(motorizados.map(m => ({
-                    id: m.id,
-                    name: m.name,
-                    phone: m.phone || '0412-5551234',
-                    vehicle: m.vehicle || 'Bera SBR 150 Azul',
-                    plate: m.plate || 'AB1C23D',
-                    rating: m.rating || 4.9,
-                    deliveriesCount: m.deliveriesCount || 0,
-                    active: m.active
-                })));
-            } else {
-                setFleetDrivers(FLEET_DRIVERS);
+    // Cargar motorizados en tiempo real desde Supabase Cloud
+    const fetchFleetFromSupabase = useCallback(async () => {
+        try {
+            const drivers = await deliveryService.getDrivers();
+            if (Array.isArray(drivers) && drivers.length > 0) {
+                setFleetDrivers(drivers);
             }
-        };
-        window.addEventListener('users_changed', updateDrivers);
-        return () => window.removeEventListener('users_changed', updateDrivers);
+        } catch (err) {
+            console.warn('Error cargando motorizados:', err);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchFleetFromSupabase();
+
+        const handleDriversChanged = () => {
+            fetchFleetFromSupabase();
+        };
+
+        window.addEventListener('motorizados_updated', handleDriversChanged);
+        window.addEventListener('users_changed', handleDriversChanged);
+        return () => {
+            window.removeEventListener('motorizados_updated', handleDriversChanged);
+            window.removeEventListener('users_changed', handleDriversChanged);
+        };
+    }, [fetchFleetFromSupabase]);
 
     const config = deliveryService.getConfig();
 
@@ -665,7 +665,7 @@ export default function Delivery() {
                     }`}
                 >
                     <Bike className="w-4 h-4" />
-                    Flota de Motorizados ({FLEET_DRIVERS.length})
+                    Flota de Motorizados ({fleetDrivers.length})
                 </button>
             </div>
 
@@ -929,8 +929,40 @@ export default function Delivery() {
             {/* === TAB 3: FLEET MOTORIZADOS === */}
             {activeTab === 'fleet' && (
                 <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200/80 dark:border-blue-900/50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-500/20">
+                                🛵
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                                    Flota de Motorizados Oficiales
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                        Supabase Cloud Activo
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Conductores verificados para delivery en Barquisimeto, Cabudare y municipios de Lara.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                await fetchFleetFromSupabase();
+                                toast.success('Flota sincronizada desde Supabase');
+                            }}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-blue-300 dark:border-blue-700 text-xs font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-100/50 dark:hover:bg-blue-900/40 transition-colors"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            Actualizar Flota
+                        </button>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {FLEET_DRIVERS.map(driver => {
+                        {fleetDrivers.map(driver => {
                             const activeDeliveries = deliveries.filter(d => d.driverName === driver.name && (d.status === 'asignado' || d.status === 'en_camino'));
                             const totalDone = deliveries.filter(d => d.driverName === driver.name && d.status === 'entregado').length;
 

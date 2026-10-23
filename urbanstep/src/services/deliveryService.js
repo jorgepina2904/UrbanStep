@@ -455,24 +455,117 @@ export const deliveryService = {
     },
 
     /**
-     * Forward geocoding: buscar dirección y obtener coordenadas
+     * Obtiene todos los motorizados registrados desde Supabase Cloud
      */
-    async searchAddress(query) {
-        try {
-            const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Venezuela')}&limit=5&addressdetails=1&accept-language=es`,
-                { headers: { 'User-Agent': 'UrbanStepPOS/3.0' } }
-            );
-            const data = await response.json();
-            return data.map(item => ({
-                lat: parseFloat(item.lat),
-                lng: parseFloat(item.lon),
-                address: item.display_name,
-                type: item.type,
-            }));
-        } catch {
-            return [];
+    async getDrivers() {
+        if (isSupabaseConfigured() && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('motorizados')
+                    .select('*')
+                    .order('nombre', { ascending: true });
+
+                if (!error && Array.isArray(data) && data.length > 0) {
+                    const mapped = data.map(m => ({
+                        id: m.id,
+                        name: m.nombre,
+                        phone: m.telefono,
+                        vehicle: m.vehiculo,
+                        plate: m.placa,
+                        rating: Number(m.calificacion) || 5.0,
+                        deliveriesCount: Number(m.entregas_historicas) || 0,
+                        active: Boolean(m.activo)
+                    }));
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('urbanstep_motorizados_cache', JSON.stringify(mapped));
+                    }
+                    return mapped;
+                }
+                if (error) {
+                    console.warn('Advertencia consultando motorizados en Supabase:', error.message);
+                }
+            } catch (err) {
+                console.warn('Error de red al consultar motorizados en Supabase:', err);
+            }
         }
+
+        // Respaldo local
+        if (typeof window !== 'undefined') {
+            const cached = localStorage.getItem('urbanstep_motorizados_cache');
+            if (cached) {
+                try {
+                    return JSON.parse(cached);
+                } catch {
+                    // ignorar
+                }
+            }
+        }
+        return [...FLEET_DRIVERS];
+    },
+
+    /**
+     * Crea o actualiza un motorizado en Supabase Cloud
+     */
+    async saveDriver(driverData) {
+        const id = driverData.id || `mot-${Date.now().toString().slice(-4)}`;
+        const record = {
+            id,
+            nombre: driverData.name || driverData.nombre,
+            telefono: driverData.phone || driverData.telefono,
+            vehiculo: driverData.vehicle || driverData.vehiculo,
+            placa: driverData.plate || driverData.placa || 'S/P',
+            calificacion: Number(driverData.rating || driverData.calificacion || 5.0),
+            entregas_historicas: Number(driverData.deliveriesCount || driverData.entregas_historicas || 0),
+            activo: driverData.active !== undefined ? driverData.active : true,
+            actualizado_el: new Date().toISOString()
+        };
+
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('motorizados')
+                .upsert([record], { onConflict: 'id' });
+
+            if (error) {
+                console.error('Error guardando motorizado en Supabase:', error);
+                throw new Error(`Error en base de datos: ${error.message}`);
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('motorizados_updated', { detail: record }));
+        }
+        return {
+            id: record.id,
+            name: record.nombre,
+            phone: record.telefono,
+            vehicle: record.vehiculo,
+            plate: record.placa,
+            rating: record.calificacion,
+            deliveriesCount: record.entregas_historicas,
+            active: record.activo
+        };
+    },
+
+    /**
+     * Elimina un motorizado de Supabase Cloud
+     */
+    async deleteDriver(driverId) {
+        if (isSupabaseConfigured() && supabase) {
+            const { error } = await supabase
+                .from('motorizados')
+                .delete()
+                .eq('id', driverId);
+
+            if (error) {
+                console.error('Error eliminando motorizado de Supabase:', error);
+                throw new Error(`Error en base de datos: ${error.message}`);
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('motorizados_updated', { detail: { id: driverId, deleted: true } }));
+        }
+        return true;
     },
 };
 
