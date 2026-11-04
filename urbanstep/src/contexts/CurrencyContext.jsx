@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { bcvService } from '../services/bcvService';
 
 export const CurrencyContext = createContext(null);
@@ -20,6 +20,72 @@ export const CurrencyProvider = ({ children }) => {
         bcvService.fetchOnlineRate().catch(() => {});
 
         return () => window.removeEventListener('bcv_rate_updated', handleRateChange);
+    }, []);
+
+    // Moneda primaria para visualización de precios: 'USD' (por defecto) o 'VES' (invertido)
+    const [primaryCurrency, setPrimaryCurrencyState] = useState(() => {
+        try {
+            return localStorage.getItem('urbanstep_primary_currency') || 'USD';
+        } catch {
+            return 'USD';
+        }
+    });
+
+    const primaryCurrencyRef = useRef(primaryCurrency);
+    useEffect(() => {
+        primaryCurrencyRef.current = primaryCurrency;
+    }, [primaryCurrency]);
+
+    const isSwapped = primaryCurrency === 'VES';
+
+    const setPrimaryCurrency = useCallback((curr) => {
+        const next = curr === 'VES' ? 'VES' : 'USD';
+        primaryCurrencyRef.current = next;
+        try {
+            localStorage.setItem('urbanstep_primary_currency', next);
+        } catch (e) {
+            console.warn('Error saving primary currency:', e);
+        }
+        setPrimaryCurrencyState(next);
+        window.dispatchEvent(new CustomEvent('urbanstep_currency_mode_changed', { detail: next }));
+    }, []);
+
+    const toggleCurrencyOrder = useCallback(() => {
+        const next = primaryCurrencyRef.current === 'USD' ? 'VES' : 'USD';
+        primaryCurrencyRef.current = next;
+        try {
+            localStorage.setItem('urbanstep_primary_currency', next);
+        } catch (e) {
+            console.warn('Error saving primary currency:', e);
+        }
+        setPrimaryCurrencyState(next);
+        window.dispatchEvent(new CustomEvent('urbanstep_currency_mode_changed', { detail: next }));
+    }, []);
+
+    // Escuchar cambios de preferencia entre pestañas o módulos
+    useEffect(() => {
+        const handleCurrencyMode = (e) => {
+            if (e.detail && (e.detail === 'USD' || e.detail === 'VES')) {
+                if (e.detail !== primaryCurrencyRef.current) {
+                    primaryCurrencyRef.current = e.detail;
+                    setPrimaryCurrencyState(e.detail);
+                }
+            }
+        };
+        const handleStorage = (e) => {
+            if (e.key === 'urbanstep_primary_currency' && (e.newValue === 'USD' || e.newValue === 'VES')) {
+                if (e.newValue !== primaryCurrencyRef.current) {
+                    primaryCurrencyRef.current = e.newValue;
+                    setPrimaryCurrencyState(e.newValue);
+                }
+            }
+        };
+        window.addEventListener('urbanstep_currency_mode_changed', handleCurrencyMode);
+        window.addEventListener('storage', handleStorage);
+        return () => {
+            window.removeEventListener('urbanstep_currency_mode_changed', handleCurrencyMode);
+            window.removeEventListener('storage', handleStorage);
+        };
     }, []);
 
     const updateRate = useCallback((newRate, source = 'Manual') => {
@@ -71,9 +137,33 @@ export const CurrencyProvider = ({ children }) => {
         return {
             usd: formatUSD(usd),
             bs: formatBs(bs),
-            combined: `${formatUSD(usd)} / ${formatBs(bs)}`
+            combined: isSwapped ? `${formatBs(bs)} / ${formatUSD(usd)}` : `${formatUSD(usd)} / ${formatBs(bs)}`
         };
-    }, [toBs, formatUSD, formatBs]);
+    }, [toBs, formatUSD, formatBs, isSwapped]);
+
+    /**
+     * Retorna los textos formateados grande y pequeño respetando la inversión de moneda configurada
+     */
+    const renderDualPrice = useCallback((usdAmount) => {
+        const usd = Number(usdAmount) || 0;
+        const bs = toBs(usd);
+        if (isSwapped) {
+            return {
+                primary: formatBs(bs),
+                secondary: formatUSD(usd),
+                isBsPrimary: true,
+                usdFormatted: formatUSD(usd),
+                bsFormatted: formatBs(bs)
+            };
+        }
+        return {
+            primary: formatUSD(usd),
+            secondary: formatBs(bs),
+            isBsPrimary: false,
+            usdFormatted: formatUSD(usd),
+            bsFormatted: formatBs(bs)
+        };
+    }, [toBs, formatBs, formatUSD, isSwapped]);
 
     return (
         <CurrencyContext.Provider value={{
@@ -81,6 +171,11 @@ export const CurrencyProvider = ({ children }) => {
             lastUpdated: rateData.lastUpdated,
             source: rateData.source,
             isRefreshing,
+            primaryCurrency,
+            isSwapped,
+            setPrimaryCurrency,
+            toggleCurrencyOrder,
+            renderDualPrice,
             updateRate,
             refreshRate,
             toBs,

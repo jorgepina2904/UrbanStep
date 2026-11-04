@@ -16,6 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Tipografías de la tienda web (Sportswear Elite) -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,600;0,700;0,800;0,900;1,800&family=Space+Grotesk:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <!-- Leaflet CSS for Maps -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <!-- Tailwind CSS CDN -->
@@ -27,12 +29,30 @@
         extend: {
           fontFamily: {
             sans: ['Inter', 'system-ui', 'sans-serif'],
+            // Tienda web: prefijo "us-" para no alterar las fuentes del panel administrativo
+            'us-display': ['Montserrat', 'Inter', 'sans-serif'],
+            'us-body': ['Work Sans', 'Inter', 'sans-serif'],
+            'us-mono': ['Space Grotesk', 'ui-monospace', 'monospace'],
           },
           colors: {
             gray: {
               750: '#2d3748',
               850: '#1a202c',
               950: '#0a0e17',
+            },
+            // Paleta "Sportswear Elite" de la tienda web
+            us: {
+              cyan: '#00e5ff',
+              ice: '#c3f5ff',
+              ink: '#0e0e10',
+              surface: '#131315',
+              carbon: '#121318',
+              panel: '#16171d',
+              elevated: '#1a1c23',
+              low: '#1c1b1d',
+              mid: '#201f21',
+              high: '#2a2a2c',
+              highest: '#353437',
             }
           },
           keyframes: {
