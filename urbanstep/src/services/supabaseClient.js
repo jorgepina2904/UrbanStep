@@ -17,6 +17,41 @@ export const supabase = isSupabaseConfigured()
     : null;
 
 /**
+ * Registra un suscriptor que se ejecuta cuando hay una sesión activa de Supabase
+ * (al inicio de sesión o al restaurar la sesión), para que los servicios recarguen sus cachés autorizadas.
+ */
+const sessionListeners = new Set();
+
+export const onCloudSession = (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    sessionListeners.add(callback);
+
+    if (isSupabaseConfigured() && supabase) {
+        supabase.auth.getSession().then(({ data }) => {
+            if (data?.session?.user) {
+                try { callback(data.session); } catch (e) { console.warn('Error en callback onCloudSession:', e); }
+            }
+        }).catch(() => {});
+    }
+
+    return () => { sessionListeners.delete(callback); };
+};
+
+export const triggerCloudSession = (session) => {
+    sessionListeners.forEach(cb => {
+        try { cb(session); } catch (e) { console.warn('Error ejecutando listener de sesión:', e); }
+    });
+};
+
+if (isSupabaseConfigured() && supabase) {
+    supabase.auth.onAuthStateChange((event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') && session?.user) {
+            triggerCloudSession(session);
+        }
+    });
+}
+
+/**
  * Prueba la conectividad con Supabase
  * @returns {Promise<{success: boolean, message: string}>}
  */

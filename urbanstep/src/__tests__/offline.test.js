@@ -27,7 +27,7 @@ vi.mock('../services/supabaseClient', () => {
             return q;
         }
     };
-    return { supabase: fake, isSupabaseConfigured: () => true, testSupabaseConnection: async () => ({ ok: true }) };
+    return { supabase: fake, isSupabaseConfigured: () => true, testSupabaseConnection: async () => ({ ok: true }), onCloudSession: () => () => {} };
 });
 
 const sync = await import('../services/offlineSync');

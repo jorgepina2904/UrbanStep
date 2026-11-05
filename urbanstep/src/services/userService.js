@@ -1,5 +1,5 @@
 import { auditService } from './auditService';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured, onCloudSession } from './supabaseClient';
 import { mockUsers } from '../data/mockUsers';
 import { normalizeEmail, validateEmail, validatePassword, validatePersonName, validatePhoneVE } from '../utils/validators';
 
@@ -106,7 +106,8 @@ const loadInitialUsers = () => {
             console.warn('Aviso leyendo caché de usuarios:', e);
         }
     }
-    return [...mockUsers];
+    // Con Supabase configurado en producción, no se inyectan usuarios de demostración
+    return isSupabaseConfigured() ? [] : [...mockUsers];
 };
 
 let _cachedUsers = loadInitialUsers();
@@ -149,6 +150,9 @@ const initUsersFromCloud = () => syncUsersFromCloud().catch((e) => console.warn(
 
 if (typeof window !== 'undefined') {
     initUsersFromCloud();
+    onCloudSession(() => {
+        syncUsersFromCloud().catch((e) => console.warn('Aviso sincronizando usuarios tras sesión:', e));
+    });
 }
 
 export const userService = {
@@ -172,28 +176,30 @@ export const userService = {
     },
 
     /** true si los usuarios provienen de Supabase (los de demostración ya no aplican). */
-    isCloudAuthoritative: () => _cloudAuthoritative,
+    isCloudAuthoritative: () => _cloudAuthoritative || (isSupabaseConfigured() && _cachedUsers.length > 0),
 
-    /** true solo si Supabase respondió y la tabla `usuarios` está vacía (instalación nueva). */
-    isCloudEmpty: async () => {
-        if (!isSupabaseConfigured() || !supabase) return false;
-        const { data, error } = await supabase.from('usuarios').select('id').limit(1);
-        return !error && Array.isArray(data) && data.length === 0;
+    /**
+     * Consulta la cuenta propia en `usuarios` por su identificador de Supabase Auth (usuario_auth_id).
+     * El rol SIEMPRE se toma de la base de datos, nunca de los metadatos editables del token.
+     */
+    findOwnAccount: async (authId) => {
+        if (!isSupabaseConfigured() || !supabase || !authId) return null;
+        try {
+            const { data, error } = await supabase
+                .from('usuarios')
+                .select(USER_COLUMNS)
+                .eq('usuario_auth_id', authId)
+                .maybeSingle();
+            if (error || !data) return null;
+            return mapDbUser(data);
+        } catch (e) {
+            console.warn('Error consultando cuenta propia en Supabase:', e);
+            return null;
+        }
     },
-
-    /** Convierte una fila de `usuarios` (o de login_usuario) al modelo de la aplicación. */
-    fromDbRow: (row) => mapDbUser(row),
 
     /** Columnas públicas de la tabla `usuarios` (sin password_hash). */
     publicColumns: USER_COLUMNS,
-
-    /** Consulta un usuario por correo directamente en la nube (para el inicio de sesión). */
-    findInCloudByEmail: async (email) => {
-        if (!isSupabaseConfigured() || !supabase) return null;
-        const { data, error } = await supabase.from('usuarios').select(USER_COLUMNS).eq('correo', normalizeEmail(email)).maybeSingle();
-        if (error || !data) return null;
-        return mapDbUser(data);
-    },
 
     /**
      * Guarda la lista completa de usuarios en la caché reactiva
@@ -232,10 +238,11 @@ export const userService = {
      * para que aparezca en Configuración > Usuarios. Si el correo ya existe, se reutiliza tal cual.
      */
     ensureClientAccount: async ({ name, email }) => {
-        const existing = userService.getByEmail(email) || await userService.findInCloudByEmail(email);
+        const clean = normalizeEmail(email);
+        const existing = userService.getByEmail(clean);
         if (existing) return existing;
-        const displayName = String(name || '').trim() || normalizeEmail(email).split('@')[0];
-        return userService.create({ name: displayName, email, role: 'Cliente', assignedCaja: 'Tienda Online', branch: 'Ecommerce Online', provider: 'google' });
+        const displayName = String(name || '').trim() || clean.split('@')[0];
+        return userService.create({ name: displayName, email: clean, role: 'Cliente', assignedCaja: 'Tienda Online', branch: 'Ecommerce Online', provider: 'google' });
     },
 
     /**

@@ -24,18 +24,20 @@ export const cartRecoveryService = {
         const snapshot = items.map(i => ({
             productId: i.productId ?? i.id, name: i.name, size: i.size, color: i.color || null, quantity: i.quantity, price: i.price
         }));
-        const row = { nombre: name || null, telefono: digits(phone), items: snapshot, total_usd: Number(totalUsd) || 0, estado: 'abierto', actualizado_el: new Date().toISOString() };
         try {
             let id = null;
             try { id = localStorage.getItem(CART_ID_KEY); } catch { /* sin almacenamiento */ }
-            if (id && UUID_RE.test(id)) {
-                const { error } = await supabase.from('carritos_abandonados').update(row).eq('id', id);
-                if (!error) return id;
-            }
-            const { data, error } = await supabase.from('carritos_abandonados').insert(row).select('id').single();
+            const validId = id && UUID_RE.test(id) ? id : null;
+            const { data, error } = await supabase.rpc('guardar_carrito', {
+                p_id: validId,
+                p_nombre: name || null,
+                p_telefono: digits(phone),
+                p_items: snapshot,
+                p_total_usd: Number(totalUsd) || 0
+            });
             if (error || !data) return null;
-            try { localStorage.setItem(CART_ID_KEY, data.id); } catch { /* sin almacenamiento */ }
-            return data.id;
+            try { localStorage.setItem(CART_ID_KEY, data); } catch { /* sin almacenamiento */ }
+            return data;
         } catch {
             return null;
         }
@@ -45,19 +47,20 @@ export const cartRecoveryService = {
     async markConverted() {
         let id = null;
         try { id = localStorage.getItem(CART_ID_KEY); localStorage.removeItem(CART_ID_KEY); } catch { /* sin almacenamiento */ }
-        if (!id || !ready()) return;
-        try { await supabase.from('carritos_abandonados').update({ estado: 'convertido', actualizado_el: new Date().toISOString() }).eq('id', id); } catch { /* no bloqueante */ }
+        if (!id || !ready() || !UUID_RE.test(id)) return;
+        try {
+            await supabase.rpc('marcar_carrito_convertido', { p_id: id });
+        } catch { /* no bloqueante */ }
     },
 
     /** Para el enlace de recuperación: devuelve los renglones guardados. */
     async getForRecovery(id) {
         if (!ready() || !UUID_RE.test(String(id))) return null;
         try {
-            const { data, error } = await supabase.from('carritos_abandonados').select('*').eq('id', id).maybeSingle();
-            if (error || !data || data.estado === 'convertido') return null;
-            await supabase.from('carritos_abandonados').update({ estado: 'recuperado' }).eq('id', id).neq('estado', 'convertido');
+            const { data, error } = await supabase.rpc('recuperar_carrito', { p_id: id });
+            if (error || !data) return null;
             try { localStorage.setItem(CART_ID_KEY, id); } catch { /* sin almacenamiento */ }
-            return data.items || [];
+            return Array.isArray(data) ? data : [];
         } catch {
             return null;
         }

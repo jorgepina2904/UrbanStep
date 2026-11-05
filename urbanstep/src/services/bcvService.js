@@ -122,30 +122,31 @@ export const bcvService = {
         _cachedRate = updatedData;
         storeRate(updatedData);
 
-        // Persistir en Supabase de forma asíncrona sin bloquear la UI
+        // Persistir en Supabase mediante RPC seguro (o fallback directo)
         if (isSupabaseConfigured() && supabase) {
             (async () => {
                 try {
-                    // 1. Actualizar tasa en configuracion_tienda
-                    await supabase
-                        .from('configuracion_tienda')
-                        .update({
-                            tasa_bcv: rateNum,
-                            actualizado_el: nowIso
-                        })
-                        .neq('id', '00000000-0000-0000-0000-000000000000');
-
-                    // 2. Registrar en histórico tasas_cambio
-                    await supabase
-                        .from('tasas_cambio')
-                        .insert({
-                            tasa: rateNum,
-                            moneda_origen: 'USD',
-                            moneda_destino: 'VES',
-                            fuente: source,
-                            registrado_por: 'Administrador',
-                            creado_el: nowIso
-                        });
+                    const { error } = await supabase.rpc('actualizar_tasa_bcv', {
+                        p_tasa: rateNum,
+                        p_fuente: source
+                    });
+                    if (error) {
+                        // Fallback si la función RPC aún no estuviese presente
+                        await supabase
+                            .from('configuracion_tienda')
+                            .update({ tasa_bcv: rateNum, actualizado_el: nowIso })
+                            .neq('id', '00000000-0000-0000-0000-000000000000');
+                        await supabase
+                            .from('tasas_cambio')
+                            .insert({
+                                tasa: rateNum,
+                                moneda_origen: 'USD',
+                                moneda_destino: 'VES',
+                                fuente: source,
+                                registrado_por: 'Administrador',
+                                creado_el: nowIso
+                            });
+                    }
                 } catch (err) {
                     console.error('Error persistiendo tasa BCV en Supabase:', err);
                 }

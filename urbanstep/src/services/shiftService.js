@@ -3,7 +3,7 @@
  * Conectado 100% a la tabla 'turnos_caja' en Supabase como Fuente Única de la Verdad.
  */
 import { generateId } from '../utils/generateId';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured, onCloudSession } from './supabaseClient';
 import { auditService } from './auditService';
 import { round2 } from '../utils/money';
 
@@ -83,6 +83,9 @@ const initActiveShiftFromCloud = async () => {
 
 if (typeof window !== 'undefined') {
     setTimeout(initActiveShiftFromCloud, 10);
+    onCloudSession(() => {
+        initActiveShiftFromCloud().catch(() => {});
+    });
 }
 
 export const shiftService = {

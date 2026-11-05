@@ -356,24 +356,26 @@ export const saleService = {
                     product.status = product.stock > product.minStock ? 'in_stock' : 'low_stock';
                 }
 
-                // Registrar movimiento en el Kardex
-                try {
-                    await stockMovementService.record({
-                        productId: product.id,
-                        productName: product.name,
-                        sku: product.sku,
-                        previousStock,
-                        newStock: product.stock,
-                        delta: -qty,
-                        type: 'salida_venta',
-                        reason: `Venta mostrador ${newSale.receiptNumber}`,
-                        size: itemSize && itemSize !== 'N/A' ? itemSize : null,
-                        color: itemColor || null,
-                        userName: newSale.cashier || 'Cajero',
-                        referenceId: newSale.receiptNumber
-                    });
-                } catch (kardexErr) {
-                    console.warn('Error registrando kardex venta:', kardexErr);
+                // Registrar movimiento en el Kardex (en pedidos web lo hace automáticamente el servidor con fn_descontar_stock_venta)
+                if (!isWebOrder) {
+                    try {
+                        await stockMovementService.record({
+                            productId: product.id,
+                            productName: product.name,
+                            sku: product.sku,
+                            previousStock,
+                            newStock: product.stock,
+                            delta: -qty,
+                            type: 'salida_venta',
+                            reason: `Venta mostrador ${newSale.receiptNumber}`,
+                            size: itemSize && itemSize !== 'N/A' ? itemSize : null,
+                            color: itemColor || null,
+                            userName: newSale.cashier || 'Cajero',
+                            referenceId: newSale.receiptNumber
+                        });
+                    } catch (kardexErr) {
+                        console.warn('Error registrando kardex venta:', kardexErr);
+                    }
                 }
             }
         }
@@ -392,41 +394,44 @@ export const saleService = {
                         syncedToCloud = false;
                         await enqueueSale(newSale);
                     } else if (!result.ok) {
+                        if (isWebOrder) {
+                            const idx = db.sales.findIndex(s => s.id === newSale.id);
+                            if (idx !== -1) db.sales.splice(idx, 1);
+                            throw new Error(result.error?.message || 'Error al procesar el pedido web en el servidor.');
+                        }
                         console.warn('Aviso guardando en ventas Supabase:', result.error);
                     }
                 }
 
-                // 4. Asegurar actualización directa y resiliente del stock en tabla 'productos' de Supabase
-                const updatedProductsMap = new Map();
-                for (const item of newSale.items) {
-                    const prodId = item.productId || item.id;
-                    const p = currentProducts.find(prod => prod.id === prodId || prod.name === item.name);
-                    if (p) {
-                        updatedProductsMap.set(p.id, p);
+                // 4. En mostrador/caja física sincronizar stock local; en pedidos web lo hace el servidor
+                if (!isWebOrder && syncedToCloud) {
+                    const updatedProductsMap = new Map();
+                    for (const item of newSale.items) {
+                        const prodId = item.productId || item.id;
+                        const p = currentProducts.find(prod => prod.id === prodId || prod.name === item.name);
+                        if (p) updatedProductsMap.set(p.id, p);
                     }
-                }
 
-                for (const p of (syncedToCloud ? updatedProductsMap.values() : [])) {
-                    const safeStock = Math.max(0, Number(p.stock) || 0);
-                    const safeEstado = safeStock <= 0 ? 'deshabilitado' : (safeStock > (p.minStock || 5) ? 'in_stock' : 'low_stock');
-                    
-                    // Intento 1: actualizar con todas las variantes si la tabla las soporta
-                    const { error: fullStockErr } = await supabase.from('productos').update({
-                        stock: safeStock,
-                        tallas_stock: p.sizeStock,
-                        variantes_color: p.colorVariants,
-                        colores: p.colors || [p.color || 'Negro'],
-                        estado: safeEstado,
-                        actualizado_el: new Date().toISOString()
-                    }).eq('id', p.id);
-
-                    // Si falla por columna inexistente, fallback a columnas base de productos
-                    if (fullStockErr) {
-                        await supabase.from('productos').update({
+                    for (const p of updatedProductsMap.values()) {
+                        const safeStock = Math.max(0, Number(p.stock) || 0);
+                        const safeEstado = safeStock <= 0 ? 'deshabilitado' : (safeStock > (p.minStock || 5) ? 'in_stock' : 'low_stock');
+                        
+                        const { error: fullStockErr } = await supabase.from('productos').update({
                             stock: safeStock,
+                            tallas_stock: p.sizeStock,
+                            variantes_color: p.colorVariants,
+                            colores: p.colors || [p.color || 'Negro'],
                             estado: safeEstado,
                             actualizado_el: new Date().toISOString()
                         }).eq('id', p.id);
+
+                        if (fullStockErr) {
+                            await supabase.from('productos').update({
+                                stock: safeStock,
+                                estado: safeEstado,
+                                actualizado_el: new Date().toISOString()
+                            }).eq('id', p.id);
+                        }
                     }
                 }
 

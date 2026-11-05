@@ -73,7 +73,7 @@ export const pushSaleRecords = async (sale) => {
         // 1. Venta (idempotente: si ya existe, continuar con los detalles faltantes)
         const alreadySynced = await existsRow('ventas', 'id', sale.id);
         if (!alreadySynced) {
-            const { error: saleErr } = await supabase.from('ventas').insert({
+            const insertPayload = {
                 id: sale.id,
                 numero_recibo: sale.receiptNumber,
                 cliente_id: validClienteId,
@@ -98,7 +98,19 @@ export const pushSaleRecords = async (sale) => {
                 tiene_delivery: Boolean(sale.shippingCarrier === 'delivery_local'),
                 creado_el: sale.date,
                 observaciones: `${sale.paymentMethodLabel}${sale.paymentReference ? ` - Ref: ${sale.paymentReference}` : ''}`
-            });
+            };
+            const insQuery = supabase.from('ventas').insert(insertPayload);
+            let saleErr = null;
+            if (insQuery && typeof insQuery.select === 'function') {
+                const { data: insertedSale, error } = await insQuery.select('numero_recibo').maybeSingle();
+                saleErr = error;
+                if (insertedSale?.numero_recibo) {
+                    sale.receiptNumber = insertedSale.numero_recibo;
+                }
+            } else {
+                const res = await insQuery;
+                saleErr = res?.error || null;
+            }
             if (saleErr) return { ok: false, networkError: isNetworkError(saleErr), error: saleErr };
         }
 

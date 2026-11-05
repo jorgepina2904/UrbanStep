@@ -8,7 +8,8 @@ import {
 vi.mock('../services/supabaseClient', () => ({
     supabase: null,
     isSupabaseConfigured: () => false,
-    testSupabaseConnection: async () => ({ ok: false })
+    testSupabaseConnection: async () => ({ ok: false }),
+    onCloudSession: () => () => {}
 }));
 
 const { db } = await import('../services/api');

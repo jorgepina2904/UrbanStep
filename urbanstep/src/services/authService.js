@@ -33,40 +33,15 @@ const resolveIdentifier = (identifier) => {
 const isMissingFunction = (error) => error?.code === 'PGRST202' || /login_usuario/i.test(error?.message || '');
 
 /**
- * Verifica credenciales contra Supabase. Orden:
- * 1) login_usuario(): bcrypt en el servidor (requiere seguridad_usuarios_validaciones.sql).
- * 2) Compatibilidad temporal mientras la migración no se ejecute: compara la contraseña de ese único usuario.
- * 3) Supabase Auth (cuentas creadas en auth.users). El rol SIEMPRE sale de la tabla `usuarios`, nunca de
- *    user_metadata, que el propio usuario puede editar.
+ * Verifica credenciales contra Supabase Auth.
+ * El rol SIEMPRE sale de la tabla `usuarios` mediante su usuario_auth_id, nunca de user_metadata.
  * @returns {{status:'ok'|'invalid'|'inactive'|'unavailable', user?:object, token?:string}}
  */
 const verifyInCloud = async (email, password) => {
-  const { data: rows, error } = await supabase.rpc('login_usuario', { p_correo: email, p_password: password });
-  if (!error && Array.isArray(rows) && rows[0]) {
-    const user = userService.fromDbRow(rows[0]);
-    return user.active ? { status: 'ok', user } : { status: 'inactive' };
-  }
-
-  if (error && isMissingFunction(error)) {
-    const { data: legacy, error: legacyError } = await supabase
-      .from('usuarios')
-      .select(`${userService.publicColumns}, password_hash`)
-      .eq('correo', email)
-      .maybeSingle();
-    if (legacyError) return { status: 'unavailable' };
-    // Una contraseña ya cifrada sin la función de verificación no puede compararse en el navegador
-    if (legacy?.password_hash && !legacy.password_hash.startsWith('$2') && legacy.password_hash === password) {
-      const user = userService.fromDbRow(legacy);
-      return user.active ? { status: 'ok', user } : { status: 'inactive' };
-    }
-  } else if (error) {
-    return { status: 'unavailable' };
-  }
-
   try {
     const { data: auth, error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (!authError && auth?.user) {
-      const account = await userService.findInCloudByEmail(email);
+      const account = await userService.findOwnAccount(auth.user.id);
       if (account && !account.active) {
         await supabase.auth.signOut();
         return { status: 'inactive' };
@@ -81,8 +56,16 @@ const verifyInCloud = async (email, password) => {
       };
       return { status: 'ok', user, token: auth.session?.access_token };
     }
+    if (authError) {
+      if (/invalid login credentials|invalid credentials/i.test(authError.message || '')) {
+        return { status: 'invalid' };
+      }
+      console.warn('Aviso en inicio de sesión con Supabase Auth:', authError.message);
+      return { status: 'invalid' };
+    }
   } catch (err) {
-    console.warn('Supabase Auth no disponible:', err);
+    console.warn('Error conectando con Supabase Auth:', err);
+    return { status: 'unavailable' };
   }
   return { status: 'invalid' };
 };
@@ -107,10 +90,7 @@ export const authService = {
       const result = await verifyInCloud(email, password);
       if (result.status === 'ok') return { success: true, user: persistSession(result.user, result.token) };
       if (result.status === 'inactive') return { success: false, error: INACTIVE_USER };
-      // Los usuarios de demostración solo valen si la tabla `usuarios` está confirmada vacía
-      if (!(await userService.isCloudEmpty())) {
-        return { success: false, error: result.status === 'invalid' ? INVALID_CREDENTIALS : 'No se pudo verificar tu acceso. Revisa tu conexión e intenta de nuevo.' };
-      }
+      return { success: false, error: result.status === 'invalid' ? INVALID_CREDENTIALS : 'No se pudo verificar tu acceso. Revisa tu conexión e intenta de nuevo.' };
     }
 
     // Sin nube (o instalación nueva sin usuarios): cada usuario entra solo con SU contraseña
@@ -140,8 +120,67 @@ export const authService = {
     const name = form.name.trim().replace(/\s+/g, ' ');
     const docType = String(form.docType || 'V').toUpperCase();
     const docNumber = normalizeDocument(docType, form.docNumber);
+    const [firstName, ...rest] = name.split(' ');
+    const lastName = rest.join(' ');
 
-    if (userService.getByEmail(email) || await userService.findInCloudByEmail(email)) {
+    if (isSupabaseConfigured() && supabase) {
+      const { data: auth, error: authError } = await supabase.auth.signUp({
+        email,
+        password: form.password,
+        options: {
+          data: {
+            full_name: name,
+            phone: form.phone,
+            perfil_pendiente: {
+              tipo_documento: docType,
+              numero_documento: docNumber,
+              nombres: firstName,
+              apellidos: lastName,
+              telefono: form.phone,
+              direccion: form.address?.trim() || null
+            }
+          }
+        }
+      });
+
+      if (authError) {
+        if (/already registered/i.test(authError.message || '')) {
+          throw new Error('Ya existe una cuenta con ese correo. Inicia sesión o recupera tu contraseña.');
+        }
+        throw new Error(authError.message);
+      }
+
+      if (!auth.session) {
+        return { success: true, needsConfirmation: true, email };
+      }
+
+      const { error: rpcError } = await supabase.rpc('registrar_ficha_cliente', {
+        p_tipo_documento: docType,
+        p_numero_documento: docNumber,
+        p_nombres: firstName,
+        p_apellidos: lastName,
+        p_telefono: form.phone,
+        p_direccion: form.address?.trim() || null,
+        p_estado: 'Lara',
+        p_ciudad: 'Barquisimeto'
+      });
+      if (rpcError) throw new Error(rpcError.message);
+
+      const clientUser = {
+        id: auth.user.id,
+        name,
+        email,
+        phone: form.phone,
+        role: 'Cliente',
+        branch: 'Ecommerce Online',
+        active: true
+      };
+      persistSession(clientUser, auth.session.access_token);
+      return clientUser;
+    }
+
+    // Modo local / sin nube
+    if (userService.getByEmail(email)) {
       throw new Error('Ya existe una cuenta con ese correo. Inicia sesión o recupera tu contraseña.');
     }
     const byDoc = await customerService.findByDocument(docType, docNumber);
@@ -153,15 +192,13 @@ export const authService = {
       throw new Error('Ese correo ya está asociado a otra cédula/RIF.');
     }
 
-    // Ficha de cliente primero: si ya compró en la tienda física se vincula en lugar de duplicarla
-    const [firstName, ...rest] = name.split(' ');
     const existing = byDoc || byEmail;
     if (existing) {
       await customerService.update(existing.id, { email, phone: form.phone, address: form.address?.trim() || existing.address });
     } else {
       await customerService.create({
         firstName,
-        lastName: rest.join(' '),
+        lastName,
         docType,
         docNumber,
         email,
@@ -266,9 +303,6 @@ export const authService = {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) return { success: false, error: error.message };
 
-    // Mantiene sincronizada la cuenta de la tabla `usuarios` con el mismo correo
-    const account = await userService.findInCloudByEmail(sessionUser.email);
-    if (account) await userService.update(account.id, { password: newPassword }).catch(() => {});
     await supabase.auth.signOut();
     return { success: true, message: 'Tu contraseña fue actualizada. Ya puedes iniciar sesión.' };
   },
@@ -291,9 +325,9 @@ export const authService = {
 
       let account = null;
       try {
-        account = await userService.ensureClientAccount({ name, email });
+        account = await userService.findOwnAccount(authUser.id);
       } catch (e) {
-        console.warn('No se pudo registrar la cuenta Google en usuarios:', e);
+        console.warn('Aviso obteniendo rol de cuenta Google:', e);
       }
       if (account && account.active === false) {
         await supabase.auth.signOut();
@@ -335,17 +369,35 @@ export const authService = {
     const email = normalizeEmail(user.email);
     const docType = String(form.docType || 'V').toUpperCase();
     const docNumber = normalizeDocument(docType, form.docNumber);
+    const name = form.name.trim().replace(/\s+/g, ' ');
+    const [firstName, ...rest] = name.split(' ');
+    const lastName = rest.join(' ');
+
+    if (isSupabaseConfigured() && supabase) {
+      const { error: rpcError } = await supabase.rpc('registrar_ficha_cliente', {
+        p_tipo_documento: docType,
+        p_numero_documento: docNumber,
+        p_nombres: firstName,
+        p_apellidos: lastName,
+        p_telefono: form.phone,
+        p_direccion: form.address.trim(),
+        p_estado: 'Lara',
+        p_ciudad: 'Barquisimeto'
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      return persistSession({ ...user, name, phone: form.phone, profileComplete: true }, localStorage.getItem(TOKEN_KEY));
+    }
+
+    // Modo local / sin nube
     const byDoc = await customerService.findByDocument(docType, docNumber);
     if (byDoc && !isPlaceholder(byDoc.email) && normalizeEmail(byDoc.email) !== email) {
       throw new Error('Esa cédula/RIF ya está registrada con otro correo. Si es tuya, escríbenos para vincularla.');
     }
-    const name = form.name.trim().replace(/\s+/g, ' ');
-    const [firstName, ...rest] = name.split(' ');
     if (byDoc) {
       await customerService.update(byDoc.id, { email, phone: form.phone, address: form.address.trim() });
     } else {
       await customerService.create({
-        firstName, lastName: rest.join(' '), docType, docNumber, email,
+        firstName, lastName, docType, docNumber, email,
         phone: form.phone, state: 'Lara', city: 'Barquisimeto', address: form.address.trim()
       });
     }

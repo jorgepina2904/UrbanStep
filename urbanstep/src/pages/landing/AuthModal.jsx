@@ -156,6 +156,12 @@ export default function AuthModal({ isOpen, initialTab = 'login', prefill = null
         if (Object.keys(errors).length > 0) { setError('Revisa los campos marcados en rojo.'); return; }
         run(async () => {
             const created = await authService.registerClient(regForm);
+            if (created?.needsConfirmation) {
+                setForgotSent(true);
+                setForgotMessage(`Te enviamos un enlace de confirmación a ${created.email}. Revisa tu correo (y la carpeta de spam) para activar tu cuenta antes de iniciar sesión.`);
+                setTab('forgot');
+                return;
+            }
             const loginRes = await login(created.email, regForm.password);
             toast.success('¡Tu cuenta de cliente ha sido creada con éxito!', { icon: '🎉' });
             setRegForm(EMPTY_REGISTER);

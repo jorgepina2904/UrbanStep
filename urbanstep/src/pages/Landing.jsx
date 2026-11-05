@@ -137,23 +137,44 @@ export default function Landing() {
         setIsAuthModalOpen(true);
     }, []);
 
-    // Top 6 más vendidos para el hero (historial de ventas; desempate por stock)
+    // Top 6 más vendidos para el hero (RPC segura productos_mas_vendidos o fallback)
     useEffect(() => {
         const pool = (products.length > 0 ? products : mockProducts.map(mapProductToCatalog)).filter(p => !p.disabled && p.stock > 0);
         if (pool.length === 0) return;
         let cancelled = false;
-        saleService.getAll().then((sales) => {
+
+        const loadBestsellers = async () => {
             const sold = {};
-            (Array.isArray(sales) ? sales : []).forEach(sale => (sale.items || []).forEach(it => {
-                const id = it.productId || it.id;
-                if (id) sold[id] = (sold[id] || 0) + (Number(it.quantity) || 1);
-            }));
+            if (isSupabaseConfigured() && supabase) {
+                try {
+                    const { data, error } = await supabase.rpc('productos_mas_vendidos', { p_limite: 12 });
+                    if (!error && Array.isArray(data)) {
+                        data.forEach(r => {
+                            if (r.producto_id) sold[r.producto_id] = Number(r.unidades) || 0;
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Aviso RPC productos_mas_vendidos:', e);
+                }
+            }
+            if (Object.keys(sold).length === 0) {
+                try {
+                    const sales = await saleService.getAll();
+                    (Array.isArray(sales) ? sales : []).forEach(sale => (sale.items || []).forEach(it => {
+                        const id = it.productId || it.id;
+                        if (id) sold[id] = (sold[id] || 0) + (Number(it.quantity) || 1);
+                    }));
+                } catch { /* fallback */ }
+            }
             const sorted = [...pool].sort((a, b) => ((sold[b.id] || 0) - (sold[a.id] || 0)) || ((b.stock || 0) - (a.stock || 0)));
             if (!cancelled) setBestsellerProducts(sorted.slice(0, 6));
-        }).catch((err) => {
+        };
+
+        loadBestsellers().catch((err) => {
             console.warn('Error calculando los más vendidos:', err);
             if (!cancelled) setBestsellerProducts(pool.slice(0, 6));
         });
+
         return () => { cancelled = true; };
     }, [products]);
 

@@ -4,7 +4,7 @@
  */
 import { generateId } from '../utils/generateId';
 import { auditService } from './auditService';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured, onCloudSession } from './supabaseClient';
 
 export const MOVEMENT_TYPES = {
     ajuste_manual: { label: 'Ajuste Manual', badgeVariant: 'warning', sign: '±' },
@@ -63,6 +63,7 @@ const initMovementsFromCloud = async () => {
 
 if (typeof window !== 'undefined') {
     setTimeout(initMovementsFromCloud, 10);
+    onCloudSession(() => { initMovementsFromCloud().catch(() => {}); });
 }
 
 export const stockMovementService = {

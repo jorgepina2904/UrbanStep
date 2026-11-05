@@ -1,5 +1,5 @@
 import { auditService } from './auditService';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured, onCloudSession } from './supabaseClient';
 
 const mapCajaFromDb = (c) => ({
     id: c.id,
@@ -37,6 +37,9 @@ const initLoadFromSupabase = async () => {
 
 if (typeof window !== 'undefined') {
     initLoadFromSupabase();
+    onCloudSession(() => {
+        initLoadFromSupabase().catch(() => {});
+    });
 }
 
 export const cashRegisterService = {
