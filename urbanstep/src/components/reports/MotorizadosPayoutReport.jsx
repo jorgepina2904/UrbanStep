@@ -321,19 +321,19 @@ export default function MotorizadosPayoutReport() {
                                         </td>
                                         <td className="py-3 px-4 text-right">
                                             <span className="font-bold text-gray-900 dark:text-white">
-                                                {formatUSD(drv.totalEarnedUsd)}
+                                                {isSwapped ? formatBs(drv.totalEarnedBs) : formatUSD(drv.totalEarnedUsd)}
                                             </span>
                                             <span className="text-[10px] text-gray-400 block">
-                                                {formatBs(drv.totalEarnedBs)}
+                                                {isSwapped ? formatUSD(drv.totalEarnedUsd) : formatBs(drv.totalEarnedBs)}
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 text-right">
                                             <span className={`font-black ${hasPending ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
-                                                {formatUSD(drv.pendingAmountUsd)}
+                                                {isSwapped ? formatBs(drv.pendingAmountBs) : formatUSD(drv.pendingAmountUsd)}
                                             </span>
                                             {hasPending && (
                                                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-bold">
-                                                    {formatBs(drv.pendingAmountBs)}
+                                                    {isSwapped ? formatUSD(drv.pendingAmountUsd) : formatBs(drv.pendingAmountBs)}
                                                 </span>
                                             )}
                                         </td>
@@ -382,8 +382,8 @@ export default function MotorizadosPayoutReport() {
                                 <th className="py-2.5 px-4 text-left">Fecha</th>
                                 <th className="py-2.5 px-4 text-left">Repartidor</th>
                                 <th className="py-2.5 px-3 text-center">Carreras</th>
-                                <th className="py-2.5 px-4 text-right">Monto USD</th>
-                                <th className="py-2.5 px-4 text-right">Monto Bs.</th>
+                                <th className="py-2.5 px-4 text-right">{isSwapped ? 'Monto Bs.' : 'Monto USD'}</th>
+                                <th className="py-2.5 px-4 text-right">{isSwapped ? 'Monto USD' : 'Monto Bs.'}</th>
                                 <th className="py-2.5 px-4 text-center">Método & Ref.</th>
                             </tr>
                         </thead>
@@ -410,10 +410,10 @@ export default function MotorizadosPayoutReport() {
                                             {p.deliveriesCount}
                                         </td>
                                         <td className="py-2.5 px-4 text-right font-bold text-gray-900 dark:text-white">
-                                            {formatUSD(p.amountUsd)}
+                                            {isSwapped ? formatBs(p.amountBs) : formatUSD(p.amountUsd)}
                                         </td>
                                         <td className="py-2.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                                            {formatBs(p.amountBs)}
+                                            {isSwapped ? formatUSD(p.amountUsd) : formatBs(p.amountBs)}
                                         </td>
                                         <td className="py-2.5 px-4 text-center font-sans">
                                             <span className="text-[10px] font-bold uppercase bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-lg text-gray-600 dark:text-gray-300">
@@ -467,10 +467,10 @@ export default function MotorizadosPayoutReport() {
                                     <span className="text-xs font-bold text-blue-950 dark:text-blue-200">Monto Total a Pagar:</span>
                                     <div className="text-right">
                                         <p className="text-lg font-black text-blue-600 dark:text-blue-400">
-                                            {formatUSD(driverToPay.pendingAmountUsd)}
+                                            {isSwapped ? formatBs(driverToPay.pendingAmountBs) : formatUSD(driverToPay.pendingAmountUsd)}
                                         </p>
                                         <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                            {formatBs(driverToPay.pendingAmountBs)}
+                                            {isSwapped ? formatUSD(driverToPay.pendingAmountUsd) : formatBs(driverToPay.pendingAmountBs)}
                                         </p>
                                     </div>
                                 </div>

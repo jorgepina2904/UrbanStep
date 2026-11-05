@@ -128,7 +128,20 @@ function ExportButtonGroup({ reportTitle, categoryName, columns, rows, summaryCa
 }
 
 export default function Reports() {
-    const { formatBs, formatUSD, toBs, rate: bcvRate } = useCurrency();
+    const {
+        formatBs,
+        formatUSD,
+        toBs,
+        rate: bcvRate,
+        isSwapped,
+        primaryCurrency,
+        primaryAmount,
+        secondaryAmount,
+        renderDualPrice,
+        formatDual
+    } = useCurrency();
+    const currLabel = isSwapped ? 'Bs.' : '$';
+    const currAltLabel = isSwapped ? '$' : 'Bs.';
     const [loading, setLoading] = useState(true);
 
     // Las 6 Capas Funcionales del SGF
@@ -747,19 +760,19 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Total DEBE Contable</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_usd || 0), 0))}
+                                {primaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_bs || 0), 0))}
                             </p>
                             <p className="text-xs font-bold text-emerald-600 mt-0.5">
-                                {formatBs(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_bs || 0), 0))}
+                                {secondaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_bs || 0), 0))}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-indigo-600">
                             <p className="text-xs font-semibold text-indigo-600">Total HABER Contable</p>
                             <p className="text-2xl font-black text-indigo-700 dark:text-indigo-400 mt-1">
-                                {formatUSD(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_usd || 0), 0))}
+                                {primaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_bs || 0), 0))}
                             </p>
                             <p className="text-xs font-bold text-indigo-600 mt-0.5">
-                                {formatBs(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_bs || 0), 0))}
+                                {secondaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_bs || 0), 0))}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20">
@@ -767,7 +780,7 @@ export default function Reports() {
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Cuadre de Partida Doble
                             </p>
                             <p className="text-2xl font-black text-emerald-600 mt-1">
-                                $0.00 ✓
+                                {isSwapped ? 'Bs. 0.00 ✓' : '$0.00 ✓'}
                             </p>
                             <p className="text-[11px] text-emerald-600 font-bold mt-0.5">Debe = Haber (100% Cuadrado)</p>
                         </Card>
@@ -805,8 +818,8 @@ export default function Reports() {
                                 }))}
                                 summaryCards={[
                                     { label: 'Asientos', value: `${filteredLibroDiario.length}` },
-                                    { label: 'Total Debe', value: formatUSD(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_usd || 0), 0)) },
-                                    { label: 'Total Haber', value: formatUSD(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_usd || 0), 0)) }
+                                    { label: 'Total Debe', value: primaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_debe_bs || 0), 0)) },
+                                    { label: 'Total Haber', value: primaryAmount(filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_usd || 0), 0), filteredLibroDiario.reduce((acc, a) => acc + (a.total_haber_bs || 0), 0)) }
                                 ]}
                                 filename="Libro_Diario_VEN_NIIF"
                                 bcvRate={bcvRate}
@@ -928,10 +941,10 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Código</th>
                                         <th className="px-4 py-3 text-left">Cuenta Contable</th>
                                         <th className="px-3 py-3 text-center">Naturaleza</th>
-                                        <th className="px-3 py-3 text-right">Total Debe ($)</th>
-                                        <th className="px-3 py-3 text-right">Total Haber ($)</th>
-                                        <th className="px-4 py-3 text-right font-bold">Saldo Final ($ USD)</th>
-                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Saldo Final (Bs.)</th>
+                                        <th className="px-3 py-3 text-right">Total Debe ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Total Haber ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-bold">Saldo Final ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Saldo Final ({currAltLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -944,13 +957,13 @@ export default function Reports() {
                                                     {cuenta.naturaleza}
                                                 </Badge>
                                             </td>
-                                            <td className="px-3 py-2.5 text-right font-bold">{formatUSD(cuenta.total_debe_usd)}</td>
-                                            <td className="px-3 py-2.5 text-right font-bold text-gray-500">{formatUSD(cuenta.total_haber_usd)}</td>
+                                            <td className="px-3 py-2.5 text-right font-bold">{primaryAmount(cuenta.total_debe_usd, cuenta.total_debe_bs)}</td>
+                                            <td className="px-3 py-2.5 text-right font-bold text-gray-500">{primaryAmount(cuenta.total_haber_usd, cuenta.total_haber_bs)}</td>
                                             <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">
-                                                {formatUSD(cuenta.saldo_final_usd)}
+                                                {primaryAmount(cuenta.saldo_final_usd, cuenta.saldo_final_bs)}
                                             </td>
                                             <td className="px-4 py-2.5 text-right font-black text-emerald-600">
-                                                {formatBs(cuenta.saldo_final_bs)}
+                                                {secondaryAmount(cuenta.saldo_final_usd, cuenta.saldo_final_bs)}
                                             </td>
                                         </tr>
                                     ))}
@@ -1007,10 +1020,10 @@ export default function Reports() {
                                 ]}
                                 rows={filteredBalanceComp}
                                 summaryCards={[
-                                    { label: 'Total Suma Debe', value: formatUSD(balanceComprobacion.sumas.total_debe_usd) },
-                                    { label: 'Total Suma Haber', value: formatUSD(balanceComprobacion.sumas.total_haber_usd) },
-                                    { label: 'Total Saldo Deudor', value: formatUSD(balanceComprobacion.sumas.total_deudor_usd) },
-                                    { label: 'Total Saldo Acreedor', value: formatUSD(balanceComprobacion.sumas.total_acreedor_usd) }
+                                    { label: 'Total Suma Debe', value: primaryAmount(balanceComprobacion.sumas.total_debe_usd, balanceComprobacion.sumas.total_debe_bs) },
+                                    { label: 'Total Suma Haber', value: primaryAmount(balanceComprobacion.sumas.total_haber_usd, balanceComprobacion.sumas.total_haber_bs) },
+                                    { label: 'Total Saldo Deudor', value: primaryAmount(balanceComprobacion.sumas.total_deudor_usd, balanceComprobacion.sumas.total_deudor_bs) },
+                                    { label: 'Total Saldo Acreedor', value: primaryAmount(balanceComprobacion.sumas.total_acreedor_usd, balanceComprobacion.sumas.total_acreedor_bs) }
                                 ]}
                                 filename="Balance_Comprobacion_Sumas_Saldos"
                                 bcvRate={bcvRate}
@@ -1024,10 +1037,10 @@ export default function Reports() {
                                     <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
                                         <th className="px-3 py-3 text-left">Código</th>
                                         <th className="px-4 py-3 text-left">Cuenta Contable</th>
-                                        <th className="px-3 py-3 text-right">Suma Debe ($)</th>
-                                        <th className="px-3 py-3 text-right">Suma Haber ($)</th>
-                                        <th className="px-3 py-3 text-right font-bold text-blue-600">Saldo Deudor ($)</th>
-                                        <th className="px-3 py-3 text-right font-bold text-purple-600">Saldo Acreedor ($)</th>
+                                        <th className="px-3 py-3 text-right">Suma Debe ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Suma Haber ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold text-blue-600">Saldo Deudor ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold text-purple-600">Saldo Acreedor ({currLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -1035,18 +1048,18 @@ export default function Reports() {
                                         <tr key={c.codigo} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                                             <td className="px-3 py-2 font-bold text-blue-600">{c.codigo}</td>
                                             <td className="px-4 py-2 font-sans font-medium text-gray-900 dark:text-white">{c.nombre}</td>
-                                            <td className="px-3 py-2 text-right">{c.total_debe_usd > 0 ? formatUSD(c.total_debe_usd) : '—'}</td>
-                                            <td className="px-3 py-2 text-right">{c.total_haber_usd > 0 ? formatUSD(c.total_haber_usd) : '—'}</td>
-                                            <td className="px-3 py-2 text-right font-bold text-blue-600">{c.saldo_deudor_usd > 0 ? formatUSD(c.saldo_deudor_usd) : '—'}</td>
-                                            <td className="px-3 py-2 text-right font-bold text-purple-600">{c.saldo_acreedor_usd > 0 ? formatUSD(c.saldo_acreedor_usd) : '—'}</td>
+                                            <td className="px-3 py-2 text-right">{c.total_debe_usd > 0 ? primaryAmount(c.total_debe_usd, c.total_debe_bs) : '—'}</td>
+                                            <td className="px-3 py-2 text-right">{c.total_haber_usd > 0 ? primaryAmount(c.total_haber_usd, c.total_haber_bs) : '—'}</td>
+                                            <td className="px-3 py-2 text-right font-bold text-blue-600">{c.saldo_deudor_usd > 0 ? primaryAmount(c.saldo_deudor_usd, c.saldo_deudor_bs) : '—'}</td>
+                                            <td className="px-3 py-2 text-right font-bold text-purple-600">{c.saldo_acreedor_usd > 0 ? primaryAmount(c.saldo_acreedor_usd, c.saldo_acreedor_bs) : '—'}</td>
                                         </tr>
                                     ))}
                                     <tr className="bg-gray-100 dark:bg-gray-800 font-bold border-t-2 border-gray-300 dark:border-gray-600 text-xs">
                                         <td colSpan="2" className="px-4 py-3 text-right font-sans uppercase">TOTALES GENERALES:</td>
-                                        <td className="px-3 py-3 text-right text-gray-900 dark:text-white">{formatUSD(balanceComprobacion.sumas.total_debe_usd)}</td>
-                                        <td className="px-3 py-3 text-right text-gray-900 dark:text-white">{formatUSD(balanceComprobacion.sumas.total_haber_usd)}</td>
-                                        <td className="px-3 py-3 text-right text-blue-600">{formatUSD(balanceComprobacion.sumas.total_deudor_usd)}</td>
-                                        <td className="px-3 py-3 text-right text-purple-600">{formatUSD(balanceComprobacion.sumas.total_acreedor_usd)}</td>
+                                        <td className="px-3 py-3 text-right text-gray-900 dark:text-white">{primaryAmount(balanceComprobacion.sumas.total_debe_usd, balanceComprobacion.sumas.total_debe_bs)}</td>
+                                        <td className="px-3 py-3 text-right text-gray-900 dark:text-white">{primaryAmount(balanceComprobacion.sumas.total_haber_usd, balanceComprobacion.sumas.total_haber_bs)}</td>
+                                        <td className="px-3 py-3 text-right text-blue-600">{primaryAmount(balanceComprobacion.sumas.total_deudor_usd, balanceComprobacion.sumas.total_deudor_bs)}</td>
+                                        <td className="px-3 py-3 text-right text-purple-600">{primaryAmount(balanceComprobacion.sumas.total_acreedor_usd, balanceComprobacion.sumas.total_acreedor_bs)}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1088,10 +1101,10 @@ export default function Reports() {
                                 { concepto: 'Total Pasivo + Patrimonio (Ecuación Patrimonial)', categoria: 'Balance General (Total)', montoUsd: formatUSD(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd), montoBs: formatBs(estadosFinancieros.balance_general.total_pasivo_patrimonio_bs) }
                             ]}
                             summaryCards={[
-                                { label: 'Ingresos Totales', value: formatUSD(estadosFinancieros.estado_resultados.total_ingresos_usd) },
-                                { label: 'Utilidad Neta', value: formatUSD(estadosFinancieros.estado_resultados.utilidad_neta_usd) },
-                                { label: 'Activo Corriente', value: formatUSD(estadosFinancieros.balance_general.total_activos_usd) },
-                                { label: 'Pasivo + Patrimonio', value: formatUSD(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd) }
+                                { label: 'Ingresos Totales', value: primaryAmount(estadosFinancieros.estado_resultados.total_ingresos_usd, estadosFinancieros.estado_resultados.total_ingresos_bs) },
+                                { label: 'Utilidad Neta', value: primaryAmount(estadosFinancieros.estado_resultados.utilidad_neta_usd, estadosFinancieros.estado_resultados.utilidad_neta_bs) },
+                                { label: 'Activo Corriente', value: primaryAmount(estadosFinancieros.balance_general.total_activos_usd, estadosFinancieros.balance_general.total_activos_bs) },
+                                { label: 'Pasivo + Patrimonio', value: primaryAmount(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd, estadosFinancieros.balance_general.total_pasivo_patrimonio_bs) }
                             ]}
                             filename="Estados_Financieros_VEN_NIIF"
                             bcvRate={bcvRate}
@@ -1121,23 +1134,23 @@ export default function Reports() {
                             <div className="space-y-3 font-mono text-xs">
                                 <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-gray-800">
                                     <span className="font-sans font-bold text-gray-700 dark:text-gray-300">INGRESOS OPERACIONALES (Ventas)</span>
-                                    <span className="font-bold text-gray-900 dark:text-white">{formatUSD(estadosFinancieros.estado_resultados.total_ingresos_usd)}</span>
+                                    <span className="font-bold text-gray-900 dark:text-white">{primaryAmount(estadosFinancieros.estado_resultados.total_ingresos_usd, estadosFinancieros.estado_resultados.total_ingresos_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-1.5 text-amber-600 border-b border-gray-100 dark:border-gray-800">
                                     <span className="font-sans font-medium">(-) Costo de Ventas (COGS Calzado)</span>
-                                    <span>{formatUSD(estadosFinancieros.estado_resultados.total_costos_usd)}</span>
+                                    <span>{primaryAmount(estadosFinancieros.estado_resultados.total_costos_usd, estadosFinancieros.estado_resultados.total_costos_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 rounded-lg border border-emerald-200 dark:border-emerald-800 font-bold">
                                     <span className="font-sans text-emerald-800 dark:text-emerald-300">(=) UTILIDAD BRUTA</span>
-                                    <span className="text-emerald-600">{formatUSD(estadosFinancieros.estado_resultados.utilidad_bruta_usd)}</span>
+                                    <span className="text-emerald-600">{primaryAmount(estadosFinancieros.estado_resultados.utilidad_bruta_usd, estadosFinancieros.estado_resultados.utilidad_bruta_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-1.5 text-red-600 border-b border-gray-100 dark:border-gray-800">
                                     <span className="font-sans font-medium">(-) Gastos Operacionales (Delivery & Comisiones)</span>
-                                    <span>{formatUSD(estadosFinancieros.estado_resultados.total_gastos_usd)}</span>
+                                    <span>{primaryAmount(estadosFinancieros.estado_resultados.total_gastos_usd, estadosFinancieros.estado_resultados.total_gastos_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-3 bg-blue-50 dark:bg-blue-950/40 px-3 rounded-xl border border-blue-200 dark:border-blue-800 font-black text-sm">
                                     <span className="font-sans text-blue-900 dark:text-blue-200">(=) UTILIDAD NETA DEL EJERCICIO</span>
-                                    <span className="text-blue-600 dark:text-blue-400">{formatUSD(estadosFinancieros.estado_resultados.utilidad_neta_usd)}</span>
+                                    <span className="text-blue-600 dark:text-blue-400">{primaryAmount(estadosFinancieros.estado_resultados.utilidad_neta_usd, estadosFinancieros.estado_resultados.utilidad_neta_bs)}</span>
                                 </div>
                             </div>
                         </Card>
@@ -1158,19 +1171,19 @@ export default function Reports() {
                             <div className="space-y-3 font-mono text-xs">
                                 <div className="flex justify-between items-center py-2 bg-blue-50/50 dark:bg-blue-950/20 px-3 rounded-lg border border-blue-200 dark:border-blue-800 font-bold">
                                     <span className="font-sans text-blue-900 dark:text-blue-200">TOTAL ACTIVO CORRIENTE</span>
-                                    <span className="text-blue-600">{formatUSD(estadosFinancieros.balance_general.total_activos_usd)}</span>
+                                    <span className="text-blue-600">{primaryAmount(estadosFinancieros.balance_general.total_activos_usd, estadosFinancieros.balance_general.total_activos_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-400">
                                     <span className="font-sans font-medium">TOTAL PASIVO (Proveedores & Fiscales)</span>
-                                    <span>{formatUSD(estadosFinancieros.balance_general.total_pasivos_usd)}</span>
+                                    <span>{primaryAmount(estadosFinancieros.balance_general.total_pasivos_usd, estadosFinancieros.balance_general.total_pasivos_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-1.5 border-b border-gray-100 dark:border-gray-800 text-gray-600 dark:text-gray-400">
                                     <span className="font-sans font-medium">PATRIMONIO NETO + RESULTADOS</span>
-                                    <span>{formatUSD(estadosFinancieros.balance_general.total_patrimonio_usd)}</span>
+                                    <span>{primaryAmount(estadosFinancieros.balance_general.total_patrimonio_usd, estadosFinancieros.balance_general.total_patrimonio_bs)}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-3 bg-emerald-50 dark:bg-emerald-950/40 px-3 rounded-xl border border-emerald-200 dark:border-emerald-800 font-black text-sm">
                                     <span className="font-sans text-emerald-900 dark:text-emerald-200">TOTAL PASIVO + PATRIMONIO</span>
-                                    <span className="text-emerald-600 dark:text-emerald-400">{formatUSD(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd)}</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400">{primaryAmount(estadosFinancieros.balance_general.total_pasivo_patrimonio_usd, estadosFinancieros.balance_general.total_pasivo_patrimonio_bs)}</span>
                                 </div>
                             </div>
                         </Card>
@@ -1272,28 +1285,28 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Base Imponible Gravable (16%)</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(seniatReport.summary.taxableBaseUsd)}
+                                {primaryAmount(seniatReport.summary.taxableBaseUsd, seniatReport.summary.taxableBaseBs)}
                             </p>
                             <p className="text-xs font-bold text-emerald-600 mt-0.5">
-                                {formatBs(seniatReport.summary.taxableBaseBs)}
+                                {secondaryAmount(seniatReport.summary.taxableBaseUsd, seniatReport.summary.taxableBaseBs)}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-indigo-600">
                             <p className="text-xs font-semibold text-indigo-600">Débito Fiscal IVA (16%)</p>
                             <p className="text-2xl font-black text-indigo-700 dark:text-indigo-400 mt-1">
-                                {formatUSD(seniatReport.summary.totalTaxUsd)}
+                                {primaryAmount(seniatReport.summary.totalTaxUsd, seniatReport.summary.totalTaxBs)}
                             </p>
                             <p className="text-xs font-bold text-indigo-600 mt-0.5">
-                                {formatBs(seniatReport.summary.totalTaxBs)}
+                                {secondaryAmount(seniatReport.summary.totalTaxUsd, seniatReport.summary.totalTaxBs)}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Percepción IGTF (3% Divisas)</p>
                             <p className="text-2xl font-black text-purple-700 dark:text-purple-400 mt-1">
-                                {formatUSD(seniatReport.summary.totalIgtfUsd)}
+                                {primaryAmount(seniatReport.summary.totalIgtfUsd, seniatReport.summary.totalIgtfBs)}
                             </p>
                             <p className="text-xs font-bold text-purple-600 mt-0.5">
-                                {formatBs(seniatReport.summary.totalIgtfBs)}
+                                {secondaryAmount(seniatReport.summary.totalIgtfUsd, seniatReport.summary.totalIgtfBs)}
                             </p>
                         </Card>
                     </div>
@@ -1346,9 +1359,9 @@ export default function Reports() {
                                 rows={filteredVentasLedger}
                                 summaryCards={[
                                     { label: 'Facturas Emitidas', value: `${filteredVentasLedger.length}` },
-                                    { label: 'Base Gravable', value: formatUSD(seniatReport.summary.taxableBaseUsd) },
-                                    { label: 'Débito Fiscal IVA', value: formatUSD(seniatReport.summary.totalTaxUsd) },
-                                    { label: 'IGTF 3% Divisas', value: formatUSD(seniatReport.summary.totalIgtfUsd) }
+                                    { label: 'Base Gravable', value: primaryAmount(seniatReport.summary.taxableBaseUsd, seniatReport.summary.taxableBaseBs) },
+                                    { label: 'Débito Fiscal IVA', value: primaryAmount(seniatReport.summary.totalTaxUsd, seniatReport.summary.totalTaxBs) },
+                                    { label: 'IGTF 3% Divisas', value: primaryAmount(seniatReport.summary.totalIgtfUsd, seniatReport.summary.totalIgtfBs) }
                                 ]}
                                 filename="Libro_Ventas_Fiscal_SENIAT"
                                 bcvRate={bcvRate}
@@ -1365,11 +1378,11 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Fecha</th>
                                         <th className="px-3 py-3 text-left">Cliente / RIF</th>
                                         <th className="px-3 py-3 text-right">Tasa BCV</th>
-                                        <th className="px-3 py-3 text-right">Base ($)</th>
-                                        <th className="px-3 py-3 text-right">IVA 16% ($)</th>
-                                        <th className="px-3 py-3 text-right">IGTF 3% ($)</th>
-                                        <th className="px-3 py-3 text-right font-bold">Total ($)</th>
-                                        <th className="px-3 py-3 text-right font-bold text-emerald-600">Total (Bs.)</th>
+                                        <th className="px-3 py-3 text-right">Base ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">IVA 16% ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">IGTF 3% ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold">Total ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold text-emerald-600">Total ({currAltLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -1383,11 +1396,11 @@ export default function Reports() {
                                                 <div className="text-[10px] text-gray-400">{row.customerDoc}</div>
                                             </td>
                                             <td className="px-3 py-2.5 text-right">{row.bcvRate}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(row.taxableBaseUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-indigo-600 font-bold">{formatUSD(row.taxUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-purple-600 font-bold">{formatUSD(row.igtfUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(row.totalUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right font-black text-emerald-600">{formatBs(row.totalBs)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(row.taxableBaseUsd, row.taxableBaseBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-indigo-600 font-bold">{primaryAmount(row.taxUsd, row.taxBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-purple-600 font-bold">{primaryAmount(row.igtfUsd, row.igtfBs)}</td>
+                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(row.totalUsd, row.totalBs)}</td>
+                                            <td className="px-3 py-2.5 text-right font-black text-emerald-600">{secondaryAmount(row.totalUsd, row.totalBs)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1411,27 +1424,29 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-amber-600">
                             <p className="text-xs font-semibold text-amber-600">Base Imponible Compras</p>
                             <p className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-1">
-                                {formatUSD(seniatPurchasesReport.summary.totalTaxableBaseUsd)}
+                                {primaryAmount(seniatPurchasesReport.summary.totalTaxableBaseUsd, seniatPurchasesReport.summary.totalTaxableBaseBs)}
                             </p>
                             <p className="text-xs font-bold text-amber-600 mt-0.5">
-                                {formatBs(seniatPurchasesReport.summary.totalTaxableBaseBs)}
+                                {secondaryAmount(seniatPurchasesReport.summary.totalTaxableBaseUsd, seniatPurchasesReport.summary.totalTaxableBaseBs)}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Crédito Fiscal IVA (16%)</p>
                             <p className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
-                                {formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd)}
+                                {primaryAmount(seniatPurchasesReport.summary.totalFiscalCreditUsd, seniatPurchasesReport.summary.totalFiscalCreditBs)}
                             </p>
                             <p className="text-xs font-bold text-emerald-600 mt-0.5">
-                                {formatBs(seniatPurchasesReport.summary.totalFiscalCreditBs)}
+                                {secondaryAmount(seniatPurchasesReport.summary.totalFiscalCreditUsd, seniatPurchasesReport.summary.totalFiscalCreditBs)}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Retención de IVA (75%)</p>
                             <p className="text-2xl font-black text-purple-700 dark:text-purple-400 mt-1">
-                                {formatUSD(seniatPurchasesReport.summary.totalIvaWithheldUsd)}
+                                {primaryAmount(seniatPurchasesReport.summary.totalIvaWithheldUsd, seniatPurchasesReport.summary.totalIvaWithheldBs)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Enterado ante el SENIAT</p>
+                            <p className="text-xs font-bold text-purple-600 mt-0.5">
+                                {secondaryAmount(seniatPurchasesReport.summary.totalIvaWithheldUsd, seniatPurchasesReport.summary.totalIvaWithheldBs)}
+                            </p>
                         </Card>
                     </div>
 
@@ -1465,8 +1480,8 @@ export default function Reports() {
                                 rows={filteredComprasLedger}
                                 summaryCards={[
                                     { label: 'Facturas Compras', value: `${filteredComprasLedger.length}` },
-                                    { label: 'Crédito Fiscal IVA', value: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd) },
-                                    { label: 'IVA Retenido (75%)', value: formatUSD(seniatPurchasesReport.summary.totalIvaWithheldUsd) }
+                                    { label: 'Crédito Fiscal IVA', value: primaryAmount(seniatPurchasesReport.summary.totalFiscalCreditUsd, seniatPurchasesReport.summary.totalFiscalCreditBs) },
+                                    { label: 'IVA Retenido (75%)', value: primaryAmount(seniatPurchasesReport.summary.totalIvaWithheldUsd, seniatPurchasesReport.summary.totalIvaWithheldBs) }
                                 ]}
                                 filename="Libro_Compras_Fiscal_SENIAT"
                                 bcvRate={bcvRate}
@@ -1483,11 +1498,11 @@ export default function Reports() {
                                         <th className="px-4 py-3 text-left">Proveedor / RIF</th>
                                         <th className="px-3 py-3 text-left">Factura N°</th>
                                         <th className="px-3 py-3 text-left">Control</th>
-                                        <th className="px-3 py-3 text-right">Base ($)</th>
-                                        <th className="px-3 py-3 text-right">Crédito IVA ($)</th>
-                                        <th className="px-3 py-3 text-right">Retención (75%)</th>
+                                        <th className="px-3 py-3 text-right">Base ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Crédito IVA ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Retención (75%) ({currLabel})</th>
                                         <th className="px-3 py-3 text-left">Comprobante Ret.</th>
-                                        <th className="px-3 py-3 text-right font-bold">Total ($)</th>
+                                        <th className="px-3 py-3 text-right font-bold">Total ({currLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -1501,11 +1516,11 @@ export default function Reports() {
                                             </td>
                                             <td className="px-3 py-2.5 font-bold text-blue-600">{row.invoiceNumber}</td>
                                             <td className="px-3 py-2.5 text-gray-500">{row.controlNumber}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(row.taxableBaseUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{formatUSD(row.fiscalCreditUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-purple-600 font-bold">{formatUSD(row.retentionIvaUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(row.taxableBaseUsd, row.taxableBaseBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{primaryAmount(row.fiscalCreditUsd, row.fiscalCreditBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-purple-600 font-bold">{primaryAmount(row.retentionIvaUsd, row.retentionIvaBs)}</td>
                                             <td className="px-3 py-2.5 text-blue-600 font-bold">{row.retentionVoucher}</td>
-                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(row.totalUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(row.totalUsd, row.totalBs)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1529,16 +1544,16 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Total Retenciones de IVA (75%)</p>
                             <p className="text-2xl font-black text-purple-700 dark:text-purple-400 mt-1">
-                                {formatUSD(withholdingsReport.totalIvaWithheldUsd)}
+                                {primaryAmount(withholdingsReport.totalIvaWithheldUsd)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Enterado en quincena fiscal</p>
+                            <p className="text-xs font-bold text-purple-600 mt-0.5">{secondaryAmount(withholdingsReport.totalIvaWithheldUsd)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-indigo-600">
                             <p className="text-xs font-semibold text-indigo-600">Total Retenciones ISLR (2% / 5%)</p>
                             <p className="text-2xl font-black text-indigo-700 dark:text-indigo-400 mt-1">
-                                {formatUSD(withholdingsReport.totalIslrWithheldUsd)}
+                                {primaryAmount(withholdingsReport.totalIslrWithheldUsd)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Adquisición bienes y servicios</p>
+                            <p className="text-xs font-bold text-indigo-600 mt-0.5">{secondaryAmount(withholdingsReport.totalIslrWithheldUsd)}</p>
                         </Card>
                     </div>
 
@@ -1569,7 +1584,7 @@ export default function Reports() {
                                 ]}
                                 rows={withholdingsReport.ivaWithholdings}
                                 summaryCards={[
-                                    { label: 'Total IVA Retenido', value: formatUSD(withholdingsReport.totalIvaWithheldUsd) }
+                                    { label: 'Total IVA Retenido', value: primaryAmount(withholdingsReport.totalIvaWithheldUsd) }
                                 ]}
                                 filename="Retenciones_IVA_SENIAT"
                                 bcvRate={bcvRate}
@@ -1585,9 +1600,9 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Fecha</th>
                                         <th className="px-4 py-3 text-left">Proveedor / RIF</th>
                                         <th className="px-3 py-3 text-left">Factura</th>
-                                        <th className="px-3 py-3 text-right">Monto IVA ($)</th>
+                                        <th className="px-3 py-3 text-right">Monto IVA ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">% Ret.</th>
-                                        <th className="px-4 py-3 text-right font-bold text-purple-600">Monto Retenido ($)</th>
+                                        <th className="px-4 py-3 text-right font-bold text-purple-600">Monto Retenido ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">Estatus</th>
                                     </tr>
                                 </thead>
@@ -1601,9 +1616,9 @@ export default function Reports() {
                                                 <div className="text-[10px] text-gray-400">{ret.supplierRif}</div>
                                             </td>
                                             <td className="px-3 py-2.5">{ret.invoiceNumber}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(ret.ivaAmountUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(ret.ivaAmountUsd)}</td>
                                             <td className="px-3 py-2.5 text-center font-bold">75%</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-purple-600">{formatUSD(ret.amountWithheldUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-purple-600">{primaryAmount(ret.amountWithheldUsd)}</td>
                                             <td className="px-3 py-2.5 text-center font-sans">
                                                 <Badge variant="success" className="text-[10px]">Enterado SENIAT ✓</Badge>
                                             </td>
@@ -1648,10 +1663,10 @@ export default function Reports() {
                                     { concepto: 'Retenciones de IVA 75% Enteradas a Proveedores', baseUsd: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd), alicuota: '75.00%', montoUsd: formatUSD(seniatPurchasesReport.summary.totalIvaWithheldUsd), montoBs: formatBs(seniatPurchasesReport.summary.totalIvaWithheldBs) }
                                 ]}
                                 summaryCards={[
-                                    { label: 'Débito Fiscal IVA', value: formatUSD(seniatReport.summary.totalTaxUsd) },
-                                    { label: 'Crédito Fiscal IVA', value: formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd) },
-                                    { label: 'Cuota Neta IVA', value: formatUSD(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd)) },
-                                    { label: 'IGTF 3% Divisas', value: formatUSD(seniatReport.summary.totalIgtfUsd) }
+                                    { label: 'Débito Fiscal IVA', value: primaryAmount(seniatReport.summary.totalTaxUsd, seniatReport.summary.totalTaxBs) },
+                                    { label: 'Crédito Fiscal IVA', value: primaryAmount(seniatPurchasesReport.summary.totalFiscalCreditUsd, seniatPurchasesReport.summary.totalFiscalCreditBs) },
+                                    { label: 'Cuota Neta IVA', value: primaryAmount(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd)) },
+                                    { label: 'IGTF 3% Divisas', value: primaryAmount(seniatReport.summary.totalIgtfUsd, seniatReport.summary.totalIgtfBs) }
                                 ]}
                                 filename="Declaracion_Cierre_Fiscal_SENIAT"
                                 bcvRate={bcvRate}
@@ -1672,18 +1687,18 @@ export default function Reports() {
                                 </h4>
                                 <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
                                     <span className="font-sans">Débito Fiscal IVA (Ventas):</span>
-                                    <span className="font-bold text-indigo-600">{formatUSD(seniatReport.summary.totalTaxUsd)}</span>
+                                    <span className="font-bold text-indigo-600">{primaryAmount(seniatReport.summary.totalTaxUsd, seniatReport.summary.totalTaxBs)}</span>
                                 </div>
                                 <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
                                     <span className="font-sans">(-) Crédito Fiscal IVA (Compras):</span>
                                     <span className="font-bold text-emerald-600">
-                                        {formatUSD(seniatPurchasesReport.summary.totalFiscalCreditUsd)}
+                                        {primaryAmount(seniatPurchasesReport.summary.totalFiscalCreditUsd, seniatPurchasesReport.summary.totalFiscalCreditBs)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between py-2 bg-white dark:bg-gray-800 px-3 rounded-lg border font-bold">
                                     <span className="font-sans">(=) Cuota Tributaria Neta IVA:</span>
                                     <span className={seniatReport.summary.totalTaxUsd >= seniatPurchasesReport.summary.totalFiscalCreditUsd ? 'text-blue-600' : 'text-emerald-600'}>
-                                        {formatUSD(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd))}
+                                        {primaryAmount(Math.max(0, seniatReport.summary.totalTaxUsd - seniatPurchasesReport.summary.totalFiscalCreditUsd))}
                                     </span>
                                 </div>
                             </div>
@@ -1695,7 +1710,7 @@ export default function Reports() {
                                 </h4>
                                 <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
                                     <span className="font-sans">Ventas Percibidas en Efectivo Divisas:</span>
-                                    <span className="font-bold">{formatUSD(seniatReport.summary.totalIgtfUsd / 0.03)}</span>
+                                    <span className="font-bold">{primaryAmount(seniatReport.summary.totalIgtfUsd / 0.03)}</span>
                                 </div>
                                 <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
                                     <span className="font-sans">Alícuota Legal Vigente:</span>
@@ -1703,7 +1718,7 @@ export default function Reports() {
                                 </div>
                                 <div className="flex justify-between py-2 bg-white dark:bg-gray-800 px-3 rounded-lg border font-bold">
                                     <span className="font-sans">(=) IGTF Percibido por Enterar:</span>
-                                    <span className="text-purple-600">{formatUSD(seniatReport.summary.totalIgtfUsd)}</span>
+                                    <span className="text-purple-600">{primaryAmount(seniatReport.summary.totalIgtfUsd, seniatReport.summary.totalIgtfBs)}</span>
                                 </div>
                             </div>
                         </div>
@@ -1722,32 +1737,32 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Caja Efectivo (VES & USD)</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(1850.00)}
+                                {primaryAmount(1850.00)}
                             </p>
                             <p className="text-xs font-bold text-emerald-600 mt-0.5">
-                                {formatBs(toBs(1850.00))}
+                                {secondaryAmount(1850.00)}
                             </p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-blue-600">
                             <p className="text-xs font-semibold text-blue-600">Bancos Nacionales (VES)</p>
                             <p className="text-2xl font-black text-blue-700 dark:text-blue-400 mt-1">
-                                {formatUSD(3240.50)}
+                                {primaryAmount(3240.50)}
                             </p>
-                            <p className="text-xs font-bold text-blue-600 mt-0.5">Banesco & BDV Biopago</p>
+                            <p className="text-xs font-bold text-blue-600 mt-0.5">{secondaryAmount(3240.50)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Cuentas Digitales (USD)</p>
                             <p className="text-2xl font-black text-purple-700 dark:text-purple-400 mt-1">
-                                {formatUSD(1080.00)}
+                                {primaryAmount(1080.00)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Zelle Custodia & Zinli</p>
+                            <p className="text-xs font-bold text-purple-600 mt-0.5">{secondaryAmount(1080.00)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-indigo-600 bg-indigo-50/20 dark:bg-indigo-950/20">
                             <p className="text-xs font-semibold text-indigo-600">LIQUIDEZ TOTAL DISPONIBLE</p>
                             <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
-                                {formatUSD(6170.50)}
+                                {primaryAmount(6170.50)}
                             </p>
-                            <p className="text-xs font-bold text-indigo-600 mt-0.5">{formatBs(toBs(6170.50))}</p>
+                            <p className="text-xs font-bold text-indigo-600 mt-0.5">{secondaryAmount(6170.50)}</p>
                         </Card>
                     </div>
 
@@ -1787,8 +1802,8 @@ export default function Reports() {
                                     <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
                                         <th className="px-4 py-3 text-left">Instrumento Financiero</th>
                                         <th className="px-3 py-3 text-center">Transacciones</th>
-                                        <th className="px-4 py-3 text-right font-bold">Total Recaudado ($ USD)</th>
-                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Total en Bolívares (Bs.)</th>
+                                        <th className="px-4 py-3 text-right font-bold">Total Recaudado ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Total ({currAltLabel})</th>
                                         <th className="px-3 py-3 text-center">Participación</th>
                                     </tr>
                                 </thead>
@@ -1802,8 +1817,8 @@ export default function Reports() {
                                                     {m.label}
                                                 </td>
                                                 <td className="px-3 py-2.5 text-center font-bold">{m.transactionsCount}</td>
-                                                <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(m.totalUsd)}</td>
-                                                <td className="px-4 py-2.5 text-right font-black text-emerald-600">{formatBs(m.totalBs)}</td>
+                                                <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(m.totalUsd, m.totalBs)}</td>
+                                                <td className="px-4 py-2.5 text-right font-black text-emerald-600">{secondaryAmount(m.totalUsd, m.totalBs)}</td>
                                                 <td className="px-3 py-2.5 text-center font-sans">
                                                     <span className="font-bold text-gray-700 dark:text-gray-300">{share.toFixed(1)}%</span>
                                                 </td>
@@ -1831,23 +1846,23 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Ventas Totales en Turnos</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(shiftsReport.totalSalesInShiftsUsd)}
+                                {primaryAmount(shiftsReport.totalSalesInShiftsUsd)}
                             </p>
-                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(shiftsReport.totalSalesInShiftsUsd))}</p>
+                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(shiftsReport.totalSalesInShiftsUsd)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Efectivo Físico Contado</p>
                             <p className="text-2xl font-black text-purple-700 dark:text-purple-400 mt-1">
-                                {formatUSD(shiftsReport.totalCashCollectedUsd)}
+                                {primaryAmount(shiftsReport.totalCashCollectedUsd)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Arqueado en mostrador</p>
+                            <p className="text-xs font-bold text-purple-600 mt-0.5">{secondaryAmount(shiftsReport.totalCashCollectedUsd)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-amber-600">
                             <p className="text-xs font-semibold text-amber-600">Diferencia Neta de Arqueo</p>
                             <p className={`text-2xl font-black mt-1 ${shiftsReport.totalDifferencesUsd < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                {formatUSD(shiftsReport.totalDifferencesUsd)}
+                                {primaryAmount(shiftsReport.totalDifferencesUsd)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Sobrantes o faltantes netos</p>
+                            <p className="text-xs font-bold text-amber-600 mt-0.5">{secondaryAmount(shiftsReport.totalDifferencesUsd)}</p>
                         </Card>
                     </div>
 
@@ -1866,10 +1881,10 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Cajero</th>
                                         <th className="px-3 py-3 text-center">Turnos</th>
                                         <th className="px-3 py-3 text-center">Con descuadre</th>
-                                        <th className="px-3 py-3 text-right">Faltante ($)</th>
-                                        <th className="px-3 py-3 text-right">Sobrante ($)</th>
-                                        <th className="px-3 py-3 text-right">Faltante (Bs.)</th>
-                                        <th className="px-3 py-3 text-right">Sobrante (Bs.)</th>
+                                        <th className="px-3 py-3 text-right">Faltante ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Sobrante ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Faltante ({currAltLabel})</th>
+                                        <th className="px-3 py-3 text-right">Sobrante ({currAltLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -1878,10 +1893,10 @@ export default function Reports() {
                                             <td className="px-3 py-2.5 font-sans font-medium">{r.cashier}</td>
                                             <td className="px-3 py-2.5 text-center">{r.shifts}</td>
                                             <td className={`px-3 py-2.5 text-center font-bold ${r.withDifference > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{r.withDifference}</td>
-                                            <td className="px-3 py-2.5 text-right text-red-600 font-bold">{formatUSD(r.shortageUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-blue-600 font-bold">{formatUSD(r.overageUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right text-red-600">{formatBs(r.shortageBs)}</td>
-                                            <td className="px-3 py-2.5 text-right text-blue-600">{formatBs(r.overageBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-red-600 font-bold">{primaryAmount(r.shortageUsd, r.shortageBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-blue-600 font-bold">{primaryAmount(r.overageUsd, r.overageBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-red-600">{secondaryAmount(r.shortageUsd, r.shortageBs)}</td>
+                                            <td className="px-3 py-2.5 text-right text-blue-600">{secondaryAmount(r.overageUsd, r.overageBs)}</td>
                                         </tr>
                                     ))}
                                     {(shiftsReport.differencesByCashier || []).length === 0 && (
@@ -1917,8 +1932,8 @@ export default function Reports() {
                                 rows={filteredShifts}
                                 summaryCards={[
                                     { label: 'Turnos Auditados', value: `${filteredShifts.length}` },
-                                    { label: 'Total en Turnos', value: formatUSD(shiftsReport.totalSalesInShiftsUsd) },
-                                    { label: 'Diferencia Neta', value: formatUSD(shiftsReport.totalDifferencesUsd) }
+                                    { label: 'Total en Turnos', value: primaryAmount(shiftsReport.totalSalesInShiftsUsd) },
+                                    { label: 'Diferencia Neta', value: primaryAmount(shiftsReport.totalDifferencesUsd) }
                                 ]}
                                 filename="Arqueos_Cierres_Cajas"
                                 bcvRate={bcvRate}
@@ -1935,10 +1950,10 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Cajero Responsable</th>
                                         <th className="px-3 py-3 text-left">Apertura - Cierre</th>
                                         <th className="px-3 py-3 text-center">Ventas</th>
-                                        <th className="px-3 py-3 text-right">Efectivo Inicial</th>
-                                        <th className="px-3 py-3 text-right">Esperado</th>
-                                        <th className="px-3 py-3 text-right font-bold">Contado Físico</th>
-                                        <th className="px-3 py-3 text-right font-bold">Diferencia</th>
+                                        <th className="px-3 py-3 text-right">Efectivo Inicial ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">Esperado ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold">Contado Físico ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right font-bold">Diferencia ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">Estatus</th>
                                     </tr>
                                 </thead>
@@ -1952,11 +1967,11 @@ export default function Reports() {
                                                 {new Date(s.openedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })} - {s.closedAt ? new Date(s.closedAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : 'Abierto'}
                                             </td>
                                             <td className="px-3 py-2.5 text-center font-bold text-blue-600">{s.salesCount || 0}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(s.initialCashUsd || 0)}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(s.expectedCashUsd || 0)}</td>
-                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(s.actualCashUsd || s.countedCashUsd || 0)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(s.initialCashUsd || 0)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(s.expectedCashUsd || 0)}</td>
+                                            <td className="px-3 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(s.actualCashUsd || s.countedCashUsd || 0)}</td>
                                             <td className={`px-3 py-2.5 text-right font-black ${(s.differenceUsd || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                {formatUSD(s.differenceUsd || 0)}
+                                                {primaryAmount(s.differenceUsd || 0)}
                                             </td>
                                             <td className="px-3 py-2.5 text-center font-sans">
                                                 <Badge variant={s.status === 'closed' ? 'success' : 'warning'} className="text-[10px]">
@@ -2025,8 +2040,8 @@ export default function Reports() {
                                 ]}
                                 rows={cashFlowProjReport.weeklyTimeline}
                                 summaryCards={[
-                                    { label: 'Saldo Inicial', value: formatUSD(cashFlowProjReport.initialLiquidityUsd) },
-                                    { label: 'Saldo a 90 Días', value: formatUSD(cashFlowProjReport.p90.endingBalance) }
+                                    { label: 'Saldo Inicial', value: primaryAmount(cashFlowProjReport.initialLiquidityUsd) },
+                                    { label: 'Saldo a 90 Días', value: primaryAmount(cashFlowProjReport.p90.endingBalance) }
                                 ]}
                                 filename="Flujo_Caja_Proyectado_90d"
                                 bcvRate={bcvRate}
@@ -2039,20 +2054,20 @@ export default function Reports() {
                                 <thead>
                                     <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
                                         <th className="px-4 py-3 text-left">Semana</th>
-                                        <th className="px-4 py-3 text-right">Ingresos Esperados ($)</th>
-                                        <th className="px-4 py-3 text-right">Egresos Proyectados ($)</th>
-                                        <th className="px-4 py-3 text-right">Flujo Neto Semanal ($)</th>
-                                        <th className="px-4 py-3 text-right font-black">Saldo Proyectado Acumulado ($)</th>
+                                        <th className="px-4 py-3 text-right">Ingresos Esperados ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right">Egresos Proyectados ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right">Flujo Neto Semanal ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-black">Saldo Proyectado Acumulado ({currLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
                                     {cashFlowProjReport.weeklyTimeline.map((w) => (
                                         <tr key={w.week} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
                                             <td className="px-4 py-2.5 font-sans font-bold text-gray-900 dark:text-white">{w.week}</td>
-                                            <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">+{formatUSD(w.inflowUsd)}</td>
-                                            <td className="px-4 py-2.5 text-right text-red-600 font-bold">-{formatUSD(w.outflowUsd)}</td>
-                                            <td className="px-4 py-2.5 text-right font-bold text-blue-600">{formatUSD(w.netUsd)}</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(w.balanceUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right text-emerald-600 font-bold">+{primaryAmount(w.inflowUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right text-red-600 font-bold">-{primaryAmount(w.outflowUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-bold text-blue-600">{primaryAmount(w.netUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(w.balanceUsd)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -2080,23 +2095,23 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-amber-600">
                             <p className="text-xs font-semibold text-amber-600">Valorización a Costo (PEPS)</p>
                             <p className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-1">
-                                {formatUSD(kardexReport.totalValuationCostUsd)}
+                                {primaryAmount(kardexReport.totalValuationCostUsd)}
                             </p>
-                            <p className="text-xs font-bold text-amber-600 mt-0.5">{formatBs(toBs(kardexReport.totalValuationCostUsd))}</p>
+                            <p className="text-xs font-bold text-amber-600 mt-0.5">{secondaryAmount(kardexReport.totalValuationCostUsd)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Valorización a PVP (Venta)</p>
                             <p className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
-                                {formatUSD(kardexReport.totalValuationRetailUsd)}
+                                {primaryAmount(kardexReport.totalValuationRetailUsd)}
                             </p>
-                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(kardexReport.totalValuationRetailUsd))}</p>
+                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(kardexReport.totalValuationRetailUsd)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-indigo-600">
                             <p className="text-xs font-semibold text-indigo-600">Margen Potencial de Inventario</p>
                             <p className="text-2xl font-black text-indigo-700 dark:text-indigo-400 mt-1">
-                                {formatUSD(kardexReport.potentialInventoryProfitUsd)}
+                                {primaryAmount(kardexReport.potentialInventoryProfitUsd)}
                             </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">Utilidad bruta esperada</p>
+                            <p className="text-xs font-bold text-indigo-600 mt-0.5">{secondaryAmount(kardexReport.potentialInventoryProfitUsd)}</p>
                         </Card>
                     </div>
 
@@ -2145,10 +2160,10 @@ export default function Reports() {
                                         <th className="px-4 py-3 text-left">Modelo de Calzado</th>
                                         <th className="px-3 py-3 text-left">Marca</th>
                                         <th className="px-3 py-3 text-center">Stock</th>
-                                        <th className="px-3 py-3 text-right">Costo Unit. ($)</th>
-                                        <th className="px-3 py-3 text-right">PVP ($)</th>
-                                        <th className="px-4 py-3 text-right font-bold text-amber-600">Valor Costo ($)</th>
-                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Valor PVP ($)</th>
+                                        <th className="px-3 py-3 text-right">Costo Unit. ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">PVP ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-bold text-amber-600">Valor Costo ({currLabel})</th>
+                                        <th className="px-4 py-3 text-right font-bold text-emerald-600">Valor PVP ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">Estatus</th>
                                     </tr>
                                 </thead>
@@ -2159,10 +2174,10 @@ export default function Reports() {
                                             <td className="px-4 py-2.5 font-sans font-bold text-gray-900 dark:text-white">{p.name}</td>
                                             <td className="px-3 py-2.5 font-sans">{p.brand}</td>
                                             <td className="px-3 py-2.5 text-center font-black">{p.currentStock} un.</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(p.unitCostUsd)}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(p.unitPriceUsd)}</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-amber-600">{formatUSD(p.valuationCostUsd)}</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-emerald-600">{formatUSD(p.valuationRetailUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(p.unitCostUsd)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(p.unitPriceUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-amber-600">{primaryAmount(p.valuationCostUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-emerald-600">{primaryAmount(p.valuationRetailUsd)}</td>
                                             <td className="px-3 py-2.5 text-center font-sans">
                                                 <Badge variant={p.stockStatus === 'Óptimo' ? 'success' : (p.stockStatus === 'Crítico' ? 'warning' : 'danger')} className="text-[10px]">
                                                     {p.stockStatus}
@@ -2220,8 +2235,8 @@ export default function Reports() {
                                         <th className="px-3 py-3 text-left">Marca</th>
                                         <th className="px-3 py-3 text-center">Stock</th>
                                         <th className="px-3 py-3 text-center">Mínimo</th>
-                                        <th className="px-3 py-3 text-right">Costo ($)</th>
-                                        <th className="px-3 py-3 text-right">PVP ($)</th>
+                                        <th className="px-3 py-3 text-right">Costo ({currLabel})</th>
+                                        <th className="px-3 py-3 text-right">PVP ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">Acción</th>
                                     </tr>
                                 </thead>
@@ -2233,8 +2248,8 @@ export default function Reports() {
                                             <td className="px-3 py-2.5 font-sans">{p.brand}</td>
                                             <td className="px-3 py-2.5 text-center font-black text-amber-600">{p.stock} pares</td>
                                             <td className="px-3 py-2.5 text-center text-gray-400">{p.minStock}</td>
-                                            <td className="px-3 py-2.5 text-right">{formatUSD(p.cost)}</td>
-                                            <td className="px-3 py-2.5 text-right font-bold">{formatUSD(p.price)}</td>
+                                            <td className="px-3 py-2.5 text-right">{primaryAmount(p.cost)}</td>
+                                            <td className="px-3 py-2.5 text-right font-bold">{primaryAmount(p.price)}</td>
                                             <td className="px-3 py-2.5 text-center font-sans">
                                                 <Badge variant="warning" className="text-[10px]">Reorden Urgente</Badge>
                                             </td>
@@ -2274,7 +2289,7 @@ export default function Reports() {
                                 rows={filteredTopProducts}
                                 summaryCards={[
                                     { label: 'Unidades Vendidas', value: `${topProductsReport.totalUnitsSold}` },
-                                    { label: 'Facturación USD', value: formatUSD(topProductsReport.totalRevenueUsd) }
+                                    { label: `Facturación ${currLabel}`, value: primaryAmount(topProductsReport.totalRevenueUsd) }
                                 ]}
                                 filename="Rotacion_Inventario_Calzado"
                                 bcvRate={bcvRate}
@@ -2289,7 +2304,7 @@ export default function Reports() {
                                         <th className="px-4 py-3 text-left">Modelo de Calzado</th>
                                         <th className="px-3 py-3 text-left">Marca</th>
                                         <th className="px-3 py-3 text-center">Pares Vendidos</th>
-                                        <th className="px-4 py-3 text-right font-bold">Venta ($ USD)</th>
+                                        <th className="px-4 py-3 text-right font-bold">Venta ({currLabel})</th>
                                         <th className="px-3 py-3 text-center">Stock Almacén</th>
                                         <th className="px-3 py-3 text-center">Días Stock</th>
                                         <th className="px-3 py-3 text-center">Rotación</th>
@@ -2301,7 +2316,7 @@ export default function Reports() {
                                             <td className="px-4 py-2.5 font-sans font-bold text-gray-900 dark:text-white">{p.name}</td>
                                             <td className="px-3 py-2.5 font-sans">{p.brand}</td>
                                             <td className="px-3 py-2.5 text-center font-black text-amber-600">{p.unitsSold} pares</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(p.revenueUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(p.revenueUsd)}</td>
                                             <td className="px-3 py-2.5 text-center font-bold">{p.currentStock} un.</td>
                                             <td className="px-3 py-2.5 text-center text-blue-600 font-bold">{p.estimatedDaysStock} d</td>
                                             <td className="px-3 py-2.5 text-center font-sans">
@@ -2355,7 +2370,7 @@ export default function Reports() {
                                     <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
                                         <th className="px-4 py-3 text-left">Empresa de Transporte</th>
                                         <th className="px-4 py-3 text-center">Despachos Realizados</th>
-                                        <th className="px-4 py-3 text-right font-bold">Fletes Cobrados ($ USD)</th>
+                                        <th className="px-4 py-3 text-right font-bold">Fletes Cobrados ({currLabel})</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -2366,7 +2381,7 @@ export default function Reports() {
                                                 {c.name}
                                             </td>
                                             <td className="px-4 py-2.5 text-center font-bold">{c.count}</td>
-                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{formatUSD(c.revenueUsd)}</td>
+                                            <td className="px-4 py-2.5 text-right font-black text-gray-900 dark:text-white">{primaryAmount(c.revenueUsd)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -2426,8 +2441,8 @@ export default function Reports() {
                                             <th className="px-4 py-3 text-left">Calzado Devuelto</th>
                                             <th className="px-4 py-3 text-left">Motivo SGF</th>
                                             <th className="px-4 py-3 text-center">Destino Físico Stock</th>
-                                            <th className="px-4 py-3 text-right font-bold">Monto Devuelto ($)</th>
-                                            <th className="px-4 py-3 text-right font-bold">Monto (Bs)</th>
+                                            <th className="px-4 py-3 text-right font-bold">Monto Devuelto ({currLabel})</th>
+                                            <th className="px-4 py-3 text-right font-bold">Monto ({currAltLabel})</th>
                                             <th className="px-4 py-3 text-center">Estado</th>
                                         </tr>
                                     </thead>
@@ -2469,10 +2484,10 @@ export default function Reports() {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-right font-black text-rose-600 dark:text-rose-400 font-mono">
-                                                    -{formatUSD(r.totalUsd)}
+                                                    -{primaryAmount(r.totalUsd, r.totalBs)}
                                                 </td>
                                                 <td className="px-4 py-3 text-right text-gray-500 font-mono text-[10px]">
-                                                    -{formatVES(r.totalBs)}
+                                                    -{secondaryAmount(r.totalUsd, r.totalBs)}
                                                 </td>
                                                 <td className="px-4 py-3 text-center font-sans">
                                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
@@ -2500,16 +2515,16 @@ export default function Reports() {
                         <Card className="p-4 border-l-4 border-l-blue-600">
                             <p className="text-xs font-semibold text-gray-500">Ticket Promedio General</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(summary?.avgTicket || 0)}
+                                {primaryAmount(summary?.avgTicket || 0)}
                             </p>
-                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(summary?.avgTicket || 0))}</p>
+                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(summary?.avgTicket || 0)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-emerald-600">
                             <p className="text-xs font-semibold text-emerald-600">Facturación Acumulada</p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(summary?.revenue || 0)}
+                                {primaryAmount(summary?.revenue || 0)}
                             </p>
-                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(summary?.revenue || 0))}</p>
+                            <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(summary?.revenue || 0)}</p>
                         </Card>
                         <Card className="p-4 border-l-4 border-l-purple-600">
                             <p className="text-xs font-semibold text-purple-600">Unidades Vendidas</p>
@@ -2549,9 +2564,9 @@ export default function Reports() {
                                     avgTicketUsd: formatUSD(r.avgTicketUsd)
                                 }))}
                                 summaryCards={[
-                                    { label: 'Total Ventas', value: formatUSD(summary?.revenue || 0) },
+                                    { label: 'Total Ventas', value: primaryAmount(summary?.revenue || 0) },
                                     { label: 'Transacciones', value: `${summary?.salesCount || 0}` },
-                                    { label: 'Ticket Promedio', value: formatUSD(summary?.avgTicket || 0) }
+                                    { label: 'Ticket Promedio', value: primaryAmount(summary?.avgTicket || 0) }
                                 ]}
                                 filename="Tendencias_Ventas_Ticket"
                                 bcvRate={bcvRate}
@@ -2569,7 +2584,7 @@ export default function Reports() {
                                             <span className="font-bold text-gray-700 dark:text-gray-300">{d.date}</span>
                                             <div className="flex items-center gap-3">
                                                 <span className="text-gray-400 font-mono text-[11px]">{d.salesCount} ventas</span>
-                                                <span className="font-black text-gray-900 dark:text-white font-mono">{formatUSD(d.volumeUsd)}</span>
+                                                <span className="font-black text-gray-900 dark:text-white font-mono">{primaryAmount(d.volumeUsd)}</span>
                                             </div>
                                         </div>
                                         <div className="w-full bg-gray-100 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
@@ -2618,7 +2633,7 @@ export default function Reports() {
                                 }))}
                                 summaryCards={[
                                     { label: 'Cajeros Activos', value: `${cashierReport.length}` },
-                                    { label: 'Total Recaudado', value: formatUSD(cashierReport.reduce((a, b) => a + (b.totalRevenueUsd || 0), 0)) }
+                                    { label: 'Total Recaudado', value: primaryAmount(cashierReport.reduce((a, b) => a + (b.totalRevenueUsd || 0), 0)) }
                                 ]}
                                 filename="Rendimiento_Cajeros_Vendedores"
                                 bcvRate={bcvRate}
@@ -2641,11 +2656,11 @@ export default function Reports() {
                                     <div className="space-y-1 font-mono text-xs pt-2 border-t border-gray-200 dark:border-gray-700">
                                         <div className="flex justify-between">
                                             <span className="font-sans text-gray-500">Total Facturado:</span>
-                                            <span className="font-black text-gray-900 dark:text-white">{formatUSD(c.totalRevenueUsd)}</span>
+                                            <span className="font-black text-gray-900 dark:text-white">{primaryAmount(c.totalRevenueUsd, c.totalRevenueBs)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="font-sans text-gray-500">Ticket Promedio:</span>
-                                            <span className="text-blue-600 font-bold">{formatUSD(c.avgTicketUsd)}</span>
+                                            <span className="text-blue-600 font-bold">{primaryAmount(c.avgTicketUsd)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="font-sans text-gray-500">Pares Vendidos:</span>
@@ -2707,7 +2722,7 @@ export default function Reports() {
                                 }))}
                                 summaryCards={[
                                     { label: 'Total Marcas', value: `${salesByBrandReport.totalBrands}` },
-                                    { label: 'Facturación Total', value: formatUSD(salesByBrandReport.brands.reduce((s, b) => s + (b.revenueUsd || 0), 0)) }
+                                    { label: 'Facturación Total', value: primaryAmount(salesByBrandReport.brands.reduce((s, b) => s + (b.revenueUsd || 0), 0)) }
                                 ]}
                                 filename="Participacion_Mercado_Marcas"
                                 bcvRate={bcvRate}
@@ -2723,7 +2738,7 @@ export default function Reports() {
                                             <span>👟</span> {b.brand}
                                         </span>
                                         <span className="font-mono font-bold text-gray-700 dark:text-gray-300">
-                                            {formatUSD(b.revenueUsd)} ({b.share}%)
+                                            {primaryAmount(b.revenueUsd, b.revenueBs)} ({b.share}%)
                                         </span>
                                     </div>
                                     <div className="w-full bg-gray-100 dark:bg-gray-700 h-3 rounded-full overflow-hidden">
@@ -2793,7 +2808,7 @@ export default function Reports() {
                                         </div>
                                         <div className="flex justify-between text-[10px] text-gray-400 font-mono mt-1">
                                             <span>{h.unitsSold} pares</span>
-                                            <span>{formatUSD(h.revenueUsd)}</span>
+                                            <span>{primaryAmount(h.revenueUsd, h.revenueBs)}</span>
                                         </div>
                                     </div>
                                 );

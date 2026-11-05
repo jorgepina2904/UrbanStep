@@ -150,7 +150,7 @@ export default function FinancialProjectionReport({ sales = [], products = [], p
                         Variables del Modelo de Proyección
                     </span>
                     <span className="text-[11px] text-gray-400 font-mono">
-                        Run-Rate Actual: {formatUSD(baselineMetrics.dailyRunRate)} / día
+                        Run-Rate Actual: {isSwapped ? formatBs(baselineMetrics.dailyRunRate * rate) : formatUSD(baselineMetrics.dailyRunRate)} / día
                     </span>
                 </div>
 
@@ -262,7 +262,7 @@ export default function FinancialProjectionReport({ sales = [], products = [], p
                         {projections.breakEvenUnitsMonthly} pares
                     </p>
                     <p className="text-[11px] font-mono font-bold text-gray-500">
-                        Meta: {formatUSD(projections.breakEvenRevenueMonthly)} / mes
+                        Meta: {isSwapped ? formatBs(projections.breakEvenRevenueMonthly * rate) : formatUSD(projections.breakEvenRevenueMonthly)} / mes
                     </p>
                     <span className="text-[10px] text-gray-400 block pt-1 border-t border-gray-100 dark:border-gray-700">
                         Cubre alquiler, nómina y servicios sin pérdida
@@ -275,7 +275,7 @@ export default function FinancialProjectionReport({ sales = [], products = [], p
                         Capital Requerido para Reabastecer
                     </span>
                     <p className="text-2xl font-black text-amber-600 dark:text-amber-400">
-                        {formatUSD(projections.requiredRestockCapitalUsd)}
+                        {isSwapped ? formatBs(projections.requiredRestockCapitalUsd * rate) : formatUSD(projections.requiredRestockCapitalUsd)}
                     </p>
                     <p className="text-[11px] font-mono font-bold text-gray-500">
                         Para reposición de {projections.requiredRestockUnits} pares
@@ -305,8 +305,8 @@ export default function FinancialProjectionReport({ sales = [], products = [], p
                             <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 font-bold uppercase text-[10px] tracking-wider">
                                 <th className="py-3 px-4 text-left">Periodo</th>
                                 <th className="py-3 px-4 text-center">Pares Estimados</th>
-                                <th className="py-3 px-4 text-right">Ingreso Bruto ($ USD)</th>
-                                <th className="py-3 px-4 text-right">Equivalente Oficial (Bs.)</th>
+                                <th className="py-3 px-4 text-right">{isSwapped ? 'Ingreso Bruto (Bs.)' : 'Ingreso Bruto ($ USD)'}</th>
+                                <th className="py-3 px-4 text-right">{isSwapped ? 'Equivalente ($ USD)' : 'Equivalente Oficial (Bs.)'}</th>
                                 <th className="py-3 px-4 text-right">Costo Mercancía (COGS)</th>
                                 <th className="py-3 px-4 text-right">Utilidad Bruta</th>
                             </tr>
@@ -324,16 +324,16 @@ export default function FinancialProjectionReport({ sales = [], products = [], p
                                             {m.units} pares
                                         </td>
                                         <td className="py-3 px-4 text-right font-bold text-gray-900 dark:text-white">
-                                            {formatUSD(m.rev)}
+                                            {isSwapped ? formatBs(m.rev * rate) : formatUSD(m.rev)}
                                         </td>
                                         <td className="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                                            {formatBs(m.rev * rate)}
+                                            {isSwapped ? formatUSD(m.rev) : formatBs(m.rev * rate)}
                                         </td>
                                         <td className="py-3 px-4 text-right text-gray-500">
-                                            {formatUSD(cogs)}
+                                            {isSwapped ? formatBs(cogs * rate) : formatUSD(cogs)}
                                         </td>
                                         <td className="py-3 px-4 text-right font-black text-indigo-600 dark:text-indigo-400">
-                                            {formatUSD(gross)}
+                                            {isSwapped ? formatBs(gross * rate) : formatUSD(gross)}
                                         </td>
                                     </tr>
                                 );

@@ -4,56 +4,66 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { getCommissionConfig, saveCommissionConfig, getQuincenaRange } from '../services/commissionService';
+import { useCurrency } from '../contexts/CurrencyContext';
 
 const localDate = (iso) => {
     const d = new Date(iso);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const MarginTable = ({ title, rows, labelKey, formatUSD }) => (
-    <Card className="p-6 space-y-3">
-        <h3 className="font-bold text-sm text-gray-900 dark:text-white">{title}</h3>
-        <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-                <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
-                        <th className="px-3 py-2 text-left">{labelKey === 'name' ? 'Modelo' : labelKey === 'brand' ? 'Marca' : 'Categoría'}</th>
-                        <th className="px-3 py-2 text-right">Pares</th>
-                        <th className="px-3 py-2 text-right">Ingresos</th>
-                        <th className="px-3 py-2 text-right">Costo</th>
-                        <th className="px-3 py-2 text-right">Utilidad</th>
-                        <th className="px-3 py-2 text-right">Margen</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
-                    {rows.map((r) => (
-                        <tr key={r[labelKey]}>
-                            <td className="px-3 py-2 font-sans font-medium">
-                                {r[labelKey]}{r.estimated && <span title="Costo estimado: el producto no tiene costo cargado" className="ml-1 text-amber-600">*</span>}
-                            </td>
-                            <td className="px-3 py-2 text-right">{r.units}</td>
-                            <td className="px-3 py-2 text-right">{formatUSD(r.revenue)}</td>
-                            <td className="px-3 py-2 text-right">{formatUSD(r.cost)}</td>
-                            <td className={`px-3 py-2 text-right font-bold ${r.profit < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{formatUSD(r.profit)}</td>
-                            <td className={`px-3 py-2 text-right font-bold ${r.marginPct < 0 ? 'text-red-600' : 'text-blue-600'}`}>{r.marginPct.toFixed(1)}%</td>
+const MarginTable = ({ title, rows, labelKey }) => {
+    const { isSwapped, primaryAmount } = useCurrency();
+    const currLabel = isSwapped ? 'Bs.' : '$';
+
+    return (
+        <Card className="p-6 space-y-3">
+            <h3 className="font-bold text-sm text-gray-900 dark:text-white">{title}</h3>
+            <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                    <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
+                            <th className="px-3 py-2 text-left">{labelKey === 'name' ? 'Modelo' : labelKey === 'brand' ? 'Marca' : 'Categoría'}</th>
+                            <th className="px-3 py-2 text-right">Pares</th>
+                            <th className="px-3 py-2 text-right">Ingresos ({currLabel})</th>
+                            <th className="px-3 py-2 text-right">Costo ({currLabel})</th>
+                            <th className="px-3 py-2 text-right">Utilidad ({currLabel})</th>
+                            <th className="px-3 py-2 text-right">Margen</th>
                         </tr>
-                    ))}
-                    {rows.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 font-sans">Sin ventas en el periodo.</td></tr>}
-                </tbody>
-            </table>
-        </div>
-    </Card>
-);
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
+                        {rows.map((r) => (
+                            <tr key={r[labelKey]}>
+                                <td className="px-3 py-2 font-sans font-medium">
+                                    {r[labelKey]}{r.estimated && <span title="Costo estimado: el producto no tiene costo cargado" className="ml-1 text-amber-600">*</span>}
+                                </td>
+                                <td className="px-3 py-2 text-right">{r.units}</td>
+                                <td className="px-3 py-2 text-right">{primaryAmount(r.revenue)}</td>
+                                <td className="px-3 py-2 text-right">{primaryAmount(r.cost)}</td>
+                                <td className={`px-3 py-2 text-right font-bold ${r.profit < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{primaryAmount(r.profit)}</td>
+                                <td className={`px-3 py-2 text-right font-bold ${r.marginPct < 0 ? 'text-red-600' : 'text-blue-600'}`}>{r.marginPct.toFixed(1)}%</td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 font-sans">Sin ventas en el periodo.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    );
+};
 
 /** Rentabilidad: margen bruto y neto por marca, categoría y modelo (Costo Promedio Ponderado). */
-export function ProfitabilityView({ report, formatUSD, Exporter, bcvRate }) {
+export function ProfitabilityView({ report, Exporter, bcvRate }) {
+    const { isSwapped, primaryAmount, secondaryAmount } = useCurrency();
+    const currLabel = isSwapped ? 'Bs.' : '$';
+
     const cards = [
-        { label: 'Ingresos (sin IVA)', value: formatUSD(report.totalRevenueUsd), tone: 'border-l-blue-600' },
-        { label: 'Costo de Ventas (CPP)', value: formatUSD(report.totalCostUsd), tone: 'border-l-gray-500' },
-        { label: `Utilidad Bruta · ${report.profitMarginPct.toFixed(1)}%`, value: formatUSD(report.grossProfitUsd), tone: 'border-l-emerald-600' },
-        { label: 'Comisiones de Vendedores', value: formatUSD(report.commissionsUsd), tone: 'border-l-amber-500' },
-        { label: `Utilidad Neta · ${report.netMarginPct.toFixed(1)}%`, value: formatUSD(report.netProfitUsd), tone: 'border-l-purple-600' }
+        { label: 'Ingresos (sin IVA)', value: primaryAmount(report.totalRevenueUsd), subvalue: secondaryAmount(report.totalRevenueUsd), tone: 'border-l-blue-600' },
+        { label: 'Costo de Ventas (CPP)', value: primaryAmount(report.totalCostUsd), subvalue: secondaryAmount(report.totalCostUsd), tone: 'border-l-gray-500' },
+        { label: `Utilidad Bruta · ${report.profitMarginPct.toFixed(1)}%`, value: primaryAmount(report.grossProfitUsd), subvalue: secondaryAmount(report.grossProfitUsd), tone: 'border-l-emerald-600' },
+        { label: 'Comisiones de Vendedores', value: primaryAmount(report.commissionsUsd), subvalue: secondaryAmount(report.commissionsUsd), tone: 'border-l-amber-500' },
+        { label: `Utilidad Neta · ${report.netMarginPct.toFixed(1)}%`, value: primaryAmount(report.netProfitUsd), subvalue: secondaryAmount(report.netProfitUsd), tone: 'border-l-purple-600' }
     ];
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -61,6 +71,9 @@ export function ProfitabilityView({ report, formatUSD, Exporter, bcvRate }) {
                     <Card key={c.label} className={`p-4 border-l-4 ${c.tone}`}>
                         <p className="text-xs font-semibold text-gray-500">{c.label}</p>
                         <p className="text-xl font-black text-gray-900 dark:text-white mt-1">{c.value}</p>
+                        {c.subvalue && (
+                            <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{c.subvalue}</p>
+                        )}
                     </Card>
                 ))}
             </div>
@@ -86,31 +99,34 @@ export function ProfitabilityView({ report, formatUSD, Exporter, bcvRate }) {
                         { key: 'name', header: 'Modelo' },
                         { key: 'brand', header: 'Marca' },
                         { key: 'units', header: 'Pares' },
-                        { key: 'revenue', header: 'Ingresos ($)' },
-                        { key: 'cost', header: 'Costo ($)' },
-                        { key: 'profit', header: 'Utilidad ($)' },
+                        { key: 'revenue', header: `Ingresos (${currLabel})` },
+                        { key: 'cost', header: `Costo (${currLabel})` },
+                        { key: 'profit', header: `Utilidad (${currLabel})` },
                         { key: 'marginPct', header: 'Margen (%)' }
                     ]}
                     rows={report.byProduct}
                     summaryCards={[
-                        { label: 'Utilidad Bruta', value: formatUSD(report.grossProfitUsd) },
-                        { label: 'Comisiones', value: formatUSD(report.commissionsUsd) },
-                        { label: 'Utilidad Neta', value: formatUSD(report.netProfitUsd) }
+                        { label: 'Utilidad Bruta', value: primaryAmount(report.grossProfitUsd) },
+                        { label: 'Comisiones', value: primaryAmount(report.commissionsUsd) },
+                        { label: 'Utilidad Neta', value: primaryAmount(report.netProfitUsd) }
                     ]}
                     filename="Rentabilidad_Margen_Modelos"
                     bcvRate={bcvRate}
                 />
             </Card>
 
-            <MarginTable title="Por marca" rows={report.byBrand} labelKey="brand" formatUSD={formatUSD} />
-            <MarginTable title="Por categoría" rows={report.byCategory} labelKey="category" formatUSD={formatUSD} />
-            <MarginTable title="Por modelo (top 15 por utilidad)" rows={report.byProduct.slice(0, 15)} labelKey="name" formatUSD={formatUSD} />
+            <MarginTable title="Por marca" rows={report.byBrand} labelKey="brand" />
+            <MarginTable title="Por categoría" rows={report.byCategory} labelKey="category" />
+            <MarginTable title="Por modelo (top 15 por utilidad)" rows={report.byProduct.slice(0, 15)} labelKey="name" />
         </div>
     );
 }
 
 /** Comisiones por vendedor con base configurable y atajos de quincena. */
-export function CommissionsView({ report, formatUSD, Exporter, bcvRate, onSetRange, onConfigSaved }) {
+export function CommissionsView({ report, Exporter, bcvRate, onSetRange, onConfigSaved }) {
+    const { isSwapped, primaryAmount, secondaryAmount } = useCurrency();
+    const currLabel = isSwapped ? 'Bs.' : '$';
+
     const [config, setConfig] = useState(() => getCommissionConfig());
     const [newSeller, setNewSeller] = useState('');
     const [newSellerPct, setNewSellerPct] = useState('');
@@ -141,7 +157,7 @@ export function CommissionsView({ report, formatUSD, Exporter, bcvRate, onSetRan
                             <Users className="w-5 h-5 text-blue-600" /> Comisiones por Vendedor
                         </h3>
                         <p className="text-xs text-gray-500">
-                            Base: {report.base === 'margen' ? 'margen de ganancia' : 'ventas sin IVA'} · neto de notas de crédito · total del periodo {formatUSD(report.totalCommissionUsd)}
+                            Base: {report.base === 'margen' ? 'margen de ganancia' : 'ventas sin IVA'} · neto de notas de crédito · total del periodo {primaryAmount(report.totalCommissionUsd)}
                         </p>
                     </div>
                     <div className="flex gap-2">
@@ -207,12 +223,12 @@ export function CommissionsView({ report, formatUSD, Exporter, bcvRate, onSetRan
                         { key: 'seller', header: 'Vendedor' },
                         { key: 'salesCount', header: 'Facturas' },
                         { key: 'creditNotesCount', header: 'Notas de crédito' },
-                        { key: 'netBaseUsd', header: 'Base neta ($)' },
+                        { key: 'netBaseUsd', header: `Base neta (${currLabel})` },
                         { key: 'ratePct', header: '% comisión' },
-                        { key: 'commissionUsd', header: 'Comisión ($)' }
+                        { key: 'commissionUsd', header: `Comisión (${currLabel})` }
                     ]}
                     rows={report.rows}
-                    summaryCards={[{ label: 'Total comisiones', value: formatUSD(report.totalCommissionUsd) }]}
+                    summaryCards={[{ label: 'Total comisiones', value: primaryAmount(report.totalCommissionUsd) }]}
                     filename="Comisiones_Vendedores"
                     bcvRate={bcvRate}
                 />
@@ -224,9 +240,9 @@ export function CommissionsView({ report, formatUSD, Exporter, bcvRate, onSetRan
                                 <th className="px-3 py-2 text-left">Vendedor</th>
                                 <th className="px-3 py-2 text-center">Facturas</th>
                                 <th className="px-3 py-2 text-center">NC</th>
-                                <th className="px-3 py-2 text-right">Base neta</th>
+                                <th className="px-3 py-2 text-right">Base neta ({currLabel})</th>
                                 <th className="px-3 py-2 text-right">%</th>
-                                <th className="px-3 py-2 text-right">Comisión</th>
+                                <th className="px-3 py-2 text-right">Comisión ({currLabel})</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800 font-mono text-[11px]">
@@ -235,9 +251,9 @@ export function CommissionsView({ report, formatUSD, Exporter, bcvRate, onSetRan
                                     <td className="px-3 py-2 font-sans font-medium">{r.seller}{r.estimatedCostLines > 0 && <span title="Margen con costo estimado" className="ml-1 text-amber-600">*</span>}</td>
                                     <td className="px-3 py-2 text-center">{r.salesCount}</td>
                                     <td className="px-3 py-2 text-center">{r.creditNotesCount}</td>
-                                    <td className="px-3 py-2 text-right">{formatUSD(r.netBaseUsd)}</td>
+                                    <td className="px-3 py-2 text-right">{primaryAmount(r.netBaseUsd)}</td>
                                     <td className="px-3 py-2 text-right">{r.ratePct}%</td>
-                                    <td className="px-3 py-2 text-right font-black text-emerald-600">{formatUSD(r.commissionUsd)}</td>
+                                    <td className="px-3 py-2 text-right font-black text-emerald-600">{primaryAmount(r.commissionUsd)}</td>
                                 </tr>
                             ))}
                             {report.rows.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400 font-sans">Sin ventas en el periodo.</td></tr>}

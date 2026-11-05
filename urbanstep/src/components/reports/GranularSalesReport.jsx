@@ -286,7 +286,12 @@ export default function GranularSalesReport({ sales = [] }) {
                 </div>
                 <div className="p-3.5 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
                     <span className="text-[11px] text-gray-400 font-semibold block">Utilidad Bruta Generada</span>
-                    <p className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{formatUSD(totals.profitUsd)}</p>
+                    <p className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                        {isSwapped ? formatBs(totals.profitUsd * rate) : formatUSD(totals.profitUsd)}
+                    </p>
+                    <span className="text-[10px] text-emerald-600 font-mono font-bold block">
+                        {isSwapped ? formatUSD(totals.profitUsd) : formatBs(totals.profitUsd * rate)}
+                    </span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm">
                     <span className="text-[11px] text-gray-400 font-semibold block">Margen Promedio Real</span>
