@@ -44,7 +44,10 @@ CREATE INDEX IF NOT EXISTS idx_stock_sucursal_producto ON stock_sucursal (produc
 CREATE OR REPLACE FUNCTION mover_stock_sucursal(
     p_sucursal VARCHAR, p_producto VARCHAR, p_nombre VARCHAR, p_sku VARCHAR,
     p_color VARCHAR, p_talla VARCHAR, p_delta INTEGER
-) RETURNS INTEGER AS $$
+) RETURNS INTEGER 
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 DECLARE nueva INTEGER;
 BEGIN
     INSERT INTO stock_sucursal (sucursal_id, producto_id, nombre_producto, sku, color, talla, cantidad)
@@ -57,7 +60,7 @@ BEGIN
     END IF;
     RETURN nueva;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- 3) Traslados entre ubicaciones
 CREATE TABLE IF NOT EXISTS traslados (
@@ -75,6 +78,8 @@ CREATE TABLE IF NOT EXISTS traslados (
     recibido_el TIMESTAMPTZ,
     CHECK (origen_id <> destino_id)
 );
+CREATE INDEX IF NOT EXISTS idx_traslados_destino_id ON traslados(destino_id);
+CREATE INDEX IF NOT EXISTS idx_traslados_origen_id ON traslados(origen_id);
 
 CREATE TABLE IF NOT EXISTS traslado_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -117,7 +122,7 @@ CREATE TABLE IF NOT EXISTS lote_garantia_items (
 );
 CREATE INDEX IF NOT EXISTS idx_lote_items_lote ON lote_garantia_items (lote_id);
 
--- 5) Seguridad (mismo criterio del resto del esquema)
+-- 5) Seguridad (mismo criterio del resto del esquema, política unificada para evitar duplicados en SELECT)
 DO $$
 DECLARE t TEXT;
 BEGIN
@@ -125,8 +130,8 @@ BEGIN
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS "Lectura %1$s" ON %1$I', t);
         EXECUTE format('DROP POLICY IF EXISTS "Mutacion %1$s" ON %1$I', t);
-        EXECUTE format('CREATE POLICY "Lectura %1$s" ON %1$I FOR SELECT USING (true)', t);
-        EXECUTE format('CREATE POLICY "Mutacion %1$s" ON %1$I FOR ALL USING (true)', t);
+        EXECUTE format('DROP POLICY IF EXISTS "acceso_total_%1$s" ON %1$I', t);
+        EXECUTE format('CREATE POLICY "acceso_total_%1$s" ON %1$I FOR ALL USING (true) WITH CHECK (true)', t);
     END LOOP;
 END $$;
 

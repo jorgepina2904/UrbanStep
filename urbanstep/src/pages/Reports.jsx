@@ -40,9 +40,16 @@ import Button from '../ui/Button';
 import { Spinner } from '../ui/Spinner';
 import { reportService } from '../services/reportService';
 import { accountingService } from '../services/accountingService';
-import { auditService } from '../services/auditService';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { reportExporter } from '../utils/reportExporter';
+import { saleService } from '../services/saleServices';
+import { productService } from '../services/productService';
+import { purchaseService } from '../services/purchaseService';
+import { auditService } from '../services/auditService';
+import FinancialProjectionReport from '../components/reports/FinancialProjectionReport';
+import GranularSalesReport from '../components/reports/GranularSalesReport';
+import MotorizadosPayoutReport from '../components/reports/MotorizadosPayoutReport';
+import CurrencyToggle from '../components/CurrencyToggle';
 
 /**
  * Grupo de Botones de Exportación Formal (Excel .xlsx y PDF oficial con jsPDF)
@@ -136,6 +143,11 @@ export default function Reports() {
     const [tableSearch, setTableSearch] = useState('');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
+
+    // Datos crudos para reportes CFO
+    const [rawSales, setRawSales] = useState([]);
+    const [rawProducts, setRawProducts] = useState([]);
+    const [rawPurchases, setRawPurchases] = useState([]);
 
     // Estado para Capa 1: Contabilidad Formal
     const [planCuentas, setPlanCuentas] = useState([]);
@@ -248,6 +260,16 @@ export default function Reports() {
 
             const withholdingsData = await reportService.getWithholdingsReport(rangeParams, seniatPurchasesData).catch(() => null);
 
+            // Cargar datos transaccionales para reportes CFO
+            const [salesList, productsList, purchasesList] = await Promise.all([
+                saleService.getAll().catch(() => []),
+                productService.getAll().catch(() => []),
+                purchaseService.getAll().catch(() => [])
+            ]);
+            setRawSales(Array.isArray(salesList) ? salesList : []);
+            setRawProducts(Array.isArray(productsList) ? productsList : []);
+            setRawPurchases(Array.isArray(purchasesList) ? purchasesList : []);
+
             setPlanCuentas(accountingData?.plan || []);
             setLibroDiario(accountingData?.diario || []);
             setLibroMayor(accountingData?.mayor || []);
@@ -317,20 +339,19 @@ export default function Reports() {
         toast.success(`Reporte ${filename} descargado`);
     };
 
-    // Estructura de las 6 Capas Funcionales del SGF
+    // Estructura de las 6 Capas Funcionales del SGF Depurada por el CFO
     const reportCategories = useMemo(() => [
         {
             id: 'contabilidad',
             label: 'Capa 1: Contabilidad Formal',
             subtitle: 'VEN-NIIF & Partida Doble',
-            badge: '5 Libros',
+            badge: '4 Libros',
             icon: BookOpen,
             reports: [
                 { id: 'libro_diario', label: 'Libro Diario (Doble Partida)', icon: BookOpen },
                 { id: 'libro_mayor', label: 'Libro Mayor General', icon: Layers },
                 { id: 'balance_comprobacion', label: 'Balance de Comprobación', icon: CheckCircle2 },
                 { id: 'estados_financieros', label: 'Estados Financieros (Resultados & Balance)', icon: Landmark },
-                { id: 'plan_cuentas', label: 'Plan de Cuentas Maestro', icon: FileSpreadsheet },
             ]
         },
         {
@@ -348,7 +369,7 @@ export default function Reports() {
         },
         {
             id: 'tesoreria',
-            label: 'Capa 3: Tesorería',
+            label: 'Capa 3: Tesorería & Caja',
             subtitle: 'Caja + Bancos Consolidado',
             badge: '3 Módulos',
             icon: CreditCard,
@@ -359,45 +380,41 @@ export default function Reports() {
             ]
         },
         {
+            id: 'ventas_cfo',
+            label: 'Capa 4: Ventas & Proyecciones (CFO)',
+            subtitle: 'Forecasting & Análisis Específico',
+            badge: 'Nuevo CFO',
+            icon: TrendingUp,
+            reports: [
+                { id: 'reporte_ventas_especifico', label: 'Reporte de Ventas Específico (Multi-Filtro)', icon: FileSpreadsheet },
+                { id: 'reporte_proyeccion', label: 'Proyección Financiera & Break-Even (Forecasting)', icon: TrendingUp },
+                { id: 'pago_motorizados', label: 'Modalidad de Pago a Motorizados & Liquidaciones', icon: Truck },
+            ]
+        },
+        {
             id: 'operaciones',
-            label: 'Capa 4: Operaciones e Inventario',
+            label: 'Capa 5: Operaciones e Inventario',
             subtitle: 'Kardex & Logística',
-            badge: '5 Módulos',
+            badge: '4 Módulos',
             icon: Package,
             reports: [
                 { id: 'kardex_valorizado', label: 'Kardex Valorizado PEPS / Promedio', icon: Package },
                 { id: 'stock_critico', label: 'Stock Crítico & Alertas de Reposición', icon: AlertTriangle },
                 { id: 'rotacion_productos', label: 'Top Calzados Más Vendidos vs Rotación', icon: Flame },
-                { id: 'logistica_delivery', label: 'Logística de Delivery & Envíos', icon: Truck },
                 { id: 'garantias_devoluciones', label: 'Control de Cambios y Garantías', icon: RotateCcw },
             ]
         },
         {
             id: 'bi',
-            label: 'Capa 5: BI / Dashboards Ejecutivos',
-            subtitle: 'Analítica Visual & Exportable',
-            badge: '4 Dashboards',
+            label: 'Capa 6: BI & Rentabilidad',
+            subtitle: 'Analítica Visual & Márgenes',
+            badge: '4 Módulos',
             icon: BarChart3,
             reports: [
                 { id: 'bi_tendencias', label: 'Tendencias & Ticket Promedio', icon: BarChart3 },
-                { id: 'bi_cajeros', label: 'Rendimiento de Vendedores/Cajeros', icon: Users },
                 { id: 'bi_rentabilidad', label: 'Rentabilidad y Margen Real (CPP)', icon: TrendingUp },
-                { id: 'bi_comisiones', label: 'Comisiones por Vendedor', icon: DollarSign },
                 { id: 'bi_marcas', label: 'Ventas y Participación por Marca', icon: Sparkles },
-                { id: 'bi_trafico', label: 'Auditoría de Tráfico Horario & Picos', icon: Clock },
-            ]
-        },
-        {
-            id: 'admin',
-            label: 'Capa 6: Administración & Auditoría',
-            subtitle: 'Trazabilidad & Seguridad',
-            badge: '4 Módulos',
-            icon: Shield,
-            reports: [
                 { id: 'log_auditoria', label: 'Log Inmutable de Auditoría del Sistema', icon: Shield },
-                { id: 'impuestos_config', label: 'Parámetros Fiscales y Tributarios', icon: Sliders },
-                { id: 'matriz_rbac', label: 'Matriz de Permisos y Roles (RBAC)', icon: Lock },
-                { id: 'respaldos_bd', label: 'Respaldos e Integridad de Base de Datos', icon: Database },
             ]
         }
     ], []);
@@ -549,6 +566,9 @@ export default function Reports() {
                             <span className="hidden sm:inline">Consolidando libros SGF...</span>
                         </div>
                     )}
+
+                    {/* Botón Conversor Global ($ ⇄ Bs.) */}
+                    <CurrencyToggle />
 
                     {/* Tasa BCV Oficial */}
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-700 dark:text-blue-300">
@@ -2861,238 +2881,17 @@ export default function Reports() {
                 </div>
             )}
 
-            {/* 6.2 Parámetros Fiscales y Tributarios con Exportación */}
-            {mainCategory === 'admin' && activeReportId === 'impuestos_config' && (
-                <div className="space-y-6">
-                    <Card className="p-6 space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                    <Sliders className="w-5 h-5 text-blue-600" />
-                                    Parámetros Fiscales y Tributarios Vigentes (SENIAT)
-                                </h3>
-                                <p className="text-xs text-gray-500">Configuración impositiva aplicable a UrbanStep Venezuela C.A.</p>
-                            </div>
-                            <ExportButtonGroup
-                                reportTitle="Parámetros Fiscales y Tributarios Vigentes"
-                                categoryName="Capa 6: Administración"
-                                columns={[
-                                    { key: 'tributo', header: 'Tributo / Parámetro Fiscal' },
-                                    { key: 'alicuota', header: 'Alícuota / Valor' },
-                                    { key: 'baseLegal', header: 'Base Legal' },
-                                    { key: 'organismo', header: 'Organismo Fiscal' }
-                                ]}
-                                rows={[
-                                    { tributo: 'Impuesto al Valor Agregado (IVA General)', alicuota: '16.00%', baseLegal: 'Ley del IVA Art. 27', organismo: 'SENIAT' },
-                                    { tributo: 'Impuesto a Grandes Transacciones Financieras (IGTF Divisas)', alicuota: '3.00%', baseLegal: 'Gaceta Oficial 6.687 Art. 13', organismo: 'SENIAT' },
-                                    { tributo: 'Retención Estándar de IVA Proveedores', alicuota: '75.00%', baseLegal: 'Providencia SNAT/2015/0049 Art. 4', organismo: 'SENIAT (Agente Especial)' },
-                                    { tributo: 'Retención Especial de IVA (Sujetos Pasivos)', alicuota: '100.00%', baseLegal: 'Providencia SNAT/2015/0049 Art. 5', organismo: 'SENIAT' },
-                                    { tributo: 'Retención ISLR Bienes Muebles', alicuota: '2.00%', baseLegal: 'Decreto 1.808 Art. 9', organismo: 'SENIAT' },
-                                    { tributo: 'Retención ISLR Servicios y Fletes', alicuota: '5.00%', baseLegal: 'Decreto 1.808 Art. 9 Num. 11', organismo: 'SENIAT' },
-                                    { tributo: 'Tasa Oficial de Referencia BCV', alicuota: `${Number(bcvRate || bcvService.getRate().rate).toFixed(2)} VES/USD`, baseLegal: 'Convenio Cambiario N° 1', organismo: 'Banco Central de Venezuela' }
-                                ]}
-                                summaryCards={[
-                                    { label: 'IVA General', value: '16.00%' },
-                                    { label: 'IGTF Divisas', value: '3.00%' },
-                                    { label: 'Retención IVA', value: '75.00%' },
-                                    { label: 'Tasa BCV', value: `${Number(bcvRate || bcvService.getRate().rate).toFixed(2)} Bs/$` }
-                                ]}
-                                filename="Parametros_Fiscales_SENIAT"
-                                bcvRate={bcvRate}
-                                onExportCSV={() => handleExportCSV([
-                                    { Tributo: 'IVA General', Alicuota: '16.00%' },
-                                    { Tributo: 'IGTF Divisas', Alicuota: '3.00%' },
-                                    { Tributo: 'Retencion IVA', Alicuota: '75.00%' },
-                                    { Tributo: 'Tasa BCV', Alicuota: bcvRate }
-                                ], 'Parametros_Fiscales')}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 space-y-2">
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Impuesto al Valor Agregado (IVA General):</span>
-                                    <span className="text-blue-600 font-black">16.00%</span>
-                                </div>
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Impuesto a Grandes Transacciones (IGTF Divisas):</span>
-                                    <span className="text-purple-600 font-black">3.00%</span>
-                                </div>
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Retención Estándar de IVA Proveedores:</span>
-                                    <span className="text-emerald-600 font-black">75.00%</span>
-                                </div>
-                                <div className="flex justify-between py-1">
-                                    <span className="font-sans font-bold">Retención Especial de IVA (Sujetos Pasivos):</span>
-                                    <span className="text-emerald-600 font-black">100.00%</span>
-                                </div>
-                            </div>
-
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 space-y-2">
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Retención ISLR Bienes Muebles:</span>
-                                    <span className="text-indigo-600 font-black">2.00%</span>
-                                </div>
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Retención ISLR Servicios y Fletes:</span>
-                                    <span className="text-indigo-600 font-black">5.00%</span>
-                                </div>
-                                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-700">
-                                    <span className="font-sans font-bold">Tasa Oficial de Referencia BCV:</span>
-                                    <span className="text-gray-900 dark:text-white font-black">{Number(bcvRate || bcvService.getRate().rate).toFixed(2)} VES/USD</span>
-                                </div>
-                                <div className="flex justify-between py-1">
-                                    <span className="font-sans font-bold">Moneda Funcional y de Registro:</span>
-                                    <span className="text-gray-900 dark:text-white font-black">Dual (VES / USD)</span>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
+            {/* Capa 4: Ventas & Proyecciones (CFO) */}
+            {mainCategory === 'ventas_cfo' && activeReportId === 'reporte_ventas_especifico' && (
+                <GranularSalesReport sales={rawSales} />
             )}
 
-            {/* 6.3 Matriz de Permisos RBAC con Exportación */}
-            {mainCategory === 'admin' && activeReportId === 'matriz_rbac' && (
-                <div className="space-y-6">
-                    <Card className="p-6 space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                    <Lock className="w-5 h-5 text-blue-600" />
-                                    Matriz de Control de Acceso Basado en Roles (RBAC)
-                                </h3>
-                                <p className="text-xs text-gray-500">Privilegios y permisos asignados por capa funcional en el sistema SGF.</p>
-                            </div>
-                            <ExportButtonGroup
-                                reportTitle="Matriz de Roles y Permisos RBAC"
-                                categoryName="Capa 6: Administración"
-                                columns={[
-                                    { key: 'layer', header: 'Capa Funcional' },
-                                    { key: 'admin', header: 'Administrador' },
-                                    { key: 'cashier', header: 'Cajero POS' },
-                                    { key: 'auditor', header: 'Auditor Fiscal' },
-                                    { key: 'warehouse', header: 'Almacenista' },
-                                    { key: 'courier', header: 'Motorizado Delivery' }
-                                ]}
-                                rows={[
-                                    { layer: 'Capa 1: Contabilidad Formal VEN-NIIF', admin: 'Acceso Total (Lectura / Asientos)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
-                                    { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: 'Acceso Total (Libros / Cierre)', cashier: 'Sin Acceso', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
-                                    { layer: 'Capa 3: Tesorería & Arqueos (Cortes Z)', admin: 'Acceso Total', cashier: 'Operativo (Apertura / Arqueo)', auditor: 'Solo Lectura Oficial', warehouse: 'Sin Acceso', courier: 'Sin Acceso' },
-                                    { layer: 'Capa 4: Operaciones & Logística Delivery', admin: 'Acceso Total', cashier: 'Consulta Stock', auditor: 'Solo Lectura Oficial', warehouse: 'Gestión de Almacén', courier: 'Despacho & Rutas' },
-                                    { layer: 'Capa 5: BI / Dashboards Ejecutivos', admin: 'Acceso Total', cashier: 'Acceso a Metas', auditor: 'Solo Lectura Oficial', warehouse: 'Consulta', courier: 'Sin Acceso' },
-                                    { layer: 'Capa 6: Administración, Impuestos & Logs', admin: 'Acceso Total (Config / Backup)', cashier: 'Sin Acceso', auditor: 'Auditoría de Logs', warehouse: 'Sin Acceso', courier: 'Sin Acceso' }
-                                ]}
-                                summaryCards={[
-                                    { label: 'Roles de Usuario', value: '5' },
-                                    { label: 'Capas Protegidas', value: '6' }
-                                ]}
-                                filename="Matriz_Roles_Permisos_RBAC"
-                                bcvRate={bcvRate}
-                                onExportCSV={() => handleExportCSV([
-                                    { Capa: 'Contabilidad', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura', Motorizado: 'No' },
-                                    { Capa: 'Fiscal', Admin: 'Total', Cajero: 'No', Auditor: 'Lectura', Motorizado: 'No' },
-                                    { Capa: 'Tesoreria', Admin: 'Total', Cajero: 'Arqueo', Auditor: 'Lectura', Motorizado: 'No' },
-                                    { Capa: 'Operaciones/Delivery', Admin: 'Total', Cajero: 'Consulta', Auditor: 'Lectura', Motorizado: 'Rutas/Despacho' }
-                                ], 'Matriz_RBAC')}
-                            />
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                                <thead>
-                                    <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 uppercase text-[10px]">
-                                        <th className="px-4 py-3 text-left">Capa Funcional</th>
-                                        <th className="px-3 py-3 text-center">Administrador</th>
-                                        <th className="px-3 py-3 text-center">Cajero POS</th>
-                                        <th className="px-3 py-3 text-center">Auditor Fiscal</th>
-                                        <th className="px-3 py-3 text-center">Almacenista</th>
-                                        <th className="px-3 py-3 text-center">Motorizado Flota</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
-                                    {[
-                                        { layer: 'Capa 1: Contabilidad Formal', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
-                                        { layer: 'Capa 2: Fiscal Venezuela (SENIAT)', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
-                                        { layer: 'Capa 3: Tesorería & Arqueos', admin: true, cashier: true, auditor: true, warehouse: false, courier: false },
-                                        { layer: 'Capa 4: Operaciones & Delivery', admin: true, cashier: false, auditor: true, warehouse: true, courier: true },
-                                        { layer: 'Capa 5: BI / Dashboards', admin: true, cashier: true, auditor: true, warehouse: true, courier: false },
-                                        { layer: 'Capa 6: Administración & Logs', admin: true, cashier: false, auditor: true, warehouse: false, courier: false },
-                                    ].map((row, rIdx) => (
-                                        <tr key={rIdx} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">{row.layer}</td>
-                                            <td className="px-3 py-3 text-center font-bold text-emerald-600">{row.admin ? 'Acceso Total ✓' : '—'}</td>
-                                            <td className="px-3 py-3 text-center font-bold">{row.cashier ? <span className="text-emerald-600">Operativo ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
-                                            <td className="px-3 py-3 text-center font-bold text-blue-600">{row.auditor ? 'Solo Lectura ✓' : '—'}</td>
-                                            <td className="px-3 py-3 text-center font-bold">{row.warehouse ? <span className="text-emerald-600">Almacén ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
-                                            <td className="px-3 py-3 text-center font-bold">{row.courier ? <span className="text-amber-600">Delivery ✓</span> : <span className="text-gray-300">Denegado ✗</span>}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
-                </div>
+            {mainCategory === 'ventas_cfo' && activeReportId === 'reporte_proyeccion' && (
+                <FinancialProjectionReport sales={rawSales} products={rawProducts} purchases={rawPurchases} />
             )}
 
-            {/* 6.4 Respaldos e Integridad BD con Exportación */}
-            {mainCategory === 'admin' && activeReportId === 'respaldos_bd' && (
-                <div className="space-y-6">
-                    <Card className="p-6 space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                                <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                                    <Database className="w-5 h-5 text-emerald-600" />
-                                    Seguridad de Datos y Respaldos Automatizados (Supabase Cloud)
-                                </h3>
-                                <p className="text-xs text-gray-500">Monitoreo del estado de sincronización y respaldo de la base de datos única de UrbanStep.</p>
-                            </div>
-                            <ExportButtonGroup
-                                reportTitle="Estado de Seguridad y Respaldos BD"
-                                categoryName="Capa 6: Administración"
-                                columns={[
-                                    { key: 'parametro', header: 'Componente de Seguridad' },
-                                    { key: 'valor', header: 'Configuración / Estado' },
-                                    { key: 'detalle', header: 'Detalle Técnico' }
-                                ]}
-                                rows={[
-                                    { parametro: 'Motor de Base de Datos', valor: 'PostgreSQL 15.6', detalle: 'Instancia Unificada Supabase Cloud' },
-                                    { parametro: 'Copia de Seguridad PITR', valor: 'WAL Continuo Activo', detalle: 'Recuperación punto en el tiempo a nivel de microsegundo' },
-                                    { parametro: 'Arquitectura de Aislamiento', valor: 'Single-Tenant Dedicado', detalle: 'UrbanStep Venezuela C.A. • Sede Única Barquisimeto' },
-                                    { parametro: 'Estado de Integridad Contable', valor: '100% Consolidado', detalle: 'Partida doble verificada en tablas contables' }
-                                ]}
-                                summaryCards={[
-                                    { label: 'Motor BD', value: 'PostgreSQL 15' },
-                                    { label: 'Estado', value: 'En Línea ✓' },
-                                    { label: 'PITR WAL', value: 'Activo' }
-                                ]}
-                                filename="Estado_Seguridad_Respaldos_BD"
-                                bcvRate={bcvRate}
-                                onExportCSV={() => handleExportCSV([
-                                    { Parametro: 'Motor BD', Valor: 'PostgreSQL 15' },
-                                    { Parametro: 'PITR', Valor: 'Activo' }
-                                ], 'Respaldos_BD')}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-emerald-50/20 dark:bg-emerald-950/20 space-y-2">
-                                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Motor de Base de Datos</p>
-                                <p className="text-lg font-black text-gray-900 dark:text-white">PostgreSQL 15.6</p>
-                                <p className="text-[11px] text-gray-400">Instancia Única Supabase Cloud</p>
-                            </div>
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-blue-50/20 dark:bg-blue-950/20 space-y-2">
-                                <p className="text-xs font-bold text-blue-700 dark:text-blue-300">Copia de Seguridad PITR</p>
-                                <p className="text-lg font-black text-gray-900 dark:text-white">WAL Continuo Activo</p>
-                                <p className="text-[11px] text-gray-400">Recuperación punto en el tiempo</p>
-                            </div>
-                            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-purple-50/20 dark:bg-purple-950/20 space-y-2">
-                                <p className="text-xs font-bold text-purple-700 dark:text-purple-300">Aislamiento y Sede</p>
-                                <p className="text-lg font-black text-gray-900 dark:text-white">Single-Tenant</p>
-                                <p className="text-[11px] text-gray-400">Sede Única: Barquisimeto, Lara</p>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
+            {mainCategory === 'ventas_cfo' && activeReportId === 'pago_motorizados' && (
+                <MotorizadosPayoutReport />
             )}
         </div>
     );

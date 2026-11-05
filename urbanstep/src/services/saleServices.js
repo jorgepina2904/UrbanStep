@@ -119,6 +119,28 @@ export const saleService = {
             throw new Error("No hay artículos en la venta para procesar.");
         }
 
+        // VALIDACIÓN DE RENGLONES Y MONTOS: nada negativo, fraccionado o no numérico llega al libro de ventas
+        for (const item of saleData.items) {
+            const qty = Number(item.quantity);
+            if (!Number.isInteger(qty) || qty <= 0) {
+                throw new Error(`Cantidad inválida para "${item.name}": debe ser un número entero mayor que cero.`);
+            }
+            if (!Number.isFinite(Number(item.price)) || Number(item.price) <= 0) {
+                throw new Error(`Precio inválido para "${item.name}".`);
+            }
+        }
+        for (const [label, value] of [['subtotal', saleData.subtotal], ['descuento', saleData.discountAmount || saleData.discount], ['envío', saleData.shippingCost], ['total', saleData.total]]) {
+            if (value !== undefined && value !== null && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+                throw new Error(`Monto de ${label} inválido en la venta.`);
+            }
+        }
+        if (round2(saleData.discountAmount || saleData.discount) > round2(saleData.subtotal) + 0.01) {
+            throw new Error('El descuento no puede superar el subtotal de la venta.');
+        }
+
+        // Los pedidos web llegan desde el navegador del cliente: precios y total se recalculan contra el catálogo
+        const isWebOrder = saleData.cashier === 'Ecommerce Web';
+
         // VALIDACIÓN ESTRICTA DE INVENTARIO: Consultar catálogo fresco de Supabase
         const currentProducts = await productService.getAll();
 
@@ -130,6 +152,9 @@ export const saleService = {
             }
             if (product.disabled) {
                 throw new Error(`El producto "${product.name}" se encuentra deshabilitado para la venta.`);
+            }
+            if (isWebOrder && Math.abs(round2(item.price) - round2(product.price)) > 0.009) {
+                throw new Error(`El precio de "${product.name}" cambió a $${round2(product.price).toFixed(2)}. Actualiza tu bolsa e intenta de nuevo.`);
             }
 
             const requestedQty = Math.max(1, parseInt(item.quantity) || 1);
@@ -144,6 +169,17 @@ export const saleService = {
                     `Disponible en inventario: ${available} par(es), Solicitado: ${requestedQty} par(es). ` +
                     `No es posible vender más unidades de las existentes ni quedar en negativo.`
                 );
+            }
+        }
+
+        if (isWebOrder) {
+            const expectedSubtotal = round2(saleData.items.reduce((acc, i) => acc + round2(i.price) * Number(i.quantity), 0));
+            if (Math.abs(expectedSubtotal - round2(saleData.subtotal)) > 0.01) {
+                throw new Error('El subtotal del pedido no coincide con los precios del catálogo. Actualiza tu bolsa e intenta de nuevo.');
+            }
+            const expectedTotal = round2(expectedSubtotal - round2(saleData.discount) + round2(saleData.shippingCost) + round2(saleData.tax) + round2(saleData.igtf));
+            if (Math.abs(expectedTotal - round2(saleData.total)) > 0.01) {
+                throw new Error('El total del pedido no coincide con sus conceptos. Actualiza tu bolsa e intenta de nuevo.');
             }
         }
 

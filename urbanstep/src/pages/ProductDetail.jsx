@@ -39,7 +39,7 @@ export default function ProductDetail() {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { items: cartItems, addItem, itemCount } = useCart();
-    const { formatUSD, formatBs, toBs } = useCurrency();
+    const { formatUSD, primaryAmount, secondaryAmount } = useCurrency();
 
     const [product, setProduct] = useState(null);
     const [related, setRelated] = useState([]);
@@ -236,8 +236,8 @@ export default function ProductDetail() {
                     </div>
 
                     <div>
-                        <p className="text-3xl font-black">{formatUSD(product.price)}</p>
-                        <p className="text-sm font-semibold text-emerald-600">{formatBs(toBs(product.price))}</p>
+                        <p className="text-3xl font-black">{primaryAmount(product.price)}</p>
+                        <p className="text-sm font-semibold text-emerald-600">{secondaryAmount(product.price)}</p>
                     </div>
 
                     {product.description && <p className="text-sm text-gray-600 dark:text-gray-400">{product.description}</p>}

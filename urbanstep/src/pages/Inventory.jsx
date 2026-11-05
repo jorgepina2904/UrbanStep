@@ -24,10 +24,70 @@ import {
     Package,
     Truck,
     SlidersHorizontal,
-    Tag
+    Tag,
+    AlertTriangle
 } from 'lucide-react';
 import VariantAvailabilityModal from '../ui/VariantAvailabilityModal';
 import LabelPrintModal from '../ui/LabelPrintModal';
+import CurrencyToggle from '../components/CurrencyToggle';
+import { useCurrency } from '../contexts/CurrencyContext';
+
+// Helper de auditoría de agotamiento por talla y color
+export function getProductDepletionInfo(product) {
+  if (!product) return { isFullyOut: true, hasPartialDepletion: false, depletedSizes: [], depletedColors: [] };
+
+  const isFullyOut = Number(product.stock || 0) <= 0;
+  const depletedSizes = [];
+  const depletedColors = [];
+
+  // 1. Análisis en colorVariants
+  if (Array.isArray(product.colorVariants) && product.colorVariants.length > 0) {
+    product.colorVariants.forEach(variant => {
+      const colorName = variant.color || 'Único';
+      const vStock = variant.sizeStock || {};
+      const vTotal = variant.total !== undefined ? Number(variant.total) : Object.values(vStock).reduce((a, b) => a + Number(b || 0), 0);
+      
+      if (vTotal <= 0 && !depletedColors.includes(colorName)) {
+        depletedColors.push(colorName);
+      }
+
+      Object.entries(vStock).forEach(([sz, qty]) => {
+        if (Number(qty || 0) <= 0 && !depletedSizes.includes(sz)) {
+          depletedSizes.push(sz);
+        }
+      });
+    });
+  } 
+  // 2. Análisis en sizeStock tradicional
+  else if (product.sizeStock && typeof product.sizeStock === 'object') {
+    Object.entries(product.sizeStock).forEach(([sz, qty]) => {
+      if (Number(qty || 0) <= 0 && !depletedSizes.includes(sz)) {
+        depletedSizes.push(sz);
+      }
+    });
+  }
+
+  // 3. Verificación de variantes explícitamente pausadas/deshabilitadas
+  if (product.disabledVariants && typeof product.disabledVariants === 'object') {
+    Object.keys(product.disabledVariants).forEach(key => {
+      const parts = key.split('_');
+      if (parts.length === 2 && !depletedSizes.includes(parts[1])) {
+        depletedSizes.push(parts[1]);
+      }
+    });
+  }
+
+  const uniqueSizes = [...new Set(depletedSizes)];
+  const uniqueColors = [...new Set(depletedColors)];
+  const hasPartialDepletion = !isFullyOut && (uniqueSizes.length > 0 || uniqueColors.length > 0);
+
+  return {
+    isFullyOut,
+    hasPartialDepletion,
+    depletedSizes: uniqueSizes,
+    depletedColors: uniqueColors
+  };
+}
 import toast from 'react-hot-toast';
 
 /**
@@ -180,9 +240,12 @@ export default function Inventory() {
     const isLow = p.stock > 0 && p.stock <= p.minStock;
     const isOk = p.stock > p.minStock && !p.disabled;
     const isDisabled = Boolean(p.disabled);
+    const depletion = getProductDepletionInfo(p);
+    const isPartial = depletion.hasPartialDepletion;
 
     const matchesFilter = filter === 'all' ||
-      (filter === 'ok' && isOk) ||
+      (filter === 'ok' && isOk && !isPartial) ||
+      (filter === 'partial' && isPartial) ||
       (filter === 'low' && isLow) ||
       (filter === 'out' && isOut) ||
       (filter === 'disabled' && isDisabled);
@@ -210,6 +273,7 @@ export default function Inventory() {
     disabled: products.filter(p => p.disabled).length,
     lowStock: products.filter(p => p.stock > 0 && p.stock <= p.minStock).length,
     outOfStock: products.filter(p => p.stock <= 0).length,
+    partialDepletion: products.filter(p => !p.disabled && p.stock > 0 && getProductDepletionInfo(p).hasPartialDepletion).length,
     totalUnits: products.reduce((s, p) => s + Math.max(0, p.stock || 0), 0),
     totalValue: products.reduce((s, p) => s + ((p.cost || 0) * Math.max(0, p.stock || 0)), 0),
   };
@@ -232,23 +296,27 @@ export default function Inventory() {
             Inventario & Trazabilidad de Existencias
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Control de existencias sin negativos • Registro de Kardex y movimientos al modificar cantidades
+            Control de existencias sin negativos • Agotamiento por talla y color • Registro de Kardex
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <CurrencyToggle />
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
         {[
-          { label: 'Total Unidades', value: stats.totalUnits, sub: `${stats.active} disponibles`, color: 'text-blue-600 dark:text-blue-400' },
-          { label: 'Valorización (Costo)', value: formatCurrency(stats.totalValue), sub: 'Costo total de compra', color: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Total Unidades', value: stats.totalUnits, sub: `${stats.active} modelos activos`, color: 'text-blue-600 dark:text-blue-400' },
+          { label: 'Valorización (Costo)', value: formatCurrency(stats.totalValue), sub: 'Inversión en almacén', color: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Agotamiento Talla/Color', value: stats.partialDepletion, sub: 'Quiebre de variantes', color: 'text-purple-600 dark:text-purple-400' },
           { label: 'Stock Bajo', value: stats.lowStock, sub: 'Requiere reposición', color: 'text-amber-600 dark:text-amber-400' },
-          { label: 'Agotados / Deshabilitados', value: `${stats.outOfStock} / ${stats.disabled}`, sub: 'Retirados de venta', color: 'text-red-600 dark:text-red-400' },
+          { label: 'Agotados Totales', value: stats.outOfStock, sub: `${stats.disabled} deshabilitados`, color: 'text-red-600 dark:text-red-400' },
         ].map((stat, i) => (
-          <Card key={i} className="p-4 shadow-sm border border-gray-200/80 dark:border-gray-800">
+          <Card key={i} className="p-3.5 shadow-sm border border-gray-200/80 dark:border-gray-800">
             <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{stat.label}</p>
-            <p className={`text-2xl font-black mt-1 ${stat.color}`}>{stat.value}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{stat.sub}</p>
+            <p className={`text-xl sm:text-2xl font-black mt-1 ${stat.color}`}>{stat.value}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5 truncate">{stat.sub}</p>
           </Card>
         ))}
       </div>
@@ -317,17 +385,20 @@ export default function Inventory() {
               <div className="flex gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
                 {[
                   { key: 'all', label: 'Todos' },
-                  { key: 'ok', label: 'En Stock' },
+                  { key: 'ok', label: 'Stock Completo' },
+                  { key: 'partial', label: '⚠️ Agotamiento Talla/Color' },
                   { key: 'low', label: 'Stock Bajo' },
-                  { key: 'out', label: 'Agotados' },
+                  { key: 'out', label: 'Agotados Totales' },
                   { key: 'disabled', label: 'Deshabilitados' },
                 ].map(f => (
                   <button
                     key={f.key}
                     onClick={() => setFilter(f.key)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                       filter === f.key
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                        ? f.key === 'partial'
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                          : 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >
@@ -385,35 +456,61 @@ export default function Inventory() {
                               <p className="text-[11px] text-gray-400 dark:text-gray-500">
                                 {product.brand} • {product.category} {product.color ? `• ${product.color}` : ''}
                               </p>
+                              {/* Depletion Alert Pill */}
+                              {(() => {
+                                const depl = getProductDepletionInfo(product);
+                                if (!depl.hasPartialDepletion) return null;
+                                return (
+                                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                      <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                      Agotado: {depl.depletedSizes.length > 0 ? `Tallas [${depl.depletedSizes.join(', ')}]` : ''}
+                                      {depl.depletedColors.length > 0 ? `${depl.depletedSizes.length > 0 ? ' • ' : ''}Colores [${depl.depletedColors.join(', ')}]` : ''}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+
                               {/* Color variants preview */}
                               {product.colorVariants && product.colorVariants.length > 0 ? (
                                 <div className="flex items-center gap-1 mt-1 overflow-x-auto pb-0.5 max-w-xs scrollbar-none">
-                                  {product.colorVariants.map(v => (
-                                    <span
-                                      key={v.color}
-                                      title={`${v.color}: ${v.total !== undefined ? v.total : Object.values(v.sizeStock || {}).reduce((a, b) => a + b, 0)} pares`}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/60 shrink-0"
-                                    >
-                                      <span>{v.color}:</span>
-                                      <span>{v.total !== undefined ? v.total : Object.values(v.sizeStock || {}).reduce((a, b) => a + b, 0)}p</span>
-                                    </span>
-                                  ))}
+                                  {product.colorVariants.map(v => {
+                                    const vTot = v.total !== undefined ? v.total : Object.values(v.sizeStock || {}).reduce((a, b) => a + b, 0);
+                                    const isColDepleted = vTot <= 0;
+                                    return (
+                                      <span
+                                        key={v.color}
+                                        title={`${v.color}: ${vTot} pares ${isColDepleted ? '(Color Agotado)' : ''}`}
+                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 border ${
+                                          isColDepleted
+                                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 line-through'
+                                            : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/60 dark:border-purple-800/60'
+                                        }`}
+                                      >
+                                        <span>{v.color}:</span>
+                                        <span>{vTot}p</span>
+                                        {isColDepleted && <span className="text-[8px] no-underline">⚠️</span>}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               ) : product.sizes && product.sizes.length > 0 ? (
                                 <div className="flex items-center gap-1 mt-1 overflow-x-auto pb-0.5 max-w-xs scrollbar-none">
                                   {product.sizes.map(s => {
                                     const q = product.sizeStock ? product.sizeStock[s] : null;
+                                    const isSizeDepleted = q !== null && q <= 0;
                                     return (
                                       <span
                                         key={s}
-                                        title={q !== null ? `Talla ${s}: ${q} pares` : `Talla ${s}`}
-                                        className={`px-1.5 py-0.5 rounded font-mono text-[9px] ${
-                                          q !== null && q <= 0
-                                            ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 line-through opacity-60'
-                                            : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 font-bold'
+                                        title={q !== null ? `Talla ${s}: ${q} pares ${isSizeDepleted ? '(Agotada)' : ''}` : `Talla ${s}`}
+                                        className={`px-1.5 py-0.5 rounded font-mono text-[9px] border ${
+                                          isSizeDepleted
+                                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 line-through font-bold'
+                                            : 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border-transparent font-bold'
                                         }`}
                                       >
                                         {s}{q !== null ? `:${q}` : ''}
+                                        {isSizeDepleted && ' 🚫'}
                                       </span>
                                     );
                                   })}
@@ -447,23 +544,46 @@ export default function Inventory() {
                           {product.minStock}
                         </td>
                         <td className="px-4 py-3.5 text-center">
-                          {isDisabled ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
-                              Deshabilitado
-                            </span>
-                          ) : isOutOfStock ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">
-                              Agotado (0)
-                            </span>
-                          ) : product.stock <= product.minStock ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                              Stock Bajo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                              En Stock
-                            </span>
-                          )}
+                          {(() => {
+                            const depl = getProductDepletionInfo(product);
+                            if (isDisabled) {
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                                  Deshabilitado
+                                </span>
+                              );
+                            }
+                            if (isOutOfStock) {
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300">
+                                  Agotado Total (0)
+                                </span>
+                              );
+                            }
+                            if (depl.hasPartialDepletion) {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs"
+                                  title={`Tallas agotadas: ${depl.depletedSizes.join(', ')}`}
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                  Agotado Talla/Color
+                                </span>
+                              );
+                            }
+                            if (product.stock <= product.minStock) {
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                  Stock Bajo
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                En Stock
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3.5 text-right font-bold text-gray-900 dark:text-white font-mono">
                           {formatCurrency((product.cost || 0) * (product.stock || 0))}

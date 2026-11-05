@@ -32,7 +32,7 @@ import {
 import toast from 'react-hot-toast';
 
 export default function Purchases() {
-    const { rate, formatBs } = useCurrency();
+    const { rate, formatBs, primaryAmount, secondaryAmount } = useCurrency();
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('purchases'); // 'purchases' | 'suppliers'
     const [purchases, setPurchases] = useState([]);
@@ -355,8 +355,8 @@ export default function Purchases() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="p-4">
                     <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Total Compras Facturadas</p>
-                    <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">${totalPurchasedUsd.toFixed(2)}</p>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 font-bold">{formatBs(totalPurchasedUsd * rate)}</p>
+                    <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{primaryAmount(totalPurchasedUsd)}</p>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 font-bold">{secondaryAmount(totalPurchasedUsd)}</p>
                 </Card>
                 <Card className="p-4">
                     <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Órdenes Realizadas</p>
@@ -948,9 +948,9 @@ export default function Purchases() {
 
                         <div className="p-4 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800 text-center">
                             <p className="text-[11px] text-blue-600 dark:text-blue-300 font-bold uppercase">Total Cancelado</p>
-                            <p className="text-2xl font-black text-gray-900 dark:text-white">${selectedPurchase.totalUsd?.toFixed(2)}</p>
+                            <p className="text-2xl font-black text-gray-900 dark:text-white">{primaryAmount(selectedPurchase.totalUsd || 0, selectedPurchase.totalBs)}</p>
                             <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                                {formatBs(selectedPurchase.totalBs || (selectedPurchase.totalUsd * rate))}
+                                {secondaryAmount(selectedPurchase.totalUsd || 0, selectedPurchase.totalBs)}
                             </p>
                         </div>
 

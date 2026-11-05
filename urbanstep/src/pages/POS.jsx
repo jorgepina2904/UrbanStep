@@ -11,6 +11,7 @@ import ReturnModal from '../ui/ReturnModal';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import CurrencyToggle from '../components/CurrencyToggle';
 import { productService } from '../services/productService';
 import { saleService } from '../services/saleServices';
 import { settingsService } from '../services/settingsService';
@@ -84,7 +85,7 @@ export default function POS() {
     } = useCart();
     
     const { user } = useAuth();
-    const { rate, toBs, formatBs, formatUSD } = useCurrency();
+    const { rate, toBs, formatBs, formatUSD, isSwapped } = useCurrency();
 
     useEffect(() => {
         loadData();
@@ -356,18 +357,21 @@ export default function POS() {
                             ))}
                         </div>
 
-                        {/* Action: Devolución / Nota de Crédito SGF */}
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setShowReturnModal(true)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 shrink-0 shadow-xs"
-                            title="Gestionar Devolución por Producto Mal Facturado, Dañado o Factura Fallida"
-                        >
-                            <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-                            <span>Devolución / NC</span>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <CurrencyToggle />
+                            {/* Action: Devolución / Nota de Crédito SGF */}
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setShowReturnModal(true)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 shrink-0 shadow-xs"
+                                title="Gestionar Devolución por Producto Mal Facturado, Dañado o Factura Fallida"
+                            >
+                                <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+                                <span>Devolución / NC</span>
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -601,10 +605,10 @@ export default function POS() {
                                     <div className="relative z-20 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/80 flex items-center justify-between gap-2 shrink-0">
                                         <div className="min-w-0 pr-1">
                                             <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-white block truncate leading-tight tracking-tight">
-                                                {formatUSD(product.price)}
+                                                {isSwapped ? formatBs(toBs(product.price)) : formatUSD(product.price)}
                                             </span>
-                                            <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 block truncate">
-                                                {formatBs(toBs(product.price))}
+                                            <span className={`text-xs font-mono font-bold block truncate ${isSwapped ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                {isSwapped ? formatUSD(product.price) : formatBs(toBs(product.price))}
                                             </span>
                                         </div>
 
@@ -841,13 +845,13 @@ export default function POS() {
                                 <div className="flex justify-between items-baseline">
                                     <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Total a Cobrar:</span>
                                     <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400">
-                                        {formatUSD(total)}
+                                        {isSwapped ? formatBs(toBs(total)) : formatUSD(total)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-baseline mt-0.5">
-                                    <span className="text-[11px] text-gray-500">Al cambio BCV:</span>
-                                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                        {formatBs(toBs(total))}
+                                    <span className="text-[11px] text-gray-500">{isSwapped ? 'Equivalente en USD:' : 'Al cambio BCV:'}</span>
+                                    <span className={`text-sm font-bold ${isSwapped ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                        {isSwapped ? formatUSD(total) : formatBs(toBs(total))}
                                     </span>
                                 </div>
                             </div>

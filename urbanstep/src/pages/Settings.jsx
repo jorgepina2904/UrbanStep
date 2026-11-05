@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { customerService } from '../services/customerService';
+import { normalizeEmail, validateEmail, validatePassword, validatePersonName } from '../utils/validators';
 import SupervisorPinSettings from '../ui/SupervisorPinSettings';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
@@ -135,6 +137,42 @@ export default function Settings() {
     });
     const [userRoleFilter, setUserRoleFilter] = useState('all');
     const [userSearch, setUserSearch] = useState('');
+    const [storeCustomers, setStoreCustomers] = useState([]);
+
+    // Fichas de clientes (tienda física, POS, Google) para el directorio único de clientes
+    useEffect(() => {
+        const load = () => customerService.getAll().then(setStoreCustomers).catch(() => setStoreCustomers([]));
+        load();
+        window.addEventListener('customers_updated', load);
+        return () => window.removeEventListener('customers_updated', load);
+    }, []);
+
+    /**
+     * Directorio único: cuentas del sistema + clientes que aún no tienen cuenta web, enlazados por correo.
+     * Así un mismo cliente nunca aparece dos veces y los registrados en tienda/POS también se ven aquí.
+     */
+    const userDirectory = useMemo(() => {
+        const byEmail = new Map(storeCustomers.filter(c => c.id !== 'publico').map(c => [normalizeEmail(c.email), c]));
+        const linked = users.map(u => {
+            const card = u.role === 'Cliente' ? byEmail.get(normalizeEmail(u.email)) : null;
+            return card ? { ...u, docNumber: card.docNumber, customerId: card.id } : u;
+        });
+        const accountEmails = new Set(users.map(u => normalizeEmail(u.email)));
+        const withoutAccount = storeCustomers
+            .filter(c => c.id !== 'publico' && !accountEmails.has(normalizeEmail(c.email)))
+            .map(c => ({
+                id: `cliente-${c.id}`,
+                customerId: c.id,
+                name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Cliente',
+                email: validateEmail(c.email) ? '' : normalizeEmail(c.email),
+                role: 'Cliente',
+                branch: c.city || 'Tienda física',
+                docNumber: c.docNumber,
+                active: !c.disabled,
+                isCustomerOnly: true
+            }));
+        return [...linked, ...withoutAccount];
+    }, [users, storeCustomers]);
 
     // Admin Cash Register Shift Opening
     const [showAdminShiftModal, setShowAdminShiftModal] = useState(false);
@@ -593,7 +631,8 @@ DELETE FROM clientes WHERE id <> 'publico';
         setUserForm({
             name: u.name,
             email: u.email,
-            password: u.password || '',
+            // La contraseña actual nunca se muestra: vacío = conservarla
+            password: '',
             role: u.role,
             assignedCaja: u.assignedCaja || '',
             branch: u.branch || 'Sede Principal',
@@ -608,16 +647,12 @@ DELETE FROM clientes WHERE id <> 'publico';
     const handleSaveUser = async (e) => {
         if (e) e.preventDefault();
         try {
-            if (!userForm.name.trim()) {
-                toast.error('El nombre completo es obligatorio');
-                return;
-            }
-            if (!userForm.email.trim()) {
-                toast.error('El correo institucional es obligatorio');
-                return;
-            }
-            if (!userForm.password.trim() || userForm.password.length < 4) {
-                toast.error('La contraseña debe tener al menos 4 caracteres');
+            const formError = validatePersonName(userForm.name)
+                || validateEmail(userForm.email)
+                // Al editar, la contraseña es opcional (vacía = conservar la actual)
+                || ((!editingUser || userForm.password.trim()) ? validatePassword(userForm.password) : null);
+            if (formError) {
+                toast.error(formError);
                 return;
             }
 
@@ -959,9 +994,11 @@ DELETE FROM clientes WHERE id <> 'publico';
                         <Card className="p-3.5 border-l-4 border-l-cyan-500">
                             <p className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">Clientes Ecommerce</p>
                             <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1">
-                                {users.filter(u => u.role === 'Cliente').length}
+                                {userDirectory.filter(u => u.role === 'Cliente').length}
                             </p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">Desde la landing</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                {userDirectory.filter(u => u.role === 'Cliente' && !u.isCustomerOnly).length} con cuenta web · {userDirectory.filter(u => u.isCustomerOnly).length} solo ficha
+                            </p>
                         </Card>
                     </div>
 
@@ -1018,13 +1055,14 @@ DELETE FROM clientes WHERE id <> 'publico';
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                    {users
+                                    {userDirectory
                                         .filter(u => {
                                             const matchRole = userRoleFilter === 'all' || u.role === userRoleFilter;
                                             const q = userSearch.toLowerCase().trim();
                                             const matchSearch = !q || (
                                                 u.name.toLowerCase().includes(q) ||
-                                                u.email.toLowerCase().includes(q) ||
+                                                (u.email || '').toLowerCase().includes(q) ||
+                                                (u.docNumber && u.docNumber.toLowerCase().includes(q)) ||
                                                 (u.assignedCaja && u.assignedCaja.toLowerCase().includes(q)) ||
                                                 (u.role && u.role.toLowerCase().includes(q))
                                             );
@@ -1059,7 +1097,8 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4 whitespace-nowrap">
-                                                    <span className="font-mono text-xs text-gray-600 dark:text-gray-300">{u.email}</span>
+                                                    <span className="font-mono text-xs text-gray-600 dark:text-gray-300 block">{u.email || 'Sin correo registrado'}</span>
+                                                    {u.docNumber && <span className="font-mono text-[11px] text-gray-400 block">{u.docNumber}</span>}
                                                 </td>
                                                 <td className="px-5 py-4 whitespace-nowrap">
                                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${roleColors[u.role] || 'bg-gray-100 text-gray-700'}`}>
@@ -1069,8 +1108,10 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                 <td className="px-5 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 font-medium">
                                                         <Store className="w-3.5 h-3.5 text-gray-400" />
-                                                        {u.role === 'Cliente' ? (
-                                                            <span className="text-cyan-600 dark:text-cyan-400 font-semibold">🛍️ Tienda Online</span>
+                                                        {u.isCustomerOnly ? (
+                                                            <span className="text-gray-500 dark:text-gray-400 font-semibold">🏬 Ficha de cliente (sin cuenta web)</span>
+                                                        ) : u.role === 'Cliente' ? (
+                                                            <span className="text-cyan-600 dark:text-cyan-400 font-semibold">🛍️ Tienda Online{u.customerId ? ' · ficha vinculada' : ' · sin ficha'}</span>
                                                         ) : u.role === 'Motorizado' ? (
                                                             <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
                                                                 🛵 {u.vehicle || 'Flota Delivery'} {u.plate ? `(${u.plate})` : ''}
@@ -1086,6 +1127,11 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                     </Badge>
                                                 </td>
                                                 <td className="px-5 py-4 whitespace-nowrap text-right">
+                                                    {u.isCustomerOnly ? (
+                                                        <span className="text-[11px] text-gray-400" title="Se gestiona en el módulo Clientes; aparecerá como cuenta cuando se registre en la tienda web con este correo o cédula">
+                                                            Gestionar en Clientes
+                                                        </span>
+                                                    ) : (
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         {u.role === 'Cajero' && u.active && (
                                                             <button
@@ -1125,6 +1171,7 @@ DELETE FROM clientes WHERE id <> 'publico';
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -2084,12 +2131,13 @@ DELETE FROM clientes WHERE id <> 'publico';
                         </label>
                         <Input
                             type="password"
+                            autoComplete="new-password"
                             value={userForm.password}
                             onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                            placeholder="••••••••"
-                            required
+                            placeholder={editingUser ? 'Dejar vacío para conservar la actual' : '••••••••'}
+                            required={!editingUser}
                         />
-                        <p className="text-[11px] text-gray-400 mt-1">Mínimo 4 caracteres para acceso seguro</p>
+                        <p className="text-[11px] text-gray-400 mt-1">Mínimo 8 caracteres combinando letras y números. Se guarda cifrada.</p>
                     </div>
 
                     <div className="space-y-3">

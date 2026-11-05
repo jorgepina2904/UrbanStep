@@ -70,7 +70,7 @@ const downloadReceiptPdf = (order, formatUsd) => {
 export default function Account() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    const { formatUSD, formatBs } = useCurrency();
+    const { formatUSD, primaryAmount, secondaryAmount } = useCurrency();
     const [tab, setTab] = useState('orders');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -196,8 +196,8 @@ export default function Account() {
                                         <p className="text-xs text-gray-500">{new Date(o.date).toLocaleString('es-VE')}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-black">{formatUSD(o.total)}</p>
-                                        <p className="text-xs text-emerald-600 font-semibold">{formatBs(Number(o.totalBs) > 0 ? o.totalBs : usdToVes(o.total, resolveSaleRate(o, bcvService.getRate().rate)))}</p>
+                                        <p className="font-black">{primaryAmount(o.total, Number(o.totalBs) > 0 ? o.totalBs : usdToVes(o.total, resolveSaleRate(o, bcvService.getRate().rate)))}</p>
+                                        <p className="text-xs text-emerald-600 font-semibold">{secondaryAmount(o.total, Number(o.totalBs) > 0 ? o.totalBs : usdToVes(o.total, resolveSaleRate(o, bcvService.getRate().rate)))}</p>
                                     </div>
                                 </div>
                                 <ul className="text-sm text-gray-700 dark:text-gray-300">

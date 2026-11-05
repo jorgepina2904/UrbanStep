@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Lock, Mail, Eye, EyeOff, ArrowRight, ChevronLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Lock, Mail, Eye, EyeOff, ArrowRight, ChevronLeft, CheckCircle2, Loader2, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
-import { userService } from '../../services/userService';
-import { customerService } from '../../services/customerService';
+import { authService } from '../../services/authService';
 import { getDefaultRoute } from '../../utils/permissions';
-import { fieldInput, fieldLabel, useEscapeKey } from './ui';
+import { collectErrors, validateAddress, validateDocument, validateEmail, validatePassword, validatePersonName, validatePhoneVE } from '../../utils/validators';
+import { fieldError, fieldInput, fieldLabel, modalBox, modalBtnPrimary, modalClose, modalLink, modalMuted, modalOverlay, modalPanel, modalSegment, modalSegmentBtn, useEscapeKey } from './ui';
 
 const EMPTY_REGISTER = { name: '', email: '', docType: 'V', docNumber: '', phone: '', address: '', password: '', confirmPassword: '' };
 
@@ -16,6 +16,16 @@ const STAFF_GREETING = {
     Supervisor: () => 'Panel de Supervisión y Auditoría',
     Motorizado: (u) => `Ruta de despachos lista, ${u.name}`
 };
+
+const registerRules = (f) => ({
+    name: () => validatePersonName(f.name),
+    email: () => validateEmail(f.email),
+    phone: () => validatePhoneVE(f.phone),
+    docNumber: () => validateDocument(f.docType, f.docNumber),
+    address: () => (f.address.trim() ? validateAddress(f.address) : null),
+    password: () => validatePassword(f.password),
+    confirmPassword: () => (f.password !== f.confirmPassword ? 'Las contraseñas no coinciden' : null)
+});
 
 function GoogleIcon() {
     return (
@@ -28,12 +38,22 @@ function GoogleIcon() {
     );
 }
 
+function Field({ id, label, error, children }) {
+    return (
+        <div>
+            <label htmlFor={id} className={fieldLabel}>{label}</label>
+            {children}
+            {error && <p id={`${id}-error`} className={fieldError}>{error}</p>}
+        </div>
+    );
+}
+
 /**
  * Portal único de acceso (Admin, Cajero, Supervisor, Motorizado y Cliente): inicio de sesión con
- * ruteo por rol, Google, recuperación de contraseña y registro de cliente.
+ * ruteo por rol, Google, recuperación y cambio de contraseña, y registro de cliente validado.
  */
 export default function AuthModal({ isOpen, initialTab = 'login', prefill = null, onClose, onAuthenticated }) {
-    const { login, loginWithGoogle, requestPasswordReset } = useAuth();
+    const { login, loginWithGoogle, requestPasswordReset, confirmPasswordReset } = useAuth();
     const navigate = useNavigate();
 
     const [tab, setTab] = useState(initialTab);
@@ -46,6 +66,8 @@ export default function AuthModal({ isOpen, initialTab = 'login', prefill = null
     const [forgotSent, setForgotSent] = useState(false);
     const [forgotMessage, setForgotMessage] = useState('');
     const [regForm, setRegForm] = useState(EMPTY_REGISTER);
+    const [regErrors, setRegErrors] = useState({});
+    const [reset, setReset] = useState({ password: '', confirm: '', done: false });
 
     // Cada apertura respeta la pestaña pedida y los datos que el cliente ya escribió (p. ej. desde el Club VIP)
     useEffect(() => {
@@ -53,6 +75,7 @@ export default function AuthModal({ isOpen, initialTab = 'login', prefill = null
         setTab(initialTab);
         setError('');
         setForgotSent(false);
+        setRegErrors({});
         if (prefill) {
             setRegForm(prev => ({ ...prev, ...prefill }));
             if (prefill.email) setLoginEmail(prefill.email);
@@ -68,7 +91,6 @@ export default function AuthModal({ isOpen, initialTab = 'login', prefill = null
     const finishLogin = (loggedUser) => {
         onClose();
         if (loggedUser.role === 'Cliente') {
-            toast.success(`¡Bienvenido de nuevo, ${loggedUser.name}!`);
             onAuthenticated?.(loggedUser);
             return;
         }
@@ -76,244 +98,247 @@ export default function AuthModal({ isOpen, initialTab = 'login', prefill = null
         navigate(getDefaultRoute(loggedUser.role), { replace: true });
     };
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        if (!loginEmail.trim() || !loginPassword.trim()) { setError('Por favor ingresa tu correo y contraseña'); return; }
+    const run = async (task) => {
         setLoading(true);
         setError('');
         try {
-            const res = await login(loginEmail.trim(), loginPassword.trim());
+            await task();
+        } catch (err) {
+            setError(err.message || 'Ocurrió un error inesperado. Intenta nuevamente.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLogin = (e) => {
+        e.preventDefault();
+        if (!loginEmail.trim() || !loginPassword) { setError('Por favor ingresa tu correo y contraseña'); return; }
+        run(async () => {
+            const res = await login(loginEmail.trim(), loginPassword);
             if (res.success) finishLogin(res.user);
             else setError(res.error || 'Credenciales inválidas');
-        } catch (err) {
-            setError(err.message || 'Error de conexión con el sistema');
-        } finally {
-            setLoading(false);
-        }
+        });
     };
 
-    const handleGoogle = async () => {
-        setLoading(true);
-        setError('');
-        try {
-            const res = await loginWithGoogle();
-            if (res.success) onClose();
-            else if (res.error) setError(res.error);
-        } catch (err) {
-            setError(err.message || 'Error al conectar con Google');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Google redirige a su pantalla de acceso; al volver, AuthContext restaura la sesión del cliente
+    const handleGoogle = () => run(async () => {
+        const res = await loginWithGoogle();
+        if (!res.success) setError(res.error || 'No se pudo conectar con Google');
+    });
 
-    const handleForgot = async (e) => {
+    const handleForgot = (e) => {
         e.preventDefault();
-        if (!forgotEmail.trim()) { setError('Por favor ingresa tu correo electrónico.'); return; }
-        setLoading(true);
-        setError('');
-        try {
+        const emailError = validateEmail(forgotEmail);
+        if (emailError) { setError(emailError); return; }
+        run(async () => {
             const res = await requestPasswordReset(forgotEmail.trim());
             if (res.success) { setForgotSent(true); setForgotMessage(res.message); }
             else setError(res.error || 'No se pudo procesar la recuperación de contraseña.');
-        } catch (err) {
-            setError(err.message || 'Error al procesar recuperación de contraseña');
-        } finally {
-            setLoading(false);
-        }
+        });
     };
 
-    const handleRegister = async (e) => {
+    const handleReset = (e) => {
         e.preventDefault();
-        if (!regForm.name.trim() || !regForm.email.trim() || !regForm.password.trim()) { setError('Por favor completa todos los campos requeridos'); return; }
-        if (regForm.password !== regForm.confirmPassword) { setError('Las contraseñas no coinciden'); return; }
-        if (regForm.password.length < 4) { setError('La contraseña debe tener al menos 4 caracteres'); return; }
-        setLoading(true);
-        setError('');
-        try {
-            await userService.create({
-                name: regForm.name.trim(),
-                email: regForm.email.trim(),
-                password: regForm.password.trim(),
-                role: 'Cliente',
-                assignedCaja: 'Tienda Online',
-                branch: 'Ecommerce Online'
-            });
+        const passError = validatePassword(reset.password);
+        if (passError) { setError(passError); return; }
+        if (reset.password !== reset.confirm) { setError('Las contraseñas no coinciden'); return; }
+        run(async () => {
+            const res = await confirmPasswordReset(null, reset.password);
+            if (res.success) setReset({ password: '', confirm: '', done: true });
+            else setError(res.error || 'No se pudo actualizar la contraseña.');
+        });
+    };
 
-            const nameParts = regForm.name.trim().split(' ');
-            await customerService.create({
-                firstName: nameParts[0] || 'Cliente',
-                lastName: nameParts.slice(1).join(' ') || 'Online',
-                docType: regForm.docType,
-                docNumber: regForm.docNumber ? `${regForm.docType}-${regForm.docNumber.trim()}` : `V-${Date.now().toString().slice(-8)}`,
-                email: regForm.email.trim(),
-                phone: regForm.phone.trim() || '0414-0000000',
-                state: 'Lara',
-                city: 'Barquisimeto',
-                address: regForm.address.trim() || 'Barquisimeto, Estado Lara'
-            });
-
-            const loginRes = await login(regForm.email.trim(), regForm.password.trim());
+    const handleRegister = (e) => {
+        e.preventDefault();
+        const errors = collectErrors(registerRules(regForm));
+        setRegErrors(errors);
+        if (Object.keys(errors).length > 0) { setError('Revisa los campos marcados en rojo.'); return; }
+        run(async () => {
+            const created = await authService.registerClient(regForm);
+            const loginRes = await login(created.email, regForm.password);
+            toast.success('¡Tu cuenta de cliente ha sido creada con éxito!', { icon: '🎉' });
+            setRegForm(EMPTY_REGISTER);
             if (loginRes.success) {
-                toast.success('¡Tu cuenta de cliente ha sido creada con éxito!', { icon: '🎉' });
-                setRegForm(EMPTY_REGISTER);
                 onClose();
                 onAuthenticated?.(loginRes.user);
             } else {
-                toast.success('Cuenta creada. Ya puedes iniciar sesión.');
-                setLoginEmail(regForm.email);
+                setLoginEmail(created.email);
                 setTab('login');
             }
-        } catch (err) {
-            setError(err.message || 'Error al crear cuenta de cliente');
-        } finally {
-            setLoading(false);
-        }
+        });
     };
 
-    const reg = (field) => ({ value: regForm[field], onChange: (e) => setRegForm(prev => ({ ...prev, [field]: e.target.value })) });
-    const title = tab === 'login' ? 'Iniciar sesión' : tab === 'register' ? 'Crear cuenta de cliente' : 'Recuperar contraseña';
-    const subtitle = tab === 'login'
-        ? 'Portal de acceso único para Admin, Cajero, Supervisor, Motorizado o Cliente.'
-        : tab === 'register' ? 'Regístrate para comprar online, sumar puntos VIP y recibir delivery express en Lara.'
-            : 'Ingresa tu correo para recibir las instrucciones de recuperación.';
+    const reg = (field) => ({
+        value: regForm[field],
+        'aria-invalid': Boolean(regErrors[field]),
+        'aria-describedby': regErrors[field] ? `reg-${field}-error` : undefined,
+        onChange: (e) => {
+            setRegForm(prev => ({ ...prev, [field]: e.target.value }));
+            if (regErrors[field]) setRegErrors(prev => ({ ...prev, [field]: undefined }));
+        }
+    });
+
+    const titles = {
+        login: ['Iniciar sesión', 'Portal de acceso único para Admin, Cajero, Supervisor, Motorizado o Cliente.'],
+        register: ['Crear cuenta de cliente', 'Regístrate para comprar online, sumar puntos VIP y recibir delivery express en Lara.'],
+        forgot: ['Recuperar contraseña', 'Ingresa tu correo para recibir el enlace de recuperación.'],
+        reset: ['Nueva contraseña', 'Elige una contraseña nueva para tu cuenta.']
+    };
+    const [title, subtitle] = titles[tab] || titles.login;
+    const showTabs = tab === 'login' || tab === 'register';
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-            <div className="bg-white text-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4 my-auto us-fade-in">
-                <button type="button" onClick={close} aria-label="Cerrar" className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors">
+        <div className={modalOverlay} role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <div className={`${modalPanel} w-full max-w-md p-6 relative space-y-4 my-auto us-fade-in`}>
+                <button type="button" onClick={close} aria-label="Cerrar" className={`absolute top-4 right-4 ${modalClose}`}>
                     <X className="w-5 h-5" />
                 </button>
 
                 <div className="text-center space-y-1">
-                    <div className="w-12 h-12 bg-blue-600 text-white rounded-xl mx-auto flex items-center justify-center shadow-md shadow-blue-500/30 mb-2">
-                        <Lock className="w-6 h-6" />
+                    <div className="w-12 h-12 bg-blue-600 text-white dark:bg-us-cyan dark:text-black rounded-xl mx-auto flex items-center justify-center shadow-md shadow-blue-500/30 dark:shadow-cyan-500/30 mb-2">
+                        {tab === 'reset' ? <KeyRound className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
                     </div>
                     <h3 id="auth-title" className="font-us-display text-lg font-black uppercase">{title}</h3>
-                    <p className="text-xs text-gray-500">{subtitle}</p>
+                    <p className={`text-xs ${modalMuted}`}>{subtitle}</p>
                 </div>
 
-                {tab !== 'forgot' ? (
-                    <div className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl text-xs font-bold" role="tablist">
+                {showTabs ? (
+                    <div className={`grid grid-cols-2 gap-1 text-xs font-bold ${modalSegment}`} role="tablist">
                         {[['login', 'Iniciar sesión'], ['register', 'Registrarse (cliente)']].map(([id, label]) => (
                             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => switchTab(id)}
-                                className={`py-2 rounded-lg transition-all ${tab === id ? 'bg-blue-600 text-white shadow' : 'text-gray-600 hover:text-gray-900'}`}>
+                                className={`py-2 rounded-lg transition-all ${modalSegmentBtn(tab === id)}`}>
                                 {label}
                             </button>
                         ))}
                     </div>
                 ) : (
-                    <button type="button" onClick={() => switchTab('login')} className="text-xs font-bold flex items-center gap-1.5 text-blue-600 hover:text-blue-700">
+                    <button type="button" onClick={() => switchTab('login')} className={`text-xs font-bold flex items-center gap-1.5 ${modalLink}`}>
                         <ChevronLeft className="w-4 h-4" /> Volver al inicio de sesión
                     </button>
                 )}
 
-                {error && <p role="alert" className="p-3 rounded-lg text-xs border bg-red-50 border-red-200 text-red-700">{error}</p>}
+                {error && <p role="alert" className="p-3 rounded-lg text-xs border bg-red-50 border-red-200 text-red-700 dark:bg-red-950/50 dark:border-red-900 dark:text-red-300">{error}</p>}
 
-                {tab !== 'forgot' && (
+                {showTabs && (
                     <>
-                        <button type="button" onClick={handleGoogle} disabled={loading} className="w-full py-2.5 px-3 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
-                            <GoogleIcon /> Continuar con Google
+                        <button type="button" onClick={handleGoogle} disabled={loading} className="w-full py-2.5 px-3 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 dark:border-white/15 rounded-lg text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+                            <GoogleIcon /> {tab === 'register' ? 'Registrarme con Google' : 'Continuar con Google'}
                         </button>
                         <div className="relative flex items-center justify-center">
-                            <div className="border-t border-gray-200 w-full" />
-                            <span className="bg-white px-2 text-[10px] font-bold uppercase text-gray-400 tracking-wider absolute">O con credenciales</span>
+                            <div className="border-t border-gray-200 dark:border-white/10 w-full" />
+                            <span className="bg-white dark:bg-us-panel px-2 text-[10px] font-bold uppercase text-gray-400 dark:text-gray-500 tracking-wider absolute">O con credenciales</span>
                         </div>
                     </>
                 )}
 
                 {tab === 'login' && (
-                    <form onSubmit={handleLogin} className="space-y-3 text-left text-xs">
-                        <div>
-                            <label htmlFor="auth-email" className={fieldLabel}>Correo electrónico o usuario</label>
+                    <form onSubmit={handleLogin} className="space-y-3 text-left text-xs" noValidate>
+                        <Field id="auth-email" label="Correo electrónico o usuario">
                             <div className="relative">
                                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                 <input id="auth-email" type="text" required autoComplete="username" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="tu-correo@ejemplo.com" className={`${fieldInput} pl-9`} />
                             </div>
-                        </div>
-                        <div>
-                            <label htmlFor="auth-pass" className={fieldLabel}>Contraseña</label>
+                        </Field>
+                        <Field id="auth-pass" label="Contraseña">
                             <div className="relative">
                                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                 <input id="auth-pass" type={showPassword ? 'text' : 'password'} required autoComplete="current-password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" className={`${fieldInput} pl-9 pr-10`} />
-                                <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700">
+                                <button type="button" onClick={() => setShowPassword(s => !s)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white">
                                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                 </button>
                             </div>
-                        </div>
+                        </Field>
                         <div className="text-right">
-                            <button type="button" onClick={() => { setForgotEmail(loginEmail); switchTab('forgot'); }} className="text-[11px] font-bold text-blue-600 hover:underline">¿Olvidaste tu contraseña?</button>
+                            <button type="button" onClick={() => { setForgotEmail(loginEmail.includes('@') ? loginEmail : ''); switchTab('forgot'); }} className={`text-[11px] font-bold hover:underline ${modalLink}`}>¿Olvidaste tu contraseña?</button>
                         </div>
-                        <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-1.5 text-xs">
+                        <button type="submit" disabled={loading} className={`w-full py-2.5 font-bold uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-1.5 text-xs ${modalBtnPrimary}`}>
                             {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Verificando…</> : <>Acceder al sistema <ArrowRight className="w-4 h-4" /></>}
                         </button>
                     </form>
                 )}
 
                 {tab === 'forgot' && (forgotSent ? (
-                    <div className="p-4 rounded-xl border text-center space-y-3 bg-emerald-50 border-emerald-200 text-emerald-800">
+                    <div className="p-4 rounded-xl border text-center space-y-3 bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
                         <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
-                        <h4 className="font-bold text-sm">Instrucciones enviadas</h4>
+                        <h4 className="font-bold text-sm">Revisa tu correo</h4>
                         <p className="text-xs leading-relaxed">{forgotMessage}</p>
                         <button type="button" onClick={() => switchTab('login')} className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider">Volver a iniciar sesión</button>
                     </div>
                 ) : (
-                    <form onSubmit={handleForgot} className="space-y-3 text-left text-xs">
-                        <p className="text-gray-600 leading-relaxed">Te enviaremos un enlace de restablecimiento al correo asociado a tu cuenta.</p>
-                        <div>
-                            <label htmlFor="auth-forgot" className={fieldLabel}>Correo electrónico</label>
+                    <form onSubmit={handleForgot} className="space-y-3 text-left text-xs" noValidate>
+                        <p className={`leading-relaxed ${modalMuted}`}>Te enviaremos un enlace para restablecer la contraseña al correo asociado a tu cuenta.</p>
+                        <Field id="auth-forgot" label="Correo electrónico">
                             <input id="auth-forgot" type="email" required autoComplete="email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="tu-correo@ejemplo.com" className={fieldInput} />
-                        </div>
-                        <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-1.5 text-xs">
-                            {loading ? 'Enviando…' : <>Enviar instrucciones <ArrowRight className="w-4 h-4" /></>}
+                        </Field>
+                        <button type="submit" disabled={loading} className={`w-full py-2.5 font-bold uppercase tracking-wider rounded-xl shadow-md flex items-center justify-center gap-1.5 text-xs ${modalBtnPrimary}`}>
+                            {loading ? 'Enviando…' : <>Enviar enlace <ArrowRight className="w-4 h-4" /></>}
+                        </button>
+                    </form>
+                ))}
+
+                {tab === 'reset' && (reset.done ? (
+                    <div className="p-4 rounded-xl border text-center space-y-3 bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300">
+                        <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
+                        <h4 className="font-bold text-sm">Contraseña actualizada</h4>
+                        <button type="button" onClick={() => switchTab('login')} className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider">Iniciar sesión</button>
+                    </div>
+                ) : (
+                    <form onSubmit={handleReset} className="space-y-3 text-left text-xs" noValidate>
+                        <Field id="reset-pass" label="Nueva contraseña">
+                            <input id="reset-pass" type="password" autoComplete="new-password" value={reset.password} onChange={(e) => setReset(r => ({ ...r, password: e.target.value }))} placeholder="Mínimo 8, con letras y números" className={fieldInput} />
+                        </Field>
+                        <Field id="reset-pass2" label="Repetir contraseña">
+                            <input id="reset-pass2" type="password" autoComplete="new-password" value={reset.confirm} onChange={(e) => setReset(r => ({ ...r, confirm: e.target.value }))} placeholder="••••••••" className={fieldInput} />
+                        </Field>
+                        <button type="submit" disabled={loading} className={`w-full py-2.5 font-bold uppercase tracking-wider rounded-xl shadow-md text-xs ${modalBtnPrimary}`}>
+                            {loading ? 'Guardando…' : 'Guardar nueva contraseña'}
                         </button>
                     </form>
                 ))}
 
                 {tab === 'register' && (
-                    <form onSubmit={handleRegister} className="space-y-2.5 text-left text-xs">
-                        <div>
-                            <label htmlFor="reg-name" className={fieldLabel}>Nombre completo *</label>
-                            <input id="reg-name" type="text" required autoComplete="name" placeholder="Tu nombre y apellido" className={fieldInput} {...reg('name')} />
-                        </div>
+                    <form onSubmit={handleRegister} className="space-y-2.5 text-left text-xs" noValidate>
+                        <Field id="reg-name" label="Nombre y apellido *" error={regErrors.name}>
+                            <input id="reg-name" type="text" autoComplete="name" placeholder="Tu nombre y apellido" className={fieldInput} {...reg('name')} />
+                        </Field>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                                <label htmlFor="reg-email" className={fieldLabel}>Correo electrónico *</label>
-                                <input id="reg-email" type="email" required autoComplete="email" placeholder="cliente@ejemplo.com" className={fieldInput} {...reg('email')} />
-                            </div>
-                            <div>
-                                <label htmlFor="reg-phone" className={fieldLabel}>Teléfono WhatsApp *</label>
-                                <input id="reg-phone" type="tel" required autoComplete="tel" placeholder="0414-1234567" className={fieldInput} {...reg('phone')} />
-                            </div>
+                            <Field id="reg-email" label="Correo electrónico *" error={regErrors.email}>
+                                <input id="reg-email" type="email" autoComplete="email" placeholder="cliente@ejemplo.com" className={fieldInput} {...reg('email')} />
+                            </Field>
+                            <Field id="reg-phone" label="Teléfono WhatsApp *" error={regErrors.phone}>
+                                <input id="reg-phone" type="tel" autoComplete="tel" placeholder="0414-1234567" className={fieldInput} {...reg('phone')} />
+                            </Field>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
-                            <div>
-                                <label htmlFor="reg-doc" className={fieldLabel}>Doc.</label>
-                                <select id="reg-doc" className={`${fieldInput} px-2`} {...reg('docType')}>
+                            <Field id="reg-doc" label="Doc.">
+                                <select id="reg-doc" className={`${fieldInput} px-2`} value={regForm.docType} onChange={(e) => setRegForm(prev => ({ ...prev, docType: e.target.value }))}>
                                     <option value="V">V-</option>
                                     <option value="E">E-</option>
                                     <option value="J">J-</option>
+                                    <option value="G">G-</option>
+                                    <option value="P">P-</option>
                                 </select>
-                            </div>
+                            </Field>
                             <div className="col-span-2">
-                                <label htmlFor="reg-docnum" className={fieldLabel}>Cédula / RIF</label>
-                                <input id="reg-docnum" type="text" inputMode="numeric" placeholder="28123456" className={fieldInput} {...reg('docNumber')} />
+                                <Field id="reg-docNumber" label="Cédula / RIF *" error={regErrors.docNumber}>
+                                    <input id="reg-docNumber" type="text" inputMode="numeric" placeholder="28123456" className={fieldInput} {...reg('docNumber')} />
+                                </Field>
                             </div>
                         </div>
-                        <div>
-                            <label htmlFor="reg-address" className={fieldLabel}>Dirección de entrega en Lara</label>
-                            <input id="reg-address" type="text" autoComplete="street-address" placeholder="Barquisimeto / Cabudare, Urb. o sector" className={fieldInput} {...reg('address')} />
-                        </div>
+                        <Field id="reg-address" label="Dirección de entrega en Lara" error={regErrors.address}>
+                            <input id="reg-address" type="text" autoComplete="street-address" placeholder="Barquisimeto / Cabudare, urb. o sector" className={fieldInput} {...reg('address')} />
+                        </Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label htmlFor="reg-pass" className={fieldLabel}>Contraseña *</label>
-                                <input id="reg-pass" type="password" required autoComplete="new-password" placeholder="••••••••" className={fieldInput} {...reg('password')} />
-                            </div>
-                            <div>
-                                <label htmlFor="reg-pass2" className={fieldLabel}>Repetir *</label>
-                                <input id="reg-pass2" type="password" required autoComplete="new-password" placeholder="••••••••" className={fieldInput} {...reg('confirmPassword')} />
-                            </div>
+                            <Field id="reg-password" label="Contraseña *" error={regErrors.password}>
+                                <input id="reg-password" type="password" autoComplete="new-password" placeholder="8+ letras y números" className={fieldInput} {...reg('password')} />
+                            </Field>
+                            <Field id="reg-confirmPassword" label="Repetir *" error={regErrors.confirmPassword}>
+                                <input id="reg-confirmPassword" type="password" autoComplete="new-password" placeholder="••••••••" className={fieldInput} {...reg('confirmPassword')} />
+                            </Field>
                         </div>
-                        <button type="submit" disabled={loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold uppercase tracking-wider rounded-xl shadow-md text-xs mt-1">
+                        <p className={`p-2 rounded-lg text-[11px] ${modalBox} ${modalMuted}`}>Tu cédula identifica tu ficha de cliente y tu factura fiscal: no puede estar registrada con otro correo.</p>
+                        <button type="submit" disabled={loading} className={`w-full py-2.5 font-bold uppercase tracking-wider rounded-xl shadow-md text-xs mt-1 ${modalBtnPrimary}`}>
                             {loading ? 'Creando cuenta…' : 'Crear cuenta de cliente'}
                         </button>
                     </form>

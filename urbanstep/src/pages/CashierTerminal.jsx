@@ -53,7 +53,7 @@ import toast from 'react-hot-toast';
 export default function CashierTerminal() {
     const navigate = useNavigate();
     const { user, logout } = useAuth();
-    const { rate, toBs, formatBs, formatUSD } = useCurrency();
+    const { rate, toBs, formatBs, formatUSD, primaryAmount, secondaryAmount } = useCurrency();
     const { activeShift, isOpen, lastSale, setLastSale } = useShift();
 
     const [products, setProducts] = useState([]);
@@ -765,10 +765,10 @@ export default function CashierTerminal() {
                                         <div className="relative z-20 mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-700/80 flex items-center justify-between gap-2 shrink-0">
                                             <div className="min-w-0 pr-1">
                                                 <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white block leading-tight truncate tracking-tight">
-                                                    {formatUSD(product.price)}
+                                                    {primaryAmount(product.price)}
                                                 </span>
                                                 <span className="text-[10px] sm:text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 block truncate">
-                                                    {formatBs(toBs(product.price))}
+                                                    {secondaryAmount(product.price)}
                                                 </span>
                                             </div>
 
@@ -1018,12 +1018,12 @@ export default function CashierTerminal() {
                             <div className="mt-2 p-3.5 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-lg">
                                 <div className="flex justify-between items-baseline">
                                     <span className="text-xs font-bold uppercase tracking-wider text-blue-200">Total a Cobrar:</span>
-                                    <span className="text-2xl font-black">{formatUSD(total)}</span>
+                                    <span className="text-2xl font-black">{primaryAmount(total)}</span>
                                 </div>
                                 <div className="flex justify-between items-baseline mt-1 pt-1 border-t border-white/20">
                                     <span className="text-[11px] text-emerald-200">En Bolívares (BCV):</span>
                                     <span className="text-base font-extrabold text-emerald-300 font-mono">
-                                        {formatBs(toBs(total))}
+                                        {secondaryAmount(total)}
                                     </span>
                                 </div>
                             </div>
@@ -1064,9 +1064,9 @@ export default function CashierTerminal() {
                 <div className="space-y-4">
                     <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-4 text-white text-center shadow-md">
                         <p className="text-xs font-medium uppercase tracking-wider text-blue-200">Total Venta Mostrador</p>
-                        <p className="text-2xl font-black mt-0.5">{formatUSD(total)}</p>
+                        <p className="text-2xl font-black mt-0.5">{primaryAmount(total)}</p>
                         <p className="text-sm font-bold text-emerald-300 mt-0.5">
-                            Equivalente: {formatBs(toBs(total))} <span className="text-xs font-normal text-blue-200">(BCV: {formatBs(rate)})</span>
+                            Equivalente: {secondaryAmount(total)} <span className="text-xs font-normal text-blue-200">(BCV: {formatBs(rate)})</span>
                         </p>
                     </div>
 

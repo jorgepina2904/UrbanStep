@@ -14,7 +14,7 @@ import DashboardCharts from '../components/DashboardCharts';
  */
 export default function Dashboard() {
   const { user } = useAuth();
-  const { rate, toBs, formatBs, formatUSD } = useCurrency();
+  const { rate, formatBs, primaryAmount, secondaryAmount } = useCurrency();
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
   const [recentSales, setRecentSales] = useState([]);
@@ -65,8 +65,8 @@ export default function Dashboard() {
   const kpiCards = [
     {
       title: 'Ventas de Hoy',
-      value: formatUSD(todayRev),
-      subvalue: formatBs(toBs(todayRev)),
+      value: primaryAmount(todayRev),
+      subvalue: secondaryAmount(todayRev),
       subtitle: `${stats?.todaySales || 0} transacciones`,
       icon: <TrendingUp className="w-6 h-6" />,
       gradient: 'from-emerald-500 to-teal-600',
@@ -83,8 +83,8 @@ export default function Dashboard() {
     },
     {
       title: 'Valor del Inventario',
-      value: formatUSD(totalInventoryValue),
-      subvalue: formatBs(toBs(totalInventoryValue)),
+      value: primaryAmount(totalInventoryValue),
+      subvalue: secondaryAmount(totalInventoryValue),
       subtitle: 'Precio de venta al público',
       icon: <DollarSign className="w-6 h-6" />,
       gradient: 'from-purple-500 to-violet-600',
@@ -175,9 +175,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-extrabold text-gray-900 dark:text-white">{formatUSD(sale.total)}</p>
+                    <p className="text-sm font-extrabold text-gray-900 dark:text-white">{primaryAmount(sale.total, sale.totalBs)}</p>
                     <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      {formatBs(toBs(sale.total))}
+                      {secondaryAmount(sale.total, sale.totalBs)}
                     </p>
                   </div>
                 </div>
@@ -232,7 +232,7 @@ export default function Dashboard() {
  * Vista del Cajero
  */
 function CashierDashboard({ user, allSales, lowStockProducts }) {
-  const { toBs, formatBs, formatUSD } = useCurrency();
+  const { primaryAmount, secondaryAmount } = useCurrency();
   const todayKey = new Date().toISOString().split('T')[0];
   const mySales = allSales.filter(s => s.cashier === user?.name);
   const myTodaySales = mySales.filter(s => s.date && s.date.startsWith(todayKey));
@@ -276,13 +276,13 @@ function CashierDashboard({ user, allSales, lowStockProducts }) {
         </Card>
         <Card className="p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase">Mis Ingresos Hoy</p>
-          <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{formatUSD(myTodayRevenue)}</p>
-          <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(myTodayRevenue))}</p>
+          <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{primaryAmount(myTodayRevenue)}</p>
+          <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(myTodayRevenue)}</p>
         </Card>
         <Card className="p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase">Ticket Promedio</p>
-          <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{formatUSD(myAvgTicket)}</p>
-          <p className="text-xs font-bold text-emerald-600 mt-0.5">{formatBs(toBs(myAvgTicket))}</p>
+          <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{primaryAmount(myAvgTicket)}</p>
+          <p className="text-xs font-bold text-emerald-600 mt-0.5">{secondaryAmount(myAvgTicket)}</p>
         </Card>
       </div>
 
@@ -296,8 +296,8 @@ function CashierDashboard({ user, allSales, lowStockProducts }) {
                 <p className="text-gray-400">{sale.receiptNumber || sale.id} • {sale.paymentMethodLabel || sale.paymentMethod}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-gray-900 dark:text-white">{formatUSD(sale.total)}</p>
-                <p className="text-emerald-600 font-semibold">{formatBs(toBs(sale.total))}</p>
+                <p className="font-bold text-gray-900 dark:text-white">{primaryAmount(sale.total, sale.totalBs)}</p>
+                <p className="text-emerald-600 font-semibold">{secondaryAmount(sale.total, sale.totalBs)}</p>
               </div>
             </div>
           ))}

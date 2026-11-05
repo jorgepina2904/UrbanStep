@@ -1,8 +1,39 @@
 import { db } from './api';
 import { generateId } from '../utils/generateId';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { isPlaceholder, normalizeDocument, normalizeEmail, validateDocument, validateEmail, validatePhoneVE } from '../utils/validators';
 
 const PUBLIC_CUSTOMER_ID = 'publico';
+
+const docKey = (c) => normalizeDocument(c.docType, c.docNumber);
+const emailKey = (value) => (isPlaceholder(value) ? '' : normalizeEmail(value));
+
+/**
+ * Regla única de identidad del cliente: una cédula/RIF y un correo pertenecen a un solo cliente.
+ * Se valida contra la lista fresca (Supabase si está configurado) antes de crear o editar.
+ */
+const validateCustomer = async (data, excludeId = null) => {
+    if (!String(data.firstName || '').trim()) throw new Error('El nombre del cliente es obligatorio');
+    if (!String(data.lastName || '').trim()) throw new Error('El apellido del cliente es obligatorio');
+    const docError = validateDocument(data.docType, data.docNumber);
+    if (docError) throw new Error(docError);
+    if (!isPlaceholder(data.email)) {
+        const emailError = validateEmail(data.email);
+        if (emailError) throw new Error(emailError);
+    }
+    if (!isPlaceholder(data.phone)) {
+        const phoneError = validatePhoneVE(data.phone);
+        if (phoneError) throw new Error(phoneError);
+    }
+
+    const all = await customerService.getAll();
+    const key = docKey(data);
+    const email = emailKey(data.email);
+    const sameDoc = all.find(c => c.id !== excludeId && c.id !== PUBLIC_CUSTOMER_ID && docKey(c) === key);
+    if (sameDoc) throw new Error(`La cédula/RIF ${key} ya está registrada a nombre de ${`${sameDoc.firstName} ${sameDoc.lastName}`.trim()}`);
+    const sameEmail = email && all.find(c => c.id !== excludeId && emailKey(c.email) === email);
+    if (sameEmail) throw new Error(`El correo ${email} ya pertenece a otro cliente (${sameEmail.docNumber})`);
+};
 
 export const customerService = {
     getAll: async () => {
@@ -64,11 +95,28 @@ export const customerService = {
         return { ...customer };
     },
 
+    /** Busca la ficha de un cliente por correo (para vincular su cuenta web). */
+    findByEmail: async (email) => {
+        const key = emailKey(email);
+        if (!key) return null;
+        return (await customerService.getAll()).find(c => emailKey(c.email) === key) || null;
+    },
+
+    /** Busca la ficha de un cliente por cédula/RIF normalizada. */
+    findByDocument: async (docType, docNumber) => {
+        const key = normalizeDocument(docType, docNumber);
+        return (await customerService.getAll()).find(c => c.id !== PUBLIC_CUSTOMER_ID && docKey(c) === key) || null;
+    },
+
     create: async (data) => {
+        const docType = String(data.docType || 'V').toUpperCase();
+        const docNumber = normalizeDocument(docType, data.docNumber || data.rawDoc);
+        await validateCustomer({ ...data, docType, docNumber });
+
         const newCustomer = {
             id: generateId('CLT'),
-            docType:        data.docType || 'V',
-            docNumber:      data.docNumber || `${data.docType || 'V'}-${data.rawDoc || '00000000'}`,
+            docType,
+            docNumber,
             firstName:      (data.firstName || '').trim(),
             lastName:       (data.lastName  || '').trim(),
             email:          (data.email     || '').trim(),
@@ -101,6 +149,12 @@ export const customerService = {
                     cantidad_compras: 0
                 });
 
+                // Duplicado detectado por la base de datos (índices únicos): no se conserva la ficha local
+                if (cliErr?.code === '23505') {
+                    db.customers = db.customers.filter(c => c.id !== newCustomer.id);
+                    db.save('customers');
+                    throw new Error('Ya existe un cliente con esa cédula/RIF o ese correo');
+                }
                 if (cliErr) {
                     await supabase.from('customers').insert({
                         id: newCustomer.id,
@@ -118,6 +172,7 @@ export const customerService = {
                     });
                 }
             } catch (err) {
+                if (err?.message?.startsWith('Ya existe un cliente')) throw err;
                 console.warn('Error insertando cliente en Supabase:', err);
             }
         }
@@ -128,13 +183,21 @@ export const customerService = {
     update: async (id, data) => {
         if (id === PUBLIC_CUSTOMER_ID) throw new Error('El cliente público general no puede ser editado');
 
+        const existing = db.customers.find(c => c.id === id);
+        if (!existing) throw new Error('Cliente no encontrado');
+
+        const docType = String(data.docType ?? existing.docType).toUpperCase();
+        const docNumber = normalizeDocument(docType, data.docNumber ?? existing.docNumber);
+        await validateCustomer({ ...existing, ...data, docType, docNumber }, id);
+
+        // La validación recarga la lista desde la nube: se ubica de nuevo el registro
         const index = db.customers.findIndex(c => c.id === id);
         if (index === -1) throw new Error('Cliente no encontrado');
 
         const updated = {
             ...db.customers[index],
-            docType:   data.docType ?? db.customers[index].docType,
-            docNumber: data.docNumber ?? db.customers[index].docNumber,
+            docType,
+            docNumber,
             firstName: (data.firstName ?? db.customers[index].firstName).trim(),
             lastName:  (data.lastName  ?? db.customers[index].lastName).trim(),
             email:     (data.email     ?? db.customers[index].email).trim(),

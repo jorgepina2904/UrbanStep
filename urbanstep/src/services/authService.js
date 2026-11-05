@@ -2,95 +2,185 @@ import { userService } from './userService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { cashRegisterService } from './cashRegisterService';
 import { customerService } from './customerService';
+import {
+  isPlaceholder, normalizeDocument, normalizeEmail, validateAddress, validateDocument, validateEmail,
+  validatePassword, validatePersonName, validatePhoneVE
+} from '../utils/validators';
 
 const USER_KEY = 'us_user';
 const TOKEN_KEY = 'us_token';
 const REMEMBER_KEY = 'urbanstep_remembered_user';
 
+const INVALID_CREDENTIALS = 'Credenciales inválidas. Verifica tu correo/usuario y contraseña.';
+const INACTIVE_USER = 'Tu usuario está desactivado. Contacta al administrador.';
+
+const siteOrigin = () => (typeof window !== 'undefined' ? window.location.origin : '');
+
+const persistSession = (user, token) => {
+  const { password: _password, ...safeUser } = user;
+  localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
+  localStorage.setItem(TOKEN_KEY, token || `session-${Date.now()}`);
+  return safeUser;
+};
+
+/** "cajero1" → "cajero1@urbanstep.com" solo si la parte local del correo identifica a un único usuario. */
+const resolveIdentifier = (identifier) => {
+  if (identifier.includes('@')) return identifier;
+  const matches = userService.getAll().filter(u => normalizeEmail(u.email).split('@')[0] === identifier);
+  return matches.length === 1 ? normalizeEmail(matches[0].email) : null;
+};
+
+const isMissingFunction = (error) => error?.code === 'PGRST202' || /login_usuario/i.test(error?.message || '');
+
+/**
+ * Verifica credenciales contra Supabase. Orden:
+ * 1) login_usuario(): bcrypt en el servidor (requiere seguridad_usuarios_validaciones.sql).
+ * 2) Compatibilidad temporal mientras la migración no se ejecute: compara la contraseña de ese único usuario.
+ * 3) Supabase Auth (cuentas creadas en auth.users). El rol SIEMPRE sale de la tabla `usuarios`, nunca de
+ *    user_metadata, que el propio usuario puede editar.
+ * @returns {{status:'ok'|'invalid'|'inactive'|'unavailable', user?:object, token?:string}}
+ */
+const verifyInCloud = async (email, password) => {
+  const { data: rows, error } = await supabase.rpc('login_usuario', { p_correo: email, p_password: password });
+  if (!error && Array.isArray(rows) && rows[0]) {
+    const user = userService.fromDbRow(rows[0]);
+    return user.active ? { status: 'ok', user } : { status: 'inactive' };
+  }
+
+  if (error && isMissingFunction(error)) {
+    const { data: legacy, error: legacyError } = await supabase
+      .from('usuarios')
+      .select(`${userService.publicColumns}, password_hash`)
+      .eq('correo', email)
+      .maybeSingle();
+    if (legacyError) return { status: 'unavailable' };
+    // Una contraseña ya cifrada sin la función de verificación no puede compararse en el navegador
+    if (legacy?.password_hash && !legacy.password_hash.startsWith('$2') && legacy.password_hash === password) {
+      const user = userService.fromDbRow(legacy);
+      return user.active ? { status: 'ok', user } : { status: 'inactive' };
+    }
+  } else if (error) {
+    return { status: 'unavailable' };
+  }
+
+  try {
+    const { data: auth, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (!authError && auth?.user) {
+      const account = await userService.findInCloudByEmail(email);
+      if (account && !account.active) {
+        await supabase.auth.signOut();
+        return { status: 'inactive' };
+      }
+      const user = account || {
+        id: auth.user.id,
+        name: auth.user.user_metadata?.full_name || email.split('@')[0],
+        email,
+        role: 'Cliente',
+        branch: 'Ecommerce Online',
+        active: true
+      };
+      return { status: 'ok', user, token: auth.session?.access_token };
+    }
+  } catch (err) {
+    console.warn('Supabase Auth no disponible:', err);
+  }
+  return { status: 'invalid' };
+};
+
 export const authService = {
   /**
-   * Autenticación por credenciales (correo/alias y contraseña).
-   * Solo roles Admin y Cajero.
+   * Autenticación por correo (o alias único) y contraseña para todos los roles.
+   * Con Supabase configurado solo se aceptan usuarios verificados por la base de datos; los usuarios de
+   * demostración (mockUsers) únicamente sirven sin nube o mientras la tabla `usuarios` está vacía.
    */
   async login(usernameInput, passwordInput) {
-    await new Promise(r => setTimeout(r, 350));
-
-    const cleanInput = (usernameInput || '').trim().toLowerCase();
-    const cleanPassword = (passwordInput || '').trim();
-
-    if (!cleanInput || !cleanPassword) {
+    const identifier = normalizeEmail(usernameInput);
+    const password = String(passwordInput || '');
+    if (!identifier || !password) {
       return { success: false, error: 'Por favor completa todos los campos' };
     }
 
-    // 1. Si Supabase está configurado con Auth real, intentar autenticación en la nube
-    if (isSupabaseConfigured() && cleanInput.includes('@')) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanInput,
-          password: cleanPassword,
-        });
+    const email = resolveIdentifier(identifier);
+    if (!email) return { success: false, error: INVALID_CREDENTIALS };
 
-        if (!error && data?.user) {
-          const cloudUser = {
-            id: data.user.id,
-            name: data.user.user_metadata?.full_name || cleanInput.split('@')[0],
-            email: data.user.email,
-            role: data.user.user_metadata?.role || 'Cajero',
-            branch: data.user.user_metadata?.branch || 'Sede Principal',
-            active: true,
-          };
-          localStorage.setItem(USER_KEY, JSON.stringify(cloudUser));
-          if (data.session?.access_token) {
-            localStorage.setItem(TOKEN_KEY, data.session.access_token);
-          }
-          return { success: true, user: cloudUser };
-        }
-      } catch (err) {
-        console.warn('Supabase Auth no disponible, verificando usuarios del sistema:', err);
+    if (isSupabaseConfigured() && supabase) {
+      const result = await verifyInCloud(email, password);
+      if (result.status === 'ok') return { success: true, user: persistSession(result.user, result.token) };
+      if (result.status === 'inactive') return { success: false, error: INACTIVE_USER };
+      // Los usuarios de demostración solo valen si la tabla `usuarios` está confirmada vacía
+      if (!(await userService.isCloudEmpty())) {
+        return { success: false, error: result.status === 'invalid' ? INVALID_CREDENTIALS : 'No se pudo verificar tu acceso. Revisa tu conexión e intenta de nuevo.' };
       }
     }
 
-    // 2. Autenticación con los usuarios de la base de datos (userService)
-    const storedUsers = userService.getAll();
-    const user = storedUsers.find(u => {
-      const emailLower = (u.email || '').toLowerCase();
-      const alias = (u.email || '').split('@')[0].toLowerCase();
-      const uRole = (u.role || '').toLowerCase();
+    // Sin nube (o instalación nueva sin usuarios): cada usuario entra solo con SU contraseña
+    const user = userService.getAll().find(u => normalizeEmail(u.email) === email && u.password && u.password === password);
+    if (!user) return { success: false, error: INVALID_CREDENTIALS };
+    if (!user.active) return { success: false, error: INACTIVE_USER };
+    return { success: true, user: persistSession(user) };
+  },
 
-      const matchesIdentifier =
-        emailLower === cleanInput ||
-        alias === cleanInput ||
-        (cleanInput === 'admin' && uRole === 'admin') ||
-        (cleanInput === 'cajero' && uRole === 'cajero') ||
-        (cleanInput === 'cajero1' && (u.email.includes('cajero1') || u.assignedCaja === 'Caja 1' || u.assignedCaja === 'caja-1')) ||
-        (cleanInput === 'cajero2' && (u.email.includes('cajero2') || u.assignedCaja === 'Caja 2' || u.assignedCaja === 'caja-2')) ||
-        (cleanInput === 'cajero3' && (u.email.includes('cajero3') || u.assignedCaja === 'Caja 3' || u.assignedCaja === 'caja-3'));
+  /**
+   * Registro de cliente desde la tienda. Aplica la regla única de identidad:
+   * un correo = una cuenta web, y una cédula/RIF = una ficha de cliente (se vincula si ya compró en tienda).
+   */
+  async registerClient(form) {
+    const checks = [
+      validatePersonName(form.name),
+      validateEmail(form.email),
+      validatePhoneVE(form.phone),
+      validateDocument(form.docType, form.docNumber),
+      form.address?.trim() ? validateAddress(form.address) : null,
+      validatePassword(form.password),
+      form.password !== form.confirmPassword ? 'Las contraseñas no coinciden' : null
+    ].filter(Boolean);
+    if (checks.length > 0) throw new Error(checks[0]);
 
-      if (!matchesIdentifier) return false;
+    const email = normalizeEmail(form.email);
+    const name = form.name.trim().replace(/\s+/g, ' ');
+    const docType = String(form.docType || 'V').toUpperCase();
+    const docNumber = normalizeDocument(docType, form.docNumber);
 
-      // Validación estricta de contraseña
-      const validPasswords = [
-        u.password,
-        `${alias}123`,
-        uRole === 'admin' ? 'admin2914' : null,
-        uRole === 'cajero' ? 'cajero123' : null,
-      ].filter(Boolean);
-
-      return validPasswords.includes(cleanPassword) && u.active;
-    });
-
-    if (!user) {
-      return {
-        success: false,
-        error: 'Credenciales inválidas. Verifica tu correo/usuario y contraseña.'
-      };
+    if (userService.getByEmail(email) || await userService.findInCloudByEmail(email)) {
+      throw new Error('Ya existe una cuenta con ese correo. Inicia sesión o recupera tu contraseña.');
+    }
+    const byDoc = await customerService.findByDocument(docType, docNumber);
+    if (byDoc && !isPlaceholder(byDoc.email) && normalizeEmail(byDoc.email) !== email) {
+      throw new Error('Esa cédula/RIF ya está registrada con otro correo. Si es tuya, escríbenos para vincularla.');
+    }
+    const byEmail = await customerService.findByEmail(email);
+    if (byEmail && normalizeDocument(byEmail.docType, byEmail.docNumber) !== docNumber) {
+      throw new Error('Ese correo ya está asociado a otra cédula/RIF.');
     }
 
-    const { password: _, ...safeUser } = user;
-    localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
-    localStorage.setItem(TOKEN_KEY, `mock-token-${Date.now()}`);
+    // Ficha de cliente primero: si ya compró en la tienda física se vincula en lugar de duplicarla
+    const [firstName, ...rest] = name.split(' ');
+    const existing = byDoc || byEmail;
+    if (existing) {
+      await customerService.update(existing.id, { email, phone: form.phone, address: form.address?.trim() || existing.address });
+    } else {
+      await customerService.create({
+        firstName,
+        lastName: rest.join(' '),
+        docType,
+        docNumber,
+        email,
+        phone: form.phone,
+        state: 'Lara',
+        city: 'Barquisimeto',
+        address: form.address?.trim() || 'Barquisimeto, Estado Lara'
+      });
+    }
 
-    return { success: true, user: safeUser };
+    return userService.create({
+      name,
+      email,
+      password: form.password,
+      role: 'Cliente',
+      phone: form.phone,
+      assignedCaja: 'Tienda Online',
+      branch: 'Ecommerce Online'
+    });
   },
 
   /**
@@ -107,150 +197,86 @@ export const authService = {
     return cashRegisterService.getActive();
   },
 
-  /** Inicia el flujo OAuth de Google con fallback inteligente y manejo de errores. */
+  /**
+   * Inicia el acceso con Google (OAuth de Supabase). El navegador sale hacia Google y, al volver,
+   * restoreOAuthSession() crea o vincula la cuenta del cliente. No existe un modo de demostración:
+   * sin Google configurado en Supabase el acceso se rechaza.
+   */
   async loginWithGoogle() {
     if (!isSupabaseConfigured() || !supabase) {
-      // Modo sin Supabase o desarrollo local: inicio rápido de cuenta Google
-      const demoGoogleUser = {
-        id: `google-user-${Date.now()}`,
-        name: 'Cliente Google',
-        email: 'cliente.google@urbanstep.com',
-        role: 'Cliente',
-        branch: 'Ecommerce Online',
-        active: true,
-        provider: 'google'
-      };
-      localStorage.setItem(USER_KEY, JSON.stringify(demoGoogleUser));
-      return { success: true, user: demoGoogleUser, isDemo: true };
+      return { success: false, error: 'El acceso con Google requiere conectar la tienda a Supabase.' };
     }
-
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/landing` }
+        options: {
+          redirectTo: `${siteOrigin()}/landing?oauth=google`,
+          queryParams: { prompt: 'select_account' }
+        }
       });
       if (error) {
-        // Si el proveedor aún no fue activado en Supabase Console
-        if (error.message?.includes('not enabled') || error.message?.includes('Unsupported provider')) {
-          const fallbackUser = {
-            id: `google-${Date.now()}`,
-            name: 'Cliente Google (Demo)',
-            email: 'cliente.demo@urbanstep.com',
-            role: 'Cliente',
-            branch: 'Ecommerce Online',
-            active: true,
-            provider: 'google'
-          };
-          localStorage.setItem(USER_KEY, JSON.stringify(fallbackUser));
-          return {
-            success: true,
-            user: fallbackUser,
-            warning: 'Proveedor Google de Supabase en modo demostración local. Para producción, vincula tu Client ID en el panel de Supabase.'
-          };
+        if (/not enabled|unsupported provider/i.test(error.message || '')) {
+          return { success: false, error: 'El acceso con Google aún no está activado en Supabase (Authentication > Providers > Google).' };
         }
         return { success: false, error: error.message };
       }
-      return { success: true, data };
+      return { success: true, redirecting: true };
     } catch (err) {
       return { success: false, error: err.message || 'Error al iniciar sesión con Google' };
     }
   },
 
   /**
-   * Solicitar recuperación de contraseña (Forgot password).
-   * Genera enlace vía Supabase Auth o genera token de verificación seguro en almacenamiento local.
+   * Envía el enlace de recuperación (Supabase Auth). La respuesta es la misma exista o no el correo,
+   * para no revelar qué cuentas están registradas.
    */
   async requestPasswordReset(emailInput) {
-    await new Promise(r => setTimeout(r, 450));
-    const cleanEmail = (emailInput || '').trim().toLowerCase();
-
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return { success: false, error: 'Por favor ingresa un correo electrónico válido.' };
+    const emailError = validateEmail(emailInput);
+    if (emailError) return { success: false, error: emailError };
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'La recuperación por correo requiere la conexión con Supabase. Pide al administrador que restablezca tu contraseña.' };
     }
-
-    let supabaseSent = false;
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: `${window.location.origin}/landing?reset_password=true`,
-        });
-        if (!error) {
-          supabaseSent = true;
-        }
-      } catch (err) {
-        console.warn('Supabase resetPasswordForEmail falló:', err);
-      }
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(emailInput), {
+      redirectTo: `${siteOrigin()}/landing?reset_password=true`
+    });
+    if (error && /rate limit|too many/i.test(error.message || '')) {
+      return { success: false, error: 'Ya enviamos un enlace hace poco. Espera unos minutos antes de pedir otro.' };
     }
-
-    // Comprobar existencia en userService local o clientes
-    const storedUsers = userService.getAll();
-    const existingUser = storedUsers.find(u => (u.email || '').toLowerCase() === cleanEmail);
-
-    // Guardar solicitud de restablecimiento con token y expiración (30 min)
-    const resetToken = `US-${Math.floor(100000 + Math.random() * 900000)}`;
-    try {
-      const existingResets = JSON.parse(localStorage.getItem('us_password_resets') || '[]');
-      existingResets.push({
-        email: cleanEmail,
-        code: resetToken,
-        createdAt: new Date().toISOString(),
-        expiresAt: Date.now() + 1000 * 60 * 30
-      });
-      localStorage.setItem('us_password_resets', JSON.stringify(existingResets.slice(-10)));
-    } catch {
-      // Ignorar fallo de almacenamiento
-    }
-
     return {
       success: true,
-      message: `Hemos enviado las instrucciones y tu código de recuperación al correo ${cleanEmail}. Si está registrado, podrás restablecer tu clave inmediatamente.`,
-      code: resetToken,
-      supabaseSent,
-      userFound: Boolean(existingUser || supabaseSent)
+      message: 'Si el correo está registrado recibirás un enlace para crear una contraseña nueva (revisa también spam). Si tu cuenta la creó la tienda, el administrador puede asignarte una nueva en Configuración > Usuarios.'
     };
   },
 
   /**
-   * Confirmar nueva contraseña tras recuperación
+   * Guarda la contraseña nueva. Solo funciona con la sesión de recuperación que abre el enlace del
+   * correo: sin ella no se puede cambiar la contraseña de nadie.
    */
-  async confirmPasswordReset(emailInput, newPassword, codeInput = '') {
-    await new Promise(r => setTimeout(r, 400));
-    const cleanEmail = (emailInput || '').trim().toLowerCase();
-    const cleanPassword = (newPassword || '').trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      return { success: false, error: 'Por favor ingresa el correo y la nueva contraseña.' };
+  async confirmPasswordReset(_emailInput, newPassword) {
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) return { success: false, error: passwordError };
+    if (!isSupabaseConfigured() || !supabase) {
+      return { success: false, error: 'El cambio de contraseña por enlace requiere la conexión con Supabase.' };
     }
-    if (cleanPassword.length < 6) {
-      return { success: false, error: 'La nueva contraseña debe tener un mínimo de 6 caracteres.' };
+    const { data } = await supabase.auth.getSession();
+    const sessionUser = data?.session?.user;
+    if (!sessionUser) {
+      return { success: false, error: 'El enlace de recuperación expiró o no es válido. Solicita uno nuevo.' };
     }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { success: false, error: error.message };
 
-    // 1. Si Supabase tiene sesión activa de recuperación
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { error } = await supabase.auth.updateUser({ password: cleanPassword });
-        if (!error) {
-          return { success: true, message: 'Tu contraseña ha sido actualizada con éxito en la nube.' };
-        }
-      } catch (err) {
-        console.warn('Error al actualizar contraseña en Supabase:', err);
-      }
-    }
-
-    // 2. Actualizar en usuarios locales de userService
-    const storedUsers = userService.getAll();
-    const userIndex = storedUsers.findIndex(u => (u.email || '').toLowerCase() === cleanEmail);
-    if (userIndex !== -1) {
-      storedUsers[userIndex].password = cleanPassword;
-      userService.save(storedUsers);
-      return { success: true, message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión con tu nueva clave.' };
-    }
-
-    return { success: true, message: 'Contraseña actualizada correctamente.' };
+    // Mantiene sincronizada la cuenta de la tabla `usuarios` con el mismo correo
+    const account = await userService.findInCloudByEmail(sessionUser.email);
+    if (account) await userService.update(account.id, { password: newPassword }).catch(() => {});
+    await supabase.auth.signOut();
+    return { success: true, message: 'Tu contraseña fue actualizada. Ya puedes iniciar sesión.' };
   },
 
   /**
-   * Al volver del OAuth, convierte la sesión de Supabase en un usuario de la tienda.
+   * Al volver de Google convierte la sesión de Supabase en un cliente de la tienda:
+   * crea (una sola vez) su cuenta en `usuarios` para que aparezca en Configuración y revisa si ya
+   * tiene ficha de cliente; si no, `profileComplete` queda en false para pedirle cédula y teléfono.
    * SIEMPRE rol Cliente: el rol nunca se toma de user_metadata (editable por el propio usuario).
    */
   async restoreOAuthSession() {
@@ -258,39 +284,74 @@ export const authService = {
     try {
       const { data } = await supabase.auth.getSession();
       const authUser = data?.session?.user;
-      if (!authUser || authUser.app_metadata?.provider === 'email') return null;
+      if (!authUser || authUser.app_metadata?.provider !== 'google') return null;
 
-      const email = String(authUser.email || '').toLowerCase();
+      const email = normalizeEmail(authUser.email);
       const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split('@')[0];
-      const clientUser = { id: authUser.id, name, email, role: 'Cliente', branch: 'Ecommerce Online', active: true, provider: 'google' };
 
-      // Ficha de cliente para que sus pedidos aparezcan en "Mi cuenta"
+      let account = null;
       try {
-        const all = await customerService.getAll();
-        if (!all.some(c => String(c.email || '').toLowerCase() === email)) {
-          const parts = name.split(' ');
-          await customerService.create({
-            firstName: parts[0] || 'Cliente',
-            lastName: parts.slice(1).join(' ') || 'Online',
-            docType: 'V',
-            docNumber: `V-${Date.now().toString().slice(-8)}`,
-            email,
-            phone: '0414-0000000',
-            state: 'Lara',
-            city: 'Barquisimeto',
-            address: 'Por confirmar'
-          });
-        }
+        account = await userService.ensureClientAccount({ name, email });
       } catch (e) {
-        console.warn('No se pudo crear la ficha del cliente de Google:', e);
+        console.warn('No se pudo registrar la cuenta Google en usuarios:', e);
+      }
+      if (account && account.active === false) {
+        await supabase.auth.signOut();
+        return { blocked: true, error: INACTIVE_USER };
       }
 
-      localStorage.setItem(USER_KEY, JSON.stringify(clientUser));
-      return clientUser;
+      const customer = await customerService.findByEmail(email).catch(() => null);
+      const clientUser = {
+        id: account?.role === 'Cliente' ? account.id : authUser.id,
+        name: account?.role === 'Cliente' ? account.name : name,
+        email,
+        phone: customer?.phone || '',
+        role: 'Cliente',
+        branch: 'Ecommerce Online',
+        active: true,
+        provider: 'google',
+        profileComplete: Boolean(customer)
+      };
+      return persistSession(clientUser, data.session.access_token);
     } catch (e) {
       console.warn('No se pudo restaurar la sesión OAuth:', e);
       return null;
     }
+  },
+
+  /**
+   * Completa el registro de quien entró con Google: crea su ficha de cliente (cédula, teléfono y
+   * dirección) con las mismas validaciones y la regla de identidad única.
+   */
+  async completeGoogleProfile(user, form) {
+    const checks = [
+      validatePersonName(form.name),
+      validatePhoneVE(form.phone),
+      validateDocument(form.docType, form.docNumber),
+      validateAddress(form.address)
+    ].filter(Boolean);
+    if (checks.length > 0) throw new Error(checks[0]);
+
+    const email = normalizeEmail(user.email);
+    const docType = String(form.docType || 'V').toUpperCase();
+    const docNumber = normalizeDocument(docType, form.docNumber);
+    const byDoc = await customerService.findByDocument(docType, docNumber);
+    if (byDoc && !isPlaceholder(byDoc.email) && normalizeEmail(byDoc.email) !== email) {
+      throw new Error('Esa cédula/RIF ya está registrada con otro correo. Si es tuya, escríbenos para vincularla.');
+    }
+    const name = form.name.trim().replace(/\s+/g, ' ');
+    const [firstName, ...rest] = name.split(' ');
+    if (byDoc) {
+      await customerService.update(byDoc.id, { email, phone: form.phone, address: form.address.trim() });
+    } else {
+      await customerService.create({
+        firstName, lastName: rest.join(' '), docType, docNumber, email,
+        phone: form.phone, state: 'Lara', city: 'Barquisimeto', address: form.address.trim()
+      });
+    }
+    const account = userService.getByEmail(email);
+    if (account?.role === 'Cliente') await userService.update(account.id, { name, phone: form.phone }).catch(() => {});
+    return persistSession({ ...user, name, phone: form.phone, profileComplete: true }, localStorage.getItem(TOKEN_KEY));
   },
 
   logout() {

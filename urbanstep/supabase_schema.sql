@@ -481,12 +481,15 @@ CREATE TABLE IF NOT EXISTS auditoria (
 
 -- A) Actualización automática de marcas temporales (actualizado_el)
 CREATE OR REPLACE FUNCTION fn_actualizar_timestamp()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     NEW.actualizado_el = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_configuracion_actualizada ON configuracion_tienda;
 CREATE TRIGGER trg_configuracion_actualizada
@@ -540,7 +543,10 @@ FOR EACH ROW EXECUTE PROCEDURE fn_actualizar_timestamp();
 
 -- B) Actualizar stock de inventario automáticamente al insertar detalles de compra
 CREATE OR REPLACE FUNCTION fn_aumentar_stock_compra()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     -- Incrementar stock del producto
     UPDATE productos
@@ -557,7 +563,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_detalles_compra_stock ON detalles_compra;
 CREATE TRIGGER trg_detalles_compra_stock
@@ -566,7 +572,10 @@ FOR EACH ROW EXECUTE PROCEDURE fn_aumentar_stock_compra();
 
 -- C) Descontar stock de inventario automáticamente al vender un producto
 CREATE OR REPLACE FUNCTION fn_descontar_stock_venta()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     UPDATE productos
     SET 
@@ -581,7 +590,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_detalles_venta_stock ON detalles_venta;
 CREATE TRIGGER trg_detalles_venta_stock
@@ -590,7 +599,10 @@ FOR EACH ROW EXECUTE PROCEDURE fn_descontar_stock_venta();
 
 -- D) Actualizar acumulados del cliente al registrar una venta
 CREATE OR REPLACE FUNCTION fn_actualizar_totales_cliente()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     IF NEW.cliente_id IS NOT NULL AND NEW.cliente_id <> 'publico' THEN
         UPDATE clientes
@@ -602,7 +614,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_ventas_cliente_totales ON ventas;
 CREATE TRIGGER trg_ventas_cliente_totales
@@ -639,10 +651,17 @@ CREATE INDEX IF NOT EXISTS idx_pagos_venta_venta_id ON pagos_venta(venta_id);
 
 CREATE INDEX IF NOT EXISTS idx_turnos_caja_id ON turnos_caja(caja_id);
 CREATE INDEX IF NOT EXISTS idx_turnos_estado ON turnos_caja(estado);
+CREATE INDEX IF NOT EXISTS idx_turnos_caja_cajero_id ON turnos_caja(cajero_id);
 CREATE INDEX IF NOT EXISTS idx_envios_venta_id ON envios(venta_id);
 CREATE INDEX IF NOT EXISTS idx_envios_estado ON envios(estado);
 CREATE INDEX IF NOT EXISTS idx_auditoria_creado_el ON auditoria(creado_el);
 CREATE INDEX IF NOT EXISTS idx_auditoria_modulo ON auditoria(modulo);
+
+-- Índices de claves foráneas para acelerar JOINs y evitar bloqueos en cascada
+CREATE INDEX IF NOT EXISTS idx_compras_caja_id ON compras(caja_id);
+CREATE INDEX IF NOT EXISTS idx_compras_usuario_id ON compras(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_usuarios_caja_asignada_id ON usuarios(caja_asignada_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_usuario_cajero_id ON ventas(usuario_cajero_id);
 
 -- ==============================================================================
 -- 22. POLÍTICAS DE SEGURIDAD (ROW LEVEL SECURITY - RLS)
@@ -665,50 +684,31 @@ ALTER TABLE pagos_venta ENABLE ROW LEVEL SECURITY;
 ALTER TABLE envios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auditoria ENABLE ROW LEVEL SECURITY;
 
--- Políticas de lectura (Select)
-CREATE POLICY "Lectura configuracion_tienda" ON configuracion_tienda FOR SELECT USING (true);
-CREATE POLICY "Lectura tasas_cambio" ON tasas_cambio FOR SELECT USING (true);
-CREATE POLICY "Lectura cajas" ON cajas FOR SELECT USING (true);
-CREATE POLICY "Lectura usuarios" ON usuarios FOR SELECT USING (true);
-CREATE POLICY "Lectura categorias" ON categorias FOR SELECT USING (true);
-CREATE POLICY "Lectura marcas" ON marcas FOR SELECT USING (true);
-CREATE POLICY "Lectura proveedores" ON proveedores FOR SELECT USING (true);
-CREATE POLICY "Lectura productos" ON productos FOR SELECT USING (true);
-CREATE POLICY "Lectura compras" ON compras FOR SELECT USING (true);
-CREATE POLICY "Lectura detalles_compra" ON detalles_compra FOR SELECT USING (true);
-CREATE POLICY "Lectura clientes" ON clientes FOR SELECT USING (true);
-CREATE POLICY "Lectura turnos_caja" ON turnos_caja FOR SELECT USING (true);
-CREATE POLICY "Lectura ventas" ON ventas FOR SELECT USING (true);
-CREATE POLICY "Lectura detalles_venta" ON detalles_venta FOR SELECT USING (true);
-CREATE POLICY "Lectura pagos_venta" ON pagos_venta FOR SELECT USING (true);
-CREATE POLICY "Lectura envios" ON envios FOR SELECT USING (true);
-CREATE POLICY "Lectura auditoria" ON auditoria FOR SELECT USING (true);
-
--- Políticas de mutación (Insert, Update, Delete)
-CREATE POLICY "Mutacion configuracion_tienda" ON configuracion_tienda FOR ALL USING (true);
-CREATE POLICY "Mutacion tasas_cambio" ON tasas_cambio FOR ALL USING (true);
-CREATE POLICY "Mutacion cajas" ON cajas FOR ALL USING (true);
-CREATE POLICY "Mutacion usuarios" ON usuarios FOR ALL USING (true);
-CREATE POLICY "Mutacion categorias" ON categorias FOR ALL USING (true);
-CREATE POLICY "Mutacion marcas" ON marcas FOR ALL USING (true);
-CREATE POLICY "Mutacion proveedores" ON proveedores FOR ALL USING (true);
-CREATE POLICY "Mutacion productos" ON productos FOR ALL USING (true);
-CREATE POLICY "Mutacion compras" ON compras FOR ALL USING (true);
-CREATE POLICY "Mutacion detalles_compra" ON detalles_compra FOR ALL USING (true);
-CREATE POLICY "Mutacion clientes" ON clientes FOR ALL USING (true);
-CREATE POLICY "Mutacion turnos_caja" ON turnos_caja FOR ALL USING (true);
-CREATE POLICY "Mutacion ventas" ON ventas FOR ALL USING (true);
-CREATE POLICY "Mutacion detalles_venta" ON detalles_venta FOR ALL USING (true);
-CREATE POLICY "Mutacion pagos_venta" ON pagos_venta FOR ALL USING (true);
-CREATE POLICY "Mutacion envios" ON envios FOR ALL USING (true);
-CREATE POLICY "Mutacion auditoria" ON auditoria FOR ALL USING (true);
+-- Políticas de acceso consolidadas (evita duplicidad de políticas permisivas para SELECT)
+CREATE POLICY "Acceso configuracion_tienda" ON configuracion_tienda FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso tasas_cambio" ON tasas_cambio FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso cajas" ON cajas FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso usuarios" ON usuarios FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso categorias" ON categorias FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso marcas" ON marcas FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso proveedores" ON proveedores FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso productos" ON productos FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso compras" ON compras FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso detalles_compra" ON detalles_compra FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso clientes" ON clientes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso turnos_caja" ON turnos_caja FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso ventas" ON ventas FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso detalles_venta" ON detalles_venta FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso pagos_venta" ON pagos_venta FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso envios" ON envios FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acceso auditoria" ON auditoria FOR ALL USING (true) WITH CHECK (true);
 
 -- ==============================================================================
 -- 23. VISTAS DE COMPATIBILIDAD BILINGÜES (BACKWARD COMPATIBILITY)
 -- Permite que código legacy o bibliotecas externas en inglés sigan funcionando
 -- ==============================================================================
 
-CREATE OR REPLACE VIEW store_settings AS
+CREATE OR REPLACE VIEW store_settings WITH (security_invoker = true) AS
 SELECT 
     id,
     nombre_tienda AS store_name,
@@ -737,7 +737,7 @@ SELECT
     actualizado_el AS updated_at
 FROM configuracion_tienda;
 
-CREATE OR REPLACE VIEW exchange_rates AS
+CREATE OR REPLACE VIEW exchange_rates WITH (security_invoker = true) AS
 SELECT 
     id,
     tasa AS rate,
@@ -748,7 +748,7 @@ SELECT
     creado_el AS created_at
 FROM tasas_cambio;
 
-CREATE OR REPLACE VIEW cash_registers AS
+CREATE OR REPLACE VIEW cash_registers WITH (security_invoker = true) AS
 SELECT 
     id,
     nombre AS name,
@@ -759,7 +759,7 @@ SELECT
     actualizada_el AS updated_at
 FROM cajas;
 
-CREATE OR REPLACE VIEW profiles AS
+CREATE OR REPLACE VIEW profiles WITH (security_invoker = true) AS
 SELECT 
     id,
     usuario_auth_id AS user_id,
@@ -773,7 +773,7 @@ SELECT
     actualizado_el AS updated_at
 FROM usuarios;
 
-CREATE OR REPLACE VIEW categories AS
+CREATE OR REPLACE VIEW categories WITH (security_invoker = true) AS
 SELECT 
     id,
     nombre AS name,
@@ -786,7 +786,7 @@ SELECT
     actualizada_el AS updated_at
 FROM categorias;
 
-CREATE OR REPLACE VIEW brands AS
+CREATE OR REPLACE VIEW brands WITH (security_invoker = true) AS
 SELECT 
     id,
     nombre AS name,
@@ -799,7 +799,7 @@ SELECT
     actualizada_el AS updated_at
 FROM marcas;
 
-CREATE OR REPLACE VIEW suppliers AS
+CREATE OR REPLACE VIEW suppliers WITH (security_invoker = true) AS
 SELECT 
     id,
     rif,
@@ -817,7 +817,7 @@ SELECT
     actualizado_el AS updated_at
 FROM proveedores;
 
-CREATE OR REPLACE VIEW products AS
+CREATE OR REPLACE VIEW products WITH (security_invoker = true) AS
 SELECT 
     id,
     sku,
@@ -841,7 +841,7 @@ SELECT
     actualizado_el AS updated_at
 FROM productos;
 
-CREATE OR REPLACE VIEW purchases AS
+CREATE OR REPLACE VIEW purchases WITH (security_invoker = true) AS
 SELECT 
     id,
     numero_factura AS invoice_number,
@@ -869,7 +869,7 @@ SELECT
     actualizado_el AS updated_at
 FROM compras;
 
-CREATE OR REPLACE VIEW purchase_items AS
+CREATE OR REPLACE VIEW purchase_items WITH (security_invoker = true) AS
 SELECT 
     id,
     compra_id AS purchase_id,
@@ -886,7 +886,7 @@ SELECT
     creado_el AS created_at
 FROM detalles_compra;
 
-CREATE OR REPLACE VIEW customers AS
+CREATE OR REPLACE VIEW customers WITH (security_invoker = true) AS
 SELECT 
     id,
     tipo_documento AS doc_type,
@@ -906,7 +906,7 @@ SELECT
     actualizado_el AS updated_at
 FROM clientes;
 
-CREATE OR REPLACE VIEW shifts AS
+CREATE OR REPLACE VIEW shifts WITH (security_invoker = true) AS
 SELECT 
     id,
     caja_id,
@@ -930,7 +930,7 @@ SELECT
     creado_el AS created_at
 FROM turnos_caja;
 
-CREATE OR REPLACE VIEW sales AS
+CREATE OR REPLACE VIEW sales WITH (security_invoker = true) AS
 SELECT 
     id,
     numero_recibo AS receipt_number,
@@ -963,7 +963,7 @@ SELECT
     creado_el AS created_at
 FROM ventas;
 
-CREATE OR REPLACE VIEW sale_items AS
+CREATE OR REPLACE VIEW sale_items WITH (security_invoker = true) AS
 SELECT 
     id,
     venta_id AS sale_id,
@@ -979,7 +979,7 @@ SELECT
     subtotal_bs AS total_price_bs
 FROM detalles_venta;
 
-CREATE OR REPLACE VIEW sale_payments AS
+CREATE OR REPLACE VIEW sale_payments WITH (security_invoker = true) AS
 SELECT 
     id,
     venta_id AS sale_id,
@@ -995,7 +995,7 @@ SELECT
     creado_el AS created_at
 FROM pagos_venta;
 
-CREATE OR REPLACE VIEW deliveries AS
+CREATE OR REPLACE VIEW deliveries WITH (security_invoker = true) AS
 SELECT 
     id,
     venta_id AS sale_id,
@@ -1023,7 +1023,7 @@ SELECT
     actualizado_el AS updated_at
 FROM envios;
 
-CREATE OR REPLACE VIEW audit_logs AS
+CREATE OR REPLACE VIEW audit_logs WITH (security_invoker = true) AS
 SELECT 
     id,
     usuario_id AS user_id,

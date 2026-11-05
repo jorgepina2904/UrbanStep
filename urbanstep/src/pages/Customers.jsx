@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { hasPermission } from '../utils/permissions';
 import { DOC_TYPES, VENEZUELA_STATES, PHONE_PREFIXES } from '../data/venezuelaData';
+import { validateDocument, validateEmail, validatePhoneVE } from '../utils/validators';
 
 const PUBLIC_ID = 'publico';
 const EMPTY_FORM = {
@@ -46,7 +47,7 @@ const KpiChip = ({ icon: Icon, label, value, subvalue, color }) => (
 
 export default function Customers() {
     const { user } = useAuth();
-    const { toBs, formatBs, formatUSD } = useCurrency();
+    const { primaryAmount, secondaryAmount } = useCurrency();
     const canWrite = hasPermission(user?.role, 'customers');
     const canDelete = user?.role === 'Admin';
 
@@ -145,19 +146,14 @@ export default function Customers() {
         if (!rawDoc && !editing) {
             errors.rawDoc = 'La cédula o RIF es obligatorio';
         } else if (rawDoc) {
-            const type = String(form.docType || 'V').toUpperCase();
-            const rules = {
-                V: [/^\d{6,9}$/, 'La cédula debe tener entre 6 y 9 dígitos'],
-                E: [/^\d{6,9}$/, 'La cédula debe tener entre 6 y 9 dígitos'],
-                J: [/^\d{8,10}$/, 'El RIF debe tener entre 8 y 10 dígitos'],
-                G: [/^\d{8,10}$/, 'El RIF debe tener entre 8 y 10 dígitos'],
-                P: [/^[A-Za-z0-9]{5,15}$/, 'El pasaporte debe tener entre 5 y 15 caracteres alfanuméricos']
-            };
-            const rule = rules[type];
-            if (rule && !rule[0].test(rawDoc)) errors.rawDoc = rule[1];
+            const docError = validateDocument(form.docType, rawDoc);
+            if (docError) errors.rawDoc = docError;
         }
-        if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        if (form.email && validateEmail(form.email)) {
             errors.email = 'Correo electrónico inválido';
+        }
+        if (form.phoneRaw.trim() && validatePhoneVE(`${form.phonePrefix}${form.phoneRaw}`)) {
+            errors.phoneRaw = 'Teléfono inválido: deben ser 7 dígitos después del prefijo';
         }
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
@@ -275,8 +271,8 @@ export default function Customers() {
             header: 'Total Compras',
             cell: (c) => (
                 <div className="text-right">
-                    <p className="text-xs font-bold text-gray-900 dark:text-white">{formatUSD(c.totalSpent || 0)}</p>
-                    <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">{formatBs(toBs(c.totalSpent || 0))}</p>
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">{primaryAmount(c.totalSpent || 0)}</p>
+                    <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">{secondaryAmount(c.totalSpent || 0)}</p>
                 </div>
             ),
         },
@@ -344,14 +340,14 @@ export default function Customers() {
                 <KpiChip 
                     icon={TrendingUp} 
                     label="Ventas Acumuladas" 
-                    value={formatUSD(totalRevenue)} 
-                    subvalue={formatBs(toBs(totalRevenue))} 
+                    value={primaryAmount(totalRevenue)} 
+                    subvalue={secondaryAmount(totalRevenue)} 
                     color="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600" 
                 />
                 <KpiChip 
                     icon={ShoppingBag} 
                     label="Ticket Promedio" 
-                    value={formatUSD(customers.length > 0 ? totalRevenue / customers.length : 0)} 
+                    value={primaryAmount(customers.length > 0 ? totalRevenue / customers.length : 0)} 
                     color="bg-amber-100 dark:bg-amber-900/30 text-amber-600" 
                 />
             </div>
@@ -449,6 +445,7 @@ export default function Customers() {
                                     className="flex-1 font-mono"
                                 />
                             </div>
+                            {formErrors.phoneRaw && <p className="text-[11px] text-red-500 mt-0.5">{formErrors.phoneRaw}</p>}
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Correo Electrónico</label>
@@ -533,7 +530,7 @@ export default function Customers() {
                             </div>
                             <div>
                                 <span className="text-gray-400 block">Total Invertido:</span>
-                                <span className="font-bold text-emerald-600">{formatUSD(selected.totalSpent || 0)}</span>
+                                <span className="font-bold text-emerald-600">{primaryAmount(selected.totalSpent || 0)}</span>
                             </div>
                         </div>
 
@@ -552,8 +549,8 @@ export default function Customers() {
                                                 <p className="text-gray-400">{new Date(sale.date).toLocaleString('es-VE')} • {sale.paymentMethodLabel || sale.paymentMethod}</p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-blue-600 dark:text-blue-400">{formatUSD(sale.total)}</p>
-                                                <p className="text-[10px] text-emerald-600">{formatBs(toBs(sale.total))}</p>
+                                                <p className="font-bold text-blue-600 dark:text-blue-400">{primaryAmount(sale.total, sale.totalBs)}</p>
+                                                <p className="text-[10px] text-emerald-600">{secondaryAmount(sale.total, sale.totalBs)}</p>
                                             </div>
                                         </div>
                                     ))}

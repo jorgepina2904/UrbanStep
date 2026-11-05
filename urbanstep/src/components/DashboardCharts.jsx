@@ -19,7 +19,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
  * DashboardCharts — Gráficas y Métricas Financieras y Comerciales para UrbanStep
  */
 export default function DashboardCharts({ allSales = [], products = [] }) {
-    const { rate, toBs, formatBs, formatUSD } = useCurrency();
+    const { rate, toBs, formatBs, primaryAmount, secondaryAmount } = useCurrency();
     const [chartMode, setChartMode] = useState('revenue'); // 'revenue' | 'volume'
     const [hoveredDay, setHoveredDay] = useState(null);
 
@@ -227,10 +227,10 @@ export default function DashboardCharts({ allSales = [], products = [] }) {
                                 Ticket Promedio Retail
                             </p>
                             <p className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-                                {formatUSD(executiveMetrics.avgTicketUsd)}
+                                {primaryAmount(executiveMetrics.avgTicketUsd, executiveMetrics.avgTicketBs)}
                             </p>
                             <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                {formatBs(executiveMetrics.avgTicketBs)}
+                                {secondaryAmount(executiveMetrics.avgTicketUsd, executiveMetrics.avgTicketBs)}
                             </p>
                         </div>
                         <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
@@ -412,10 +412,10 @@ export default function DashboardCharts({ allSales = [], products = [] }) {
                             <div className="absolute top-2 right-4 bg-gray-900/95 dark:bg-black/95 text-white p-3 rounded-xl shadow-2xl border border-white/20 text-xs backdrop-blur-md pointer-events-none animate-fade-in font-mono">
                                 <p className="font-bold text-blue-400 text-[11px] mb-1">{hoveredDay.dayName} · {hoveredDay.dateStr}</p>
                                 <p className="font-extrabold text-sm text-white">
-                                    {formatUSD(hoveredDay.revenueUsd)}
+                                    {primaryAmount(hoveredDay.revenueUsd)}
                                 </p>
                                 <p className="text-[10px] text-emerald-400 font-bold">
-                                    {formatBs(toBs(hoveredDay.revenueUsd))}
+                                    {secondaryAmount(hoveredDay.revenueUsd)}
                                 </p>
                                 <p className="text-[10px] text-gray-300 mt-1">
                                     {hoveredDay.volumePairs} pares · {hoveredDay.transactions} transacciones
@@ -430,7 +430,7 @@ export default function DashboardCharts({ allSales = [], products = [] }) {
                             Actualización automática por cada venta POS y Web
                         </span>
                         <span className="font-bold text-gray-700 dark:text-gray-300">
-                            Total 7 días: {formatUSD(last7DaysData.reduce((s, d) => s + d.revenueUsd, 0))}
+                            Total 7 días: {primaryAmount(last7DaysData.reduce((s, d) => s + d.revenueUsd, 0))}
                         </span>
                     </div>
                 </Card>
@@ -473,8 +473,8 @@ export default function DashboardCharts({ allSales = [], products = [] }) {
                                     </div>
 
                                     <div className="flex justify-between text-[10px] text-gray-400 font-mono">
-                                        <span>{formatUSD(item.amount)}</span>
-                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{formatBs(toBs(item.amount))}</span>
+                                        <span>{primaryAmount(item.amount)}</span>
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{secondaryAmount(item.amount)}</span>
                                     </div>
                                 </div>
                             ))}
@@ -521,10 +521,10 @@ export default function DashboardCharts({ allSales = [], products = [] }) {
 
                                 <div>
                                     <p className="text-lg font-black text-gray-900 dark:text-white">
-                                        {formatUSD(b.revenue)}
+                                        {primaryAmount(b.revenue)}
                                     </p>
                                     <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold font-mono">
-                                        {formatBs(toBs(b.revenue))}
+                                        {secondaryAmount(b.revenue)}
                                     </p>
                                 </div>
 

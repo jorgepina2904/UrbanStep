@@ -26,6 +26,32 @@ let _cachedRate = loadStoredRate() || {
     source: 'Oficial BCV (Inicial)'
 };
 
+const emitRate = () => {
+    storeRate(_cachedRate);
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: { ..._cachedRate } }));
+    }
+};
+
+/**
+ * Aplica la tasa guardada en Supabase solo si es más reciente que la que ya tiene la aplicación.
+ * Antes, la lectura de la nube podía llegar después de la consulta en vivo y devolver una tasa vieja.
+ */
+const applyCloudRate = (row) => {
+    if (!row || !(Number(row.tasa_bcv) > 0)) return false;
+    const cloudTime = new Date(row.actualizado_el || 0).getTime();
+    const currentTime = new Date(_cachedRate.lastUpdated || 0).getTime();
+    const currentIsFallback = /Inicial|última guardada/.test(_cachedRate.source || '');
+    if (!currentIsFallback && cloudTime < currentTime) return false;
+    _cachedRate = {
+        rate: Number(row.tasa_bcv),
+        lastUpdated: row.actualizado_el || new Date().toISOString(),
+        source: 'Configuración Tienda Supabase'
+    };
+    emitRate();
+    return true;
+};
+
 // Carga inicial reactiva desde Supabase Cloud
 const initRateFromCloud = async () => {
     if (isSupabaseConfigured() && supabase) {
@@ -35,18 +61,7 @@ const initRateFromCloud = async () => {
                 .select('tasa_bcv, actualizado_el')
                 .limit(1)
                 .single();
-
-            if (data && Number(data.tasa_bcv) > 0) {
-                _cachedRate = {
-                    rate: Number(data.tasa_bcv),
-                    lastUpdated: data.actualizado_el || new Date().toISOString(),
-                    source: 'Configuración Tienda Supabase'
-                };
-                storeRate(_cachedRate);
-                if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('bcv_rate_updated', { detail: _cachedRate }));
-                }
-            }
+            applyCloudRate(data);
         } catch (e) {
             console.warn('Aviso cargando tasa BCV de Supabase:', e);
         }
@@ -77,12 +92,8 @@ export const bcvService = {
                     .limit(1)
                     .single();
 
-                if (!error && data && Number(data.tasa_bcv) > 0) {
-                    _cachedRate = {
-                        rate: Number(data.tasa_bcv),
-                        lastUpdated: data.actualizado_el || new Date().toISOString(),
-                        source: 'Configuración Tienda Supabase'
-                    };
+                if (!error && data) {
+                    applyCloudRate(data);
                     return { ..._cachedRate };
                 }
             } catch (err) {
@@ -150,18 +161,28 @@ export const bcvService = {
     },
 
     /**
-     * Intenta consultar la tasa oficial en vivo desde la API pública de Venezuela
+     * Consulta la tasa oficial en vivo. Por defecto solo actualiza la pantalla (cualquier visitante de la
+     * tienda la ejecuta al cargar); con `persist: true` (botón de sincronizar del panel) además la guarda
+     * en Supabase y en el histórico, y solo si cambió, para no llenar el historial de registros repetidos.
      */
-    fetchOnlineRate: async () => {
+    fetchOnlineRate: async ({ persist = false } = {}) => {
         try {
             const response = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', {
                 cache: 'no-store'
             });
             if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-            
+
             const data = await response.json();
-            if (data && data.promedio && Number(data.promedio) > 0) {
-                return bcvService.updateRate(data.promedio, 'DolarAPI / BCV En Vivo');
+            const online = Number(data?.promedio);
+            if (online > 0) {
+                const changed = Math.abs(online - _cachedRate.rate) >= 0.0001;
+                if (persist && changed) return bcvService.updateRate(online, 'DolarAPI / BCV En Vivo');
+                _cachedRate = {
+                    rate: online,
+                    lastUpdated: data.fechaActualizacion || new Date().toISOString(),
+                    source: 'DolarAPI / BCV En Vivo'
+                };
+                emitRate();
             }
         } catch (err) {
             console.warn('No se pudo sincronizar automáticamente con la API del BCV (usando tasa almacenada):', err);

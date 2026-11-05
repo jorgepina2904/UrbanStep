@@ -9,8 +9,9 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        const returningFromGoogle = new URLSearchParams(window.location.search).get('oauth') === 'google';
         const storedUser = localStorage.getItem('us_user');
-        if (storedUser) {
+        if (storedUser && !returningFromGoogle) {
             try {
                 setUser(JSON.parse(storedUser));
             } catch {
@@ -19,11 +20,15 @@ export const AuthProvider = ({ children }) => {
             setLoading(false);
             return;
         }
-        // Sin sesión local: ¿regresa de iniciar sesión con Google?
+        // ¿Regresa de iniciar sesión con Google? Se crea o vincula su cuenta de cliente
         authService.restoreOAuthSession().then((oauthUser) => {
-            if (oauthUser) {
+            if (oauthUser?.blocked) {
+                toast.error(oauthUser.error);
+            } else if (oauthUser) {
                 setUser(oauthUser);
                 toast.success(`Bienvenido, ${oauthUser.name}`);
+            } else if (storedUser) {
+                setUser(JSON.parse(storedUser));
             }
         }).finally(() => setLoading(false));
     }, []);
@@ -47,17 +52,10 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Redirige a Google; la sesión se restaura al volver (efecto de montaje)
     const loginWithGoogle = async () => {
         try {
             const res = await authService.loginWithGoogle();
-            if (res.success && res.user) {
-                setUser(res.user);
-                toast.success(`Bienvenido con Google, ${res.user.name}`);
-                if (res.warning) {
-                    toast(res.warning, { icon: 'ℹ️', duration: 4000 });
-                }
-                return { success: true, user: res.user };
-            }
             if (!res.success && res.error) {
                 toast.error(res.error);
                 return { success: false, error: res.error };

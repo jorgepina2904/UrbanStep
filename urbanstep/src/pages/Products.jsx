@@ -6,6 +6,8 @@ import Modal from '../ui/Modal';
 import { productService } from '../services/productService';
 import { purchaseService } from '../services/purchaseService';
 import { formatCurrency } from '../utils/formatCurrency';
+import { useCurrency } from '../contexts/CurrencyContext';
+import CurrencyToggle from '../components/CurrencyToggle';
 import { 
     Palette, 
     Check, 
@@ -204,6 +206,7 @@ function ModelColorsSelector({ colors, primaryColor, onChangeColors, onSetPrimar
  * Products management page with CRUD operations.
  */
 export default function Products() {
+    const { formatUSD, formatBs, toBs, isSwapped } = useCurrency();
     const [products, setProducts] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [cardPreviewColors, setCardPreviewColors] = useState({});
@@ -828,12 +831,15 @@ export default function Products() {
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Productos</h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{products.length} productos registrados</p>
                 </div>
-                <Button variant="primary" onClick={openCreateModal}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Nuevo Producto
-                </Button>
+                <div className="flex items-center gap-2.5">
+                    <CurrencyToggle />
+                    <Button variant="primary" onClick={openCreateModal}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Nuevo Producto
+                    </Button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -998,9 +1004,14 @@ export default function Products() {
                                 )}
 
                                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                    <div>
-                                        <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(product.price)}</p>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500">Stock: {product.stock} pares</p>
+                                    <div className="min-w-0 pr-1">
+                                        <span className="text-base sm:text-lg font-bold text-gray-900 dark:text-white block truncate leading-tight tracking-tight">
+                                            {isSwapped ? formatBs(toBs(product.price)) : formatUSD(product.price)}
+                                        </span>
+                                        <span className={`text-xs font-mono font-bold block truncate ${isSwapped ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                            {isSwapped ? formatUSD(product.price) : formatBs(toBs(product.price))}
+                                        </span>
+                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Stock: {product.stock} pares</p>
                                     </div>
                                     <div className="flex gap-1">
                                         <button

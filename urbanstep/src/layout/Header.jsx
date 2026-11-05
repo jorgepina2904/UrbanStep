@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import CurrencyToggle from '../components/CurrencyToggle';
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission } from '../utils/permissions';
 import { db } from '../services/api';
@@ -39,7 +40,7 @@ import toast from 'react-hot-toast';
 
 export const Header = ({ onToggleMobileSidebar }) => {
     const { isDark, toggleTheme } = useContext(ThemeContext);
-    const { rate, updateRate, refreshRate, isRefreshing, formatBs, formatUSD } = useCurrency();
+    const { rate, updateRate, refreshRate, isRefreshing, formatBs, formatUSD, primaryAmount } = useCurrency();
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
@@ -239,7 +240,7 @@ export const Header = ({ onToggleMobileSidebar }) => {
     };
 
     return (
-        <header className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 sm:px-6 transition-colors duration-200 shrink-0 relative z-30">
+        <header className="h-16 bg-white/95 dark:bg-us-carbon/95 backdrop-blur-xl border-b border-gray-200 dark:border-white/10 flex items-center justify-between px-4 sm:px-6 transition-colors duration-200 shrink-0 relative z-30">
             {/* Left: Mobile Drawer Trigger & Modules Dropdown Button */}
             <div className="flex items-center gap-2 sm:gap-3">
                 {onToggleMobileSidebar && (
@@ -258,7 +259,7 @@ export const Header = ({ onToggleMobileSidebar }) => {
                         onClick={() => setIsModulesOpen(!isModulesOpen)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
                             isModulesOpen
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25'
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 dark:bg-us-cyan dark:text-black dark:border-us-cyan dark:shadow-cyan-500/25'
                                 : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'
                         }`}
                         title="Desplegar menú de módulos del sistema"
@@ -300,7 +301,7 @@ export const Header = ({ onToggleMobileSidebar }) => {
                                                     : 'hover:bg-gray-100 dark:hover:bg-gray-800/80 text-gray-700 dark:text-gray-300 border border-transparent'
                                             }`}
                                         >
-                                            <div className={`p-2 rounded-lg shrink-0 ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                                            <div className={`p-2 rounded-lg shrink-0 ${isActive ? 'bg-blue-600 text-white dark:bg-us-cyan dark:text-black' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
                                                 <Icon className="w-4 h-4" />
                                             </div>
                                             <div className="min-w-0 flex-1">
@@ -393,7 +394,7 @@ export const Header = ({ onToggleMobileSidebar }) => {
                                                         <p className="text-[10px] text-gray-500 font-mono">{p.brand} • SKU: {p.sku}</p>
                                                     </div>
                                                     <div className="text-right shrink-0">
-                                                        <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 block">{formatUSD(p.price)}</span>
+                                                        <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 block">{primaryAmount(p.price)}</span>
                                                         <span className="text-[10px] font-semibold text-emerald-600 block">{p.stock} disp.</span>
                                                     </div>
                                                 </div>
@@ -452,7 +453,7 @@ export const Header = ({ onToggleMobileSidebar }) => {
                                                         <p className="text-[10px] text-gray-500">{s.customer}</p>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className="text-xs font-extrabold text-emerald-600">{formatUSD(s.total)}</span>
+                                                        <span className="text-xs font-extrabold text-emerald-600">{primaryAmount(s.total, s.totalBs)}</span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -467,6 +468,9 @@ export const Header = ({ onToggleMobileSidebar }) => {
 
             {/* Right Controls */}
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+                {/* Currency Swap / Converter Button ($ ⇄ Bs.) */}
+                <CurrencyToggle />
+
                 {/* BCV Rate Widget */}
                 <button
                     onClick={handleOpenModal}

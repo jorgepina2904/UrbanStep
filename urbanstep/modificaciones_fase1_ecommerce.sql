@@ -25,9 +25,12 @@ CREATE TABLE IF NOT EXISTS cupones (
 
 -- Incremento atómico del contador de usos (evita carreras entre pedidos simultáneos)
 CREATE OR REPLACE FUNCTION incrementar_uso_cupon(p_id UUID)
-RETURNS VOID AS $$
+RETURNS VOID
+LANGUAGE sql
+SET search_path = public, pg_temp
+AS $$
     UPDATE cupones SET usos_actuales = usos_actuales + 1 WHERE id = p_id;
-$$ LANGUAGE sql;
+$$;
 
 -- 2) Reseñas de clientes (se publican al instante si la compra está verificada; si no, requieren moderación)
 CREATE TABLE IF NOT EXISTS resenas (
@@ -50,12 +53,13 @@ ALTER TABLE resenas ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Lectura cupones" ON cupones;
 DROP POLICY IF EXISTS "Mutacion cupones" ON cupones;
+DROP POLICY IF EXISTS "acceso_total_cupones" ON cupones;
 DROP POLICY IF EXISTS "Lectura resenas" ON resenas;
 DROP POLICY IF EXISTS "Insercion resenas" ON resenas;
 DROP POLICY IF EXISTS "Moderacion resenas" ON resenas;
 
-CREATE POLICY "Lectura cupones" ON cupones FOR SELECT USING (true);
-CREATE POLICY "Mutacion cupones" ON cupones FOR ALL USING (true);
+-- Política integral unificada para cupones (evita duplicidad permisiva en SELECT)
+CREATE POLICY "acceso_total_cupones" ON cupones FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Lectura resenas" ON resenas FOR SELECT USING (true);
 CREATE POLICY "Insercion resenas" ON resenas FOR INSERT WITH CHECK (true);

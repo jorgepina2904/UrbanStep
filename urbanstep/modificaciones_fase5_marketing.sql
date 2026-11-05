@@ -42,8 +42,8 @@ BEGIN
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS "Lectura %1$s" ON %1$I', t);
         EXECUTE format('DROP POLICY IF EXISTS "Mutacion %1$s" ON %1$I', t);
-        EXECUTE format('CREATE POLICY "Lectura %1$s" ON %1$I FOR SELECT USING (true)', t);
-        EXECUTE format('CREATE POLICY "Mutacion %1$s" ON %1$I FOR ALL USING (true)', t);
+        EXECUTE format('DROP POLICY IF EXISTS "acceso_total_%1$s" ON %1$I', t);
+        EXECUTE format('CREATE POLICY "acceso_total_%1$s" ON %1$I FOR ALL USING (true) WITH CHECK (true)', t);
     END LOOP;
 END $$;
 

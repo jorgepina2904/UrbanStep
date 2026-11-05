@@ -285,7 +285,7 @@ function DeliveryStatusBadge({ status }) {
 }
 
 export default function Delivery() {
-    const { rate, formatBs } = useCurrency();
+    const { formatBs, primaryAmount, secondaryAmount } = useCurrency();
     const [deliveries, setDeliveries] = useState([]);
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -621,8 +621,8 @@ export default function Delivery() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Fletes Cobrados</p>
-                                <p className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{formatCurrency(stats.totalRevenueUsd)}</p>
-                                <span className="text-[10px] text-emerald-600 font-mono font-bold">{formatBs(stats.totalRevenueUsd * rate)}</span>
+                                <p className="text-xl font-black text-gray-900 dark:text-white mt-0.5">{primaryAmount(stats.totalRevenueUsd)}</p>
+                                <span className="text-[10px] text-emerald-600 font-mono font-bold">{secondaryAmount(stats.totalRevenueUsd)}</span>
                             </div>
                             <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600">
                                 <DollarSign className="w-5 h-5" />
@@ -751,7 +751,7 @@ export default function Delivery() {
                                                 {delivery.distanceKm?.toFixed(1)} km · ~{delivery.estimatedTimeMin} min
                                             </span>
                                             <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                {formatCurrency(delivery.deliveryCostUsd)} ({formatBs(delivery.deliveryCostBs || 0)})
+                                                {primaryAmount(delivery.deliveryCostUsd, delivery.deliveryCostBs)} ({secondaryAmount(delivery.deliveryCostUsd, delivery.deliveryCostBs)})
                                             </span>
                                         </div>
                                     </div>

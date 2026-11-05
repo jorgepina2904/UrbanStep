@@ -28,6 +28,8 @@ import { TrustStrip, VipClubSection, FaqSection, SiteFooter, WhatsAppFab, Mobile
 import CartDrawer from './landing/CartDrawer';
 import CheckoutModal, { OrderSuccessModal } from './landing/CheckoutModal';
 import AuthModal from './landing/AuthModal';
+import CompleteProfileModal from './landing/CompleteProfileModal';
+import { collectErrors, validateAddress, validatePersonName, validatePhoneVE } from '../utils/validators';
 import { DELIVERY_ZONES, SHIPPING_OPTIONS, STORE, zoneByValue } from './landing/storeInfo';
 import { scrollToId } from './landing/ui';
 
@@ -71,7 +73,7 @@ const tryOnLabel = ({ productName, color, size, backupSize }) =>
     `${productName} (${color}) talla ${size}${backupSize ? ` + respaldo talla ${backupSize}` : ''}`;
 
 export default function Landing() {
-    const { user, logout, isAuthenticated } = useAuth();
+    const { user, setUser, logout, isAuthenticated } = useAuth();
     const { isDark, toggleTheme } = useContext(ThemeContext);
     const { rate, formatBs, formatUSD, renderDualPrice } = useCurrency();
     const { items: cartItems, addItem, removeItem, updateQuantity, clearCart, subtotal } = useCart();
@@ -104,6 +106,8 @@ export default function Landing() {
     const [contactConsent, setContactConsent] = useState(false);
     const [loyalty, setLoyalty] = useState(null);
     const [tryOnRequest, setTryOnRequest] = useState(null);
+    const [checkoutErrors, setCheckoutErrors] = useState({});
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [checkoutForm, setCheckoutForm] = useState({
         name: '',
         phone: '',
@@ -167,12 +171,18 @@ export default function Landing() {
         }
     }, [paymentMethods, checkoutForm.paymentMethod]);
 
-    // ?login=true abre el acceso; ?cart=1 abre la bolsa
+    // ?login=true abre el acceso; ?cart=1 abre la bolsa; ?reset_password=true viene del correo de recuperación
     useEffect(() => {
         const params = new URLSearchParams(location.search);
-        if (params.get('login') === 'true' && !isAuthenticated) openAuth('login');
+        if (params.get('reset_password') === 'true') openAuth('reset');
+        else if (params.get('login') === 'true' && !isAuthenticated) openAuth('login');
         if (params.get('cart') === '1') setIsCartOpen(true);
     }, [location.search, isAuthenticated, openAuth]);
+
+    // Quien entró con Google debe completar cédula, teléfono y dirección (factura fiscal y delivery)
+    useEffect(() => {
+        if (user?.role === 'Cliente' && user.profileComplete === false) setIsProfileOpen(true);
+    }, [user]);
 
     // Datos del cliente con sesión y su dirección principal de la libreta
     useEffect(() => {
@@ -302,6 +312,13 @@ export default function Landing() {
             openAuth('login', { resumeCheckout: true });
             return;
         }
+        if (user?.profileComplete === false) {
+            toast('Completa tu registro para poder facturar y despachar tu pedido', { icon: '🪪' });
+            resumeCheckoutRef.current = true;
+            setIsProfileOpen(true);
+            return;
+        }
+        setCheckoutErrors({});
         setIsCheckoutModalOpen(true);
     };
 
@@ -418,8 +435,15 @@ export default function Landing() {
             openAuth('login', { resumeCheckout: true });
             return;
         }
-        if (!isValidPhone(checkoutForm.phone)) {
-            toast.error('Escribe un WhatsApp válido (ej: 0414-5551234) para coordinar la entrega');
+        const formErrors = collectErrors({
+            name: () => validatePersonName(checkoutForm.name),
+            phone: () => validatePhoneVE(checkoutForm.phone),
+            address: () => (shippingOption === 'pickup' ? null : validateAddress(checkoutForm.address)),
+            paymentMethod: () => (paymentMethods.some(pm => pm.id === checkoutForm.paymentMethod) ? null : 'Elige un método de pago disponible')
+        });
+        setCheckoutErrors(formErrors);
+        if (Object.keys(formErrors).length > 0) {
+            toast.error('Revisa los datos marcados en el formulario');
             return;
         }
 
@@ -683,7 +707,11 @@ export default function Landing() {
                 isOpen={isCheckoutModalOpen}
                 onClose={() => setIsCheckoutModalOpen(false)}
                 form={checkoutForm}
-                onFormChange={(patch) => setCheckoutForm(prev => ({ ...prev, ...patch }))}
+                errors={checkoutErrors}
+                onFormChange={(patch) => {
+                    setCheckoutForm(prev => ({ ...prev, ...patch }));
+                    setCheckoutErrors(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => !(k in patch))));
+                }}
                 onZoneChange={handleZoneChange}
                 contactConsent={contactConsent}
                 onConsent={setContactConsent}
@@ -723,6 +751,19 @@ export default function Landing() {
                 prefill={authPrefill}
                 onClose={() => setIsAuthModalOpen(false)}
                 onAuthenticated={() => {
+                    if (resumeCheckoutRef.current && cartItems.length > 0) setIsCheckoutModalOpen(true);
+                    resumeCheckoutRef.current = false;
+                }}
+            />
+
+            <CompleteProfileModal
+                isOpen={isProfileOpen}
+                user={user}
+                onClose={() => { setIsProfileOpen(false); resumeCheckoutRef.current = false; }}
+                onCompleted={(updatedUser) => {
+                    setUser(updatedUser);
+                    setIsProfileOpen(false);
+                    toast.success('¡Registro completo! Ya puedes comprar con delivery express.', { icon: '✅' });
                     if (resumeCheckoutRef.current && cartItems.length > 0) setIsCheckoutModalOpen(true);
                     resumeCheckoutRef.current = false;
                 }}

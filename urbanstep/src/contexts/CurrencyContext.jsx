@@ -97,7 +97,8 @@ export const CurrencyProvider = ({ children }) => {
     const refreshRate = useCallback(async () => {
         setIsRefreshing(true);
         try {
-            const updated = await bcvService.fetchOnlineRate();
+            // Sincronización manual desde el panel: se guarda en Supabase si la tasa cambió
+            const updated = await bcvService.fetchOnlineRate({ persist: true });
             setRateData(updated);
             return updated;
         } finally {
@@ -142,6 +143,21 @@ export const CurrencyProvider = ({ children }) => {
     }, [toBs, formatUSD, formatBs, isSwapped]);
 
     /**
+     * Monto principal y secundario según la moneda elegida en el conversor ($ ⇄ Bs.).
+     * `bsAmount` permite mostrar el equivalente histórico de una venta (su tasa del día) en lugar
+     * de recalcularlo con la tasa actual.
+     */
+    const bsOf = useCallback((usdAmount, bsAmount) => (Number(bsAmount) > 0 ? Number(bsAmount) : toBs(usdAmount)), [toBs]);
+
+    const primaryAmount = useCallback((usdAmount, bsAmount) => (
+        isSwapped ? formatBs(bsOf(usdAmount, bsAmount)) : formatUSD(usdAmount)
+    ), [isSwapped, formatBs, formatUSD, bsOf]);
+
+    const secondaryAmount = useCallback((usdAmount, bsAmount) => (
+        isSwapped ? formatUSD(usdAmount) : formatBs(bsOf(usdAmount, bsAmount))
+    ), [isSwapped, formatBs, formatUSD, bsOf]);
+
+    /**
      * Retorna los textos formateados grande y pequeño respetando la inversión de moneda configurada
      */
     const renderDualPrice = useCallback((usdAmount) => {
@@ -176,6 +192,8 @@ export const CurrencyProvider = ({ children }) => {
             setPrimaryCurrency,
             toggleCurrencyOrder,
             renderDualPrice,
+            primaryAmount,
+            secondaryAmount,
             updateRate,
             refreshRate,
             toBs,
