@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { ShoppingBag, Truck, Wind, Zap, Pause, Play, ArrowRight } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { ShoppingBag, Truck, Wind, Zap, Pause, Play, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { productService } from '../../services/productService';
 import { getColorHex } from '../../utils/shoeSizes';
 import { heroSpecs } from './storeInfo';
 import { heading } from './ui';
 
 const SLIDE_MS = 5000;
-const FALLBACK_IMG = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800';
+const FALLBACK_IMG = '/brand/urbanstep-emblem.png';
 
 const prefersReducedMotion = () => {
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
@@ -40,7 +40,7 @@ export default function HeroCarousel({ slides, rate, formatBs, renderDualPrice, 
     const [rawIndex, setIndex] = useState(0);
     const [color, setColor] = useState(null);
     const [hovered, setHovered] = useState(false);
-    const [autoplay, setAutoplay] = useState(() => !prefersReducedMotion());
+    const [autoplay, setAutoplay] = useState(true);
     const [cycle, setCycle] = useState(0);
 
     const count = slides.length;
@@ -58,13 +58,22 @@ export default function HeroCarousel({ slides, rate, formatBs, renderDualPrice, 
         return `${unique.slice(0, -1).join(', ')} y ${unique[unique.length - 1]}`;
     }, [slides]);
 
-    const goTo = (i) => {
+    const goTo = useCallback((i) => {
+        if (count === 0) return;
         setIndex(((i % count) + count) % count);
         setColor(null);
         setCycle(c => c + 1);
-    };
+    }, [count]);
 
     const running = autoplay && !hovered && count > 1;
+
+    useEffect(() => {
+        if (!running) return;
+        const timer = setInterval(() => {
+            goTo(index + 1);
+        }, SLIDE_MS);
+        return () => clearInterval(timer);
+    }, [running, index, goTo]);
 
     return (
         <section id="top" className="relative overflow-hidden bg-slate-50 dark:bg-us-ink border-b border-slate-200 dark:border-white/10 py-10 md:py-16">
@@ -88,9 +97,35 @@ export default function HeroCarousel({ slides, rate, formatBs, renderDualPrice, 
                                 key={`${product?.id}-${activeColor}`}
                                 src={image}
                                 alt={product ? `${product.name}${activeColor ? ` en color ${activeColor}` : ''}` : 'Calzado deportivo UrbanStep'}
+                                onError={(e) => {
+                                    if (e.currentTarget.src !== FALLBACK_IMG && !e.currentTarget.src.endsWith(FALLBACK_IMG)) {
+                                        e.currentTarget.src = FALLBACK_IMG;
+                                    }
+                                }}
                                 className="relative w-full h-full object-contain mix-blend-multiply select-none us-fade-in"
                             />
                         </div>
+
+                        {count > 1 && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); goTo(index - 1); }}
+                                    aria-label="Calzado anterior"
+                                    className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 dark:bg-us-elevated/90 backdrop-blur-md border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-us-high shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); goTo(index + 1); }}
+                                    aria-label="Siguiente calzado"
+                                    className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/90 dark:bg-us-elevated/90 backdrop-blur-md border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-us-high shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </>
+                        )}
 
                         {product && specs.length === 3 && (
                             <>
@@ -151,11 +186,19 @@ export default function HeroCarousel({ slides, rate, formatBs, renderDualPrice, 
                                     key={`${index}-${cycle}`}
                                     className="us-progress-bar h-full bg-sky-500 dark:bg-us-cyan"
                                     style={{ '--us-duration': `${SLIDE_MS}ms`, animationPlayState: running ? 'running' : 'paused' }}
-                                    onAnimationEnd={() => goTo(index + 1)}
                                 />
                             </div>
                             <div className="flex items-center justify-between gap-2 text-xs font-us-mono">
                                 <div className="flex items-center gap-1 flex-wrap" role="tablist" aria-label="Más vendidos">
+                                    <button
+                                        type="button"
+                                        onClick={() => goTo(index - 1)}
+                                        aria-label="Calzado anterior"
+                                        title="Anterior"
+                                        className="p-1 rounded bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-us-high dark:text-gray-400 dark:hover:text-white transition-colors"
+                                    >
+                                        <ChevronLeft className="w-3.5 h-3.5" />
+                                    </button>
                                     {slides.map((s, i) => (
                                         <button
                                             key={s.id || i}
@@ -171,6 +214,15 @@ export default function HeroCarousel({ slides, rate, formatBs, renderDualPrice, 
                                             {String(i + 1).padStart(2, '0')} <span className="hidden sm:inline">{String(s.brand || '').slice(0, 8)}</span>
                                         </button>
                                     ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => goTo(index + 1)}
+                                        aria-label="Siguiente calzado"
+                                        title="Siguiente"
+                                        className="p-1 rounded bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-us-high dark:text-gray-400 dark:hover:text-white transition-colors"
+                                    >
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
                                 <button
                                     type="button"

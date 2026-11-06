@@ -52,7 +52,7 @@ const mapProductToCatalog = (p) => ({
     colorVariants: p.colorVariants || p.variantes_color || [],
     price: Number(p.price) || 120,
     tag: p.stock <= (p.minStock || 5) ? '⚡ POCAS UNIDADES' : '✓ DISPONIBLE',
-    imageUrl: p.imageUrl || p.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800',
+    imageUrl: p.imageUrl || p.image || '/brand/urbanstep-emblem.png',
     sizes: p.sizes || ['39', '40', '41', '42', '43'],
     sizeStock: p.sizeStock || null,
     sizeCategory: p.sizeCategory || null,
