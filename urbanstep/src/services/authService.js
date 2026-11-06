@@ -27,15 +27,47 @@ const persistSession = (user, token) => {
 const resolveIdentifier = (identifier) => {
   if (identifier.includes('@')) return identifier;
   const matches = userService.getAll().filter(u => normalizeEmail(u.email).split('@')[0] === identifier);
-  return matches.length === 1 ? normalizeEmail(matches[0].email) : null;
+  if (matches.length === 1) return normalizeEmail(matches[0].email);
+  // Caché aún vacía (primera visita): se intenta con el dominio de la tienda
+  return matches.length === 0 ? `${identifier}@urbanstep.com` : null;
 };
 
 const isMissingFunction = (error) => error?.code === 'PGRST202' || /login_usuario/i.test(error?.message || '');
 
+const EMAIL_NOT_CONFIRMED = 'Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada (y spam).';
+
 /**
- * Verifica credenciales contra Supabase Auth.
- * El rol SIEMPRE sale de la tabla `usuarios` mediante su usuario_auth_id, nunca de user_metadata.
- * @returns {{status:'ok'|'invalid'|'inactive'|'unavailable', user?:object, token?:string}}
+ * Cuentas del personal que aún viven solo en la tabla `usuarios` (sin cuenta en Supabase Auth):
+ * 1) login_usuario(): verificación bcrypt en el servidor (seguridad_usuarios_validaciones.sql).
+ * 2) Si esa función no existe todavía, compatibilidad con la contraseña guardada sin cifrar.
+ * @returns {{status:'ok'|'invalid'|'inactive', user?:object}}
+ */
+const verifyStaffTable = async (email, password) => {
+  const { data: rows, error } = await supabase.rpc('login_usuario', { p_correo: email, p_password: password });
+  if (!error && Array.isArray(rows) && rows[0]) {
+    const user = userService.fromDbRow(rows[0]);
+    return user.active ? { status: 'ok', user } : { status: 'inactive' };
+  }
+  if (error && !isMissingFunction(error)) return { status: 'invalid' };
+  if (!error) return { status: 'invalid' };
+
+  const { data: legacy, error: legacyError } = await supabase
+    .from('usuarios')
+    .select(`${userService.publicColumns}, password_hash`)
+    .ilike('correo', email)
+    .maybeSingle();
+  if (legacyError || !legacy?.password_hash) return { status: 'invalid' };
+  // Un hash bcrypt no puede compararse en el navegador: requiere login_usuario()
+  if (legacy.password_hash.startsWith('$2') || legacy.password_hash !== password) return { status: 'invalid' };
+  const user = userService.fromDbRow(legacy);
+  return user.active ? { status: 'ok', user } : { status: 'inactive' };
+};
+
+/**
+ * Verifica credenciales: primero Supabase Auth y, si la cuenta no existe ahí, la tabla `usuarios`
+ * (personal creado por el administrador antes de migrar a Supabase Auth).
+ * El rol SIEMPRE sale de la tabla `usuarios`, nunca de user_metadata.
+ * @returns {{status:'ok'|'invalid'|'inactive'|'unconfirmed'|'unavailable', user?:object, token?:string}}
  */
 const verifyInCloud = async (email, password) => {
   try {
@@ -56,18 +88,17 @@ const verifyInCloud = async (email, password) => {
       };
       return { status: 'ok', user, token: auth.session?.access_token };
     }
-    if (authError) {
-      if (/invalid login credentials|invalid credentials/i.test(authError.message || '')) {
-        return { status: 'invalid' };
-      }
-      console.warn('Aviso en inicio de sesión con Supabase Auth:', authError.message);
-      return { status: 'invalid' };
+    if (authError && /email not confirmed/i.test(authError.message || '')) {
+      return { status: 'unconfirmed' };
     }
+    if (authError && !/invalid login credentials|invalid credentials/i.test(authError.message || '')) {
+      console.warn('Aviso en inicio de sesión con Supabase Auth:', authError.message);
+    }
+    return await verifyStaffTable(email, password);
   } catch (err) {
-    console.warn('Error conectando con Supabase Auth:', err);
+    console.warn('Error conectando con Supabase:', err);
     return { status: 'unavailable' };
   }
-  return { status: 'invalid' };
 };
 
 export const authService = {
@@ -90,6 +121,7 @@ export const authService = {
       const result = await verifyInCloud(email, password);
       if (result.status === 'ok') return { success: true, user: persistSession(result.user, result.token) };
       if (result.status === 'inactive') return { success: false, error: INACTIVE_USER };
+      if (result.status === 'unconfirmed') return { success: false, error: EMAIL_NOT_CONFIRMED };
       return { success: false, error: result.status === 'invalid' ? INVALID_CREDENTIALS : 'No se pudo verificar tu acceso. Revisa tu conexión e intenta de nuevo.' };
     }
 

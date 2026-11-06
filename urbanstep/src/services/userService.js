@@ -198,6 +198,9 @@ export const userService = {
         }
     },
 
+    /** Convierte una fila de la tabla `usuarios` al formato de la app. */
+    fromDbRow: (row) => mapDbUser(row),
+
     /** Columnas públicas de la tabla `usuarios` (sin password_hash). */
     publicColumns: USER_COLUMNS,
 
