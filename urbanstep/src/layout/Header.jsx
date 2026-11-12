@@ -25,7 +25,12 @@ import {
     FileBarChart,
     Monitor,
     Globe,
-    Menu
+    Menu,
+    Printer,
+    Building2,
+    Warehouse,
+    Megaphone,
+    Wrench
 } from 'lucide-react';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -89,15 +94,19 @@ export const Header = ({ onToggleMobileSidebar }) => {
     // Module definitions with route and permissions
     const systemModules = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/', module: 'dashboard', desc: 'Resumen ejecutivo y KPIs' },
+        { name: 'Punto de Venta', icon: ShoppingCart, path: '/pos', module: 'pos', desc: 'Ventas de mostrador y POS' },
         { name: 'Terminal de Caja', icon: Monitor, path: '/cashier', module: 'cashier', desc: 'Facturación rápida y arqueos', badge: 'POS' },
-        { name: 'Punto de Venta', icon: ShoppingCart, path: '/pos', module: 'pos', desc: 'Ventas de mostrador' },
         { name: 'Productos', icon: Tags, path: '/products', module: 'products', desc: 'Catálogo de calzados y moda' },
-        { name: 'Inventario', icon: Package, path: '/inventory', module: 'inventory', desc: 'Stock, kardex y alertas' },
+        { name: 'Control de Inventario', icon: Package, path: '/inventory', module: 'inventory', desc: 'Stock, kardex y alertas' },
+        { name: 'Compras y Proveedores', icon: Building2, path: '/purchases', module: 'purchases', desc: 'Órdenes de compra y recepción' },
+        { name: 'Almacén y Sucursales', icon: Warehouse, path: '/warehouse', module: 'warehouse', desc: 'Traslados y reposición' },
         { name: 'Clientes', icon: Users, path: '/customers', module: 'customers', desc: 'Fidelización y cédulas/RIF' },
-        { name: 'Delivery', icon: Truck, path: '/delivery', module: 'delivery', desc: 'Envíos en Lara y motorizados' },
-        { name: 'Reportes', icon: FileBarChart, path: '/reports', module: 'reports', desc: 'Reportes gerenciales y PDF' },
-        { name: 'Configuración', icon: Settings, path: '/settings', module: 'settings', desc: 'Usuarios, roles y empresa' },
-        { name: 'Tienda Ecommerce', icon: Globe, path: '/landing', module: 'dashboard', desc: 'Catálogo online para clientes', badge: 'Web' }
+        { name: 'Despacho y Delivery', icon: Truck, path: '/delivery', module: 'delivery', desc: 'Envíos en Lara y motorizados' },
+        { name: 'Marketing y VIP', icon: Megaphone, path: '/marketing', module: 'marketing', desc: 'Campañas, promociones y cupones' },
+        { name: 'Analítica y Reportes', icon: FileBarChart, path: '/reports', module: 'reports', desc: 'Libros contables, SENIAT y KPIs' },
+        { name: 'Reportes Imprimir', icon: Printer, path: '/reports/print', module: 'reports', desc: 'Centro unificado de impresión y descargas', badge: 'Print' },
+        { name: 'Administración del Sistema', icon: Wrench, path: '/settings', module: 'settings', desc: 'Usuarios, roles, cajas, BCV y empresa' },
+        { name: 'Tienda Online', icon: Globe, path: '/landing', module: 'dashboard', desc: 'Catálogo web para clientes', badge: 'Web' }
     ];
 
     const accessibleModules = systemModules.filter(m => hasPermission(user?.role, m.module));

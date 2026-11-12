@@ -7,7 +7,7 @@ import {
     Tags,
     Users,
     FileBarChart,
-    Settings,
+    Printer,
     LogOut,
     Store,
     Monitor,
@@ -20,7 +20,8 @@ import {
     FolderKanban,
     Building2,
     Warehouse,
-    Megaphone
+    Megaphone,
+    Wrench
 } from 'lucide-react';
 import { AuthContext } from '../contexts/AuthContext';
 import { hasPermission, RoleMeta } from '../utils/permissions';
@@ -40,7 +41,7 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
     const menuGroups = [
         {
             id: 'general',
-            title: 'General',
+            title: 'Panel Principal',
             collapsible: false,
             items: [
                 { name: 'Dashboard', icon: LayoutDashboard, path: '/', module: 'dashboard' },
@@ -48,39 +49,54 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
         },
         {
             id: 'ventas',
-            title: 'Ventas & Mostrador',
+            title: 'Ventas y Caja',
             collapsible: true,
             items: [
                 { name: 'Punto de Venta', icon: ShoppingCart, path: '/pos', module: 'pos' },
                 { name: 'Terminal de Caja', icon: Monitor, path: '/cashier', module: 'cashier', highlight: true },
-                { name: 'Delivery', icon: Truck, path: '/delivery', module: 'delivery' },
             ]
         },
         {
             id: 'catalogo',
-            title: 'Catálogo & Almacén',
+            title: 'Catálogo e Inventario',
             collapsible: true,
             items: [
                 { name: 'Productos', icon: Tags, path: '/products', module: 'products' },
-                { name: 'Inventario', icon: Package, path: '/inventory', module: 'inventory' },
-                { name: 'Compras & Proveedores', icon: Building2, path: '/purchases', module: 'purchases' },
-                { name: 'Almacén & Sucursales', icon: Warehouse, path: '/warehouse', module: 'warehouse' },
+                { name: 'Control de Inventario', icon: Package, path: '/inventory', module: 'inventory' },
+                { name: 'Compras y Proveedores', icon: Building2, path: '/purchases', module: 'purchases' },
+                { name: 'Almacén y Sucursales', icon: Warehouse, path: '/warehouse', module: 'warehouse' },
             ]
         },
         {
-            id: 'gestion',
-            title: 'Gestión & Reportes',
+            id: 'comercial',
+            title: 'Clientes y Logística',
             collapsible: true,
             items: [
                 { name: 'Clientes', icon: Users, path: '/customers', module: 'customers' },
-                { name: 'Marketing & VIP', icon: Megaphone, path: '/marketing', module: 'marketing' },
-                { name: 'Reportes', icon: FileBarChart, path: '/reports', module: 'reports' },
-                { name: 'Configuración', icon: Settings, path: '/settings', module: 'settings' },
+                { name: 'Despacho y Delivery', icon: Truck, path: '/delivery', module: 'delivery' },
+                { name: 'Marketing y VIP', icon: Megaphone, path: '/marketing', module: 'marketing' },
+            ]
+        },
+        {
+            id: 'reportes',
+            title: 'Reportes y Finanzas',
+            collapsible: true,
+            items: [
+                { name: 'Analítica y Reportes', icon: FileBarChart, path: '/reports', module: 'reports' },
+                { name: 'Reportes Imprimir', icon: Printer, path: '/reports/print', module: 'reports' },
+            ]
+        },
+        {
+            id: 'administracion',
+            title: 'Administración del Sistema',
+            collapsible: true,
+            items: [
+                { name: 'Administración del Sistema', icon: Wrench, path: '/settings', module: 'settings' },
             ]
         },
         {
             id: 'online',
-            title: 'Canal Ecommerce',
+            title: 'Tienda Online',
             collapsible: false,
             items: [
                 { name: 'Tienda Pública', icon: Globe, path: '/landing', module: 'dashboard' },
@@ -92,9 +108,9 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, mobileOpen, onCloseMobi
     const [openGroups, setOpenGroups] = useState(() => {
         try {
             const saved = localStorage.getItem('urbanstep_sidebar_groups');
-            return saved ? JSON.parse(saved) : { ventas: true, catalogo: true, gestion: true };
+            return saved ? JSON.parse(saved) : { ventas: true, catalogo: true, comercial: true, reportes: true, administracion: true };
         } catch {
-            return { ventas: true, catalogo: true, gestion: true };
+            return { ventas: true, catalogo: true, comercial: true, reportes: true, administracion: true };
         }
     });
 

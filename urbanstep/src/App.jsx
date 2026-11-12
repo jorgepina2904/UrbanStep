@@ -23,6 +23,7 @@ const Products = lazyWithRetry(() => import('./pages/Products'));
 const Inventory = lazyWithRetry(() => import('./pages/Inventory'));
 const Customers = lazyWithRetry(() => import('./pages/Customers'));
 const Reports = lazyWithRetry(() => import('./pages/Reports'));
+const ReportsPrint = lazyWithRetry(() => import('./pages/ReportsPrint'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const Delivery = lazyWithRetry(() => import('./pages/Delivery'));
 const Purchases = lazyWithRetry(() => import('./pages/Purchases'));
@@ -57,7 +58,10 @@ export const App = () => {
                     <Route path="customers" element={<ProtectedRoute module="customers"><Customers /></ProtectedRoute>} />
                     <Route path="delivery" element={<ProtectedRoute module="delivery"><Delivery /></ProtectedRoute>} />
                     <Route path="reports" element={<ProtectedRoute module="reports"><Reports /></ProtectedRoute>} />
+                    <Route path="reports/print" element={<ProtectedRoute module="reports"><ReportsPrint /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute module="settings"><Settings /></ProtectedRoute>} />
+                    <Route path="admin" element={<Navigate to="/settings" replace />} />
+                    <Route path="administracion" element={<Navigate to="/settings" replace />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

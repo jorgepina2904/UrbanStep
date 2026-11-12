@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { bcvService } from '../services/bcvService';
 import { ProfitabilityView, CommissionsView } from './ReportsFinance';
 
@@ -30,7 +31,9 @@ import {
     Landmark,
     Sliders,
     Lock,
-    Database
+    Database,
+    Printer,
+    ArrowRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -583,6 +586,16 @@ export default function Reports() {
                     {/* Botón Conversor Global ($ ⇄ Bs.) */}
                     <CurrencyToggle />
 
+                    {/* Botón Acceso Rápido a Reportes Imprimir */}
+                    <Link
+                        to="/reports/print"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-sm shadow-blue-500/20 hover:brightness-110 active:scale-95 transition-all"
+                        title="Ir al Centro de Impresión y Generación Consolidado"
+                    >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Reportes Imprimir</span>
+                    </Link>
+
                     {/* Tasa BCV Oficial */}
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-xs font-semibold text-blue-700 dark:text-blue-300">
                         <span>Tasa BCV:</span>
@@ -612,6 +625,33 @@ export default function Reports() {
                         ))}
                     </div>
                 </div>
+            </div>
+
+            {/* Banner de acceso directo al Centro de Impresión Consolidado */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 p-4 rounded-2xl border border-blue-200/60 dark:border-blue-900/40 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                        <Printer className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <span>Centro de Impresión y Generación Consolidado</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+                                22 Reportes
+                            </span>
+                        </h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            Imprime o descarga todos los reportes fiscales, contables y operativos en PDF/Excel desde una sola pantalla sin saltar entre sub-módulos.
+                        </p>
+                    </div>
+                </div>
+                <Link
+                    to="/reports/print"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
+                >
+                    <span>Abrir Reportes Imprimir</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
             </div>
 
             {/* Selector de las 6 Capas Funcionales */}

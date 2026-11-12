@@ -808,10 +808,10 @@ DELETE FROM clientes WHERE id <> 'publico';
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <Store className="w-7 h-7 text-blue-600" />
-                        Configuración del Sistema
+                        Administración del Sistema
                     </h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        Ajusta los datos de facturación venezolana, tasas de cambio del BCV, cuentas bancarias y envíos.
+                        Gestión integral de usuarios, roles, cajas registradoras, datos fiscales SENIAT, tasa BCV, cuentas bancarias y envíos.
                     </p>
                 </div>
                 {activeTab !== 'audit' && (
